@@ -1,0 +1,50 @@
+# xpi-kuma 配置示例（项目级）
+#
+# 扩展在首次会话启动时会自动生成 `.pi/xpi-kuma/config.yaml`，
+# 那是实际生效的文件；本文件只是随手可查的参考副本。
+#
+# 随包发布的模板在 `src/config.example.yaml`，两者结构一致。
+# 密钥请使用 ${ENV_VAR} 占位符，不要直接写明文。
+
+vendors:
+  - name: "OpenAI"
+    endpoint: "https://api.openai.com/v1"
+    model: "gpt-4o-mini"
+    api_key: "${OPENAI_API_KEY}"
+    # 价格单位与统计口径一致，基准为每千 tokens
+    price:
+      input: 0.15
+      output: 0.6
+    probe:
+      enabled: true
+      interval: "5m"
+      timeout: 30000
+
+  - name: "Anthropic"
+    endpoint: "https://api.anthropic.com/v1"
+    model: "claude-3-5-haiku-latest"
+    api_key: "${ANTHROPIC_API_KEY}"
+    price:
+      input: 0.8
+      output: 4
+    probe:
+      enabled: true
+      interval: "1h"
+      timeout: 30000
+
+  - name: "9router"
+    endpoint: "https://api.9router.example/v1"
+    model: "gpt-4o-mini"
+    api_key: "${NINE_ROUTER_API_KEY}"
+    price:
+      input: 0.1
+      output: 0.4
+    probe:
+      # 中转站限流较严时建议关闭探测
+      enabled: false
+      interval: "10m"
+      timeout: 30000
+
+retention:
+  # 原始使用量记录保留天数，超期记录在会话启动时清理
+  raw_records: 7

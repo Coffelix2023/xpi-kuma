@@ -15,3 +15,6 @@ coverage/
 # c6x-config
 **/fast-fixes/
 **/references/
+
+# xpi-kuma 运行时配置：可能写入明文密钥，绝不入库（示例见 .pi/xpi-kuma/config.example.yaml）
+.pi/xpi-kuma/config.yaml

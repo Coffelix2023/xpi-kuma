@@ -61,7 +61,43 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 
 | Command | Description |
 | --- | --- |
-| `/xpi-kuma` | Show the extension status and the loaded version |
+| `/xpi-kuma` | Open the monitoring dashboard (vendor status, usage stats, cost/token trend) |
+
+### Configuration
+
+The extension reads `<project>/.pi/xpi-kuma/config.yaml`. The file is created from the
+shipped template on first session start; edit it to list the vendors you want to monitor.
+
+```yaml
+vendors:
+  - name: "OpenAI"
+    endpoint: "https://api.openai.com/v1"
+    model: "gpt-4o-mini"
+    api_key: "${OPENAI_API_KEY}"   # resolved from the environment, never stored
+    price: { input: 0.15, output: 0.6 }   # per 1K tokens
+    probe:
+      enabled: true
+      interval: "5m"              # 5m / 30s / 1h
+      timeout: 30000              # milliseconds
+
+retention:
+  raw_records: 7                  # days of raw records to keep
+```
+
+- `api_key` supports `${ENV_VAR}` placeholders and is expanded only in memory.
+  An unset variable is left as-is so you notice it instead of silently probing with no key.
+- Probes send a fixed `"hi"` prompt with `max_tokens: 1`, so each one costs a few tokens.
+  Set `probe.enabled: false` for vendors you do not want probed (rate-limited gateways).
+- Usage data is stored in `~/.pi/agent/data/xpi-kuma/usage.db`; the dashboard reads the same file.
+
+Data written by the extension:
+
+| Table | Written on | Contents |
+| --- | --- | --- |
+| `usage_records` | every assistant message (`message_end`) | real token counts and cost, as reported by the provider |
+| `probe_records` | each scheduled or manual probe | status, TTFT, total response time |
+
+The footer shows the current session totals as `💰 ¥0.05 | 📊 1.2K`, refreshed on every turn.
 
 <!-- TODO: document every tool and command with its honest boundary: what it reads, what it changes, and what it refuses to do. -->
 

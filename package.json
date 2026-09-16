@@ -25,6 +25,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.11",
     "@earendil-works/pi-coding-agent": "^0.84.4",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.13.3",
     "typebox": "^1.0.0",
     "typescript": "^6.0.3",
@@ -37,5 +38,10 @@
     "lint": "biome check .",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "glimpseui": "^0.8.1",
+    "yaml": "^2.9.1"
   }
 }

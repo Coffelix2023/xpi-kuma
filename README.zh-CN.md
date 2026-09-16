@@ -61,7 +61,43 @@ pi remove git:github.com/<owner>/xpi-kuma
 
 | 命令 | 说明 |
 | --- | --- |
-| `/xpi-kuma` | 显示扩展状态与已加载的版本 |
+| `/xpi-kuma` | 打开监控面板（供应商状态、使用量统计、费用/token 趋势） |
+
+### 配置
+
+扩展读取 `<项目>/.pi/xpi-kuma/config.yaml`。该文件在首次会话启动时由内置模板生成，
+编辑它来声明需要监控的供应商。
+
+```yaml
+vendors:
+  - name: "OpenAI"
+    endpoint: "https://api.openai.com/v1"
+    model: "gpt-4o-mini"
+    api_key: "${OPENAI_API_KEY}"   # 仅从环境变量解析，不落盘
+    price: { input: 0.15, output: 0.6 }   # 每千 tokens
+    probe:
+      enabled: true
+      interval: "5m"              # 支持 5m / 30s / 1h
+      timeout: 30000              # 毫秒
+
+retention:
+  raw_records: 7                  # 原始记录保留天数
+```
+
+- `api_key` 支持 `${ENV_VAR}` 占位符，只在内存中展开。变量未设置时保留原样，
+  便于你及时察觉，而不是带着空密钥去探测。
+- 探测固定发送 `"hi"` 且 `max_tokens: 1`，单次仅消耗几个 token。
+  对限流严格的中转站把 `probe.enabled` 设为 `false` 即可关闭。
+- 使用量数据存放在 `~/.pi/agent/data/xpi-kuma/usage.db`，面板读取同一个文件。
+
+扩展写入的数据：
+
+| 表 | 写入时机 | 内容 |
+| --- | --- | --- |
+| `usage_records` | 每条 assistant 消息（`message_end`） | 供应商上报的真实 token 数与费用 |
+| `probe_records` | 每次定时或手动探测 | 状态、TTFT、总响应时间 |
+
+footer 显示当前会话累计值，形如 `💰 ¥0.05 | 📊 1.2K`，每个 turn 结束后刷新。
 
 <!-- TODO: 逐个记录工具与命令,并写清它们的诚实边界:读什么、改什么、拒绝做什么。 -->
 

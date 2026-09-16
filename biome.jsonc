@@ -174,7 +174,9 @@
         "noSecrets": {
           "level": "on",
           "options": {
-            "entropyThreshold": 51 //提高数值避免误报
+            // 中文 UTF-8 字节熵本身就高，51 会把中文测试名/错误消息判成密钥；
+            // 60 仍能拦住真实 API key（sk-*/AKIA* 实测均命中）。
+            "entropyThreshold": 60
           }
         }
       },

@@ -25,7 +25,7 @@ Pi 会为每条 assistant 消息报告 token 数与费用,但没有任何地方�
 本仓库里的每个扩展都从同样四条规则出发:
 
 - **没有构建步骤。** Pi 直接加载 `./src/index.ts`,没有 `dist/`、没有打包器、不提交编译产物。
-- **Pi 原生 UI。** 渲染走 `ctx.ui.*` 与 `@earendil-works/pi-tui`,绝不劫持终端,也不引入竞争性的终端框架。
+- **Pi 原生 UI。** 扩展在终端里显示的一切都走 `ctx.ui.*`（footer 状态行与通知），绝不劫持终端，也不引入竞争性的终端框架；面板本身是回环 Web 页面，不在终端里渲染。
 - **没有重度运行时依赖。** 只用宿主提供的 API 加严格类型;工具 Schema 用 `typebox`,其余依赖都要先证明自己值得。
 - **门禁严格,没有例外。** TypeScript strict、Biome、Vitest 三条全绿才能提交。
 
@@ -66,7 +66,7 @@ pi remove git:github.com/<owner>/xpi-kuma
 
 | 命令 | 说明 |
 | --- | --- |
-| `/xpi-kuma` | 启动本机监控服务并用浏览器打开面板（供应商状态、使用量统计、费用/token 趋势） |
+| `/xpi-kuma` | 启动本机监控服务并用浏览器打开面板，误关页面后再次执行即可重开（供应商状态、使用量统计、费用/token 趋势） |
 
 ### 配置
 
@@ -113,6 +113,7 @@ footer 显示当前会话累计值，形如 `💰 ¥0.05 | 📊 1.2K`，每个 t
 - **凭据放在 URL fragment**（`http://127.0.0.1:<端口>/#<凭据>`）。fragment 不会进入 HTTP 请求、
   不写访问日志，也不会通过第三方资源的 `Referer` 外泄；页面加载后立即把它从地址栏清除。
 - **浏览器没自动打开？** 服务保持运行，Pi 会通过通知给出同一个可复制的 URL。
+- **误关了页面？** 服务在整个会话内继续运行，再次运行 `/xpi-kuma` 即可用同一凭据重新打开同一个面板，不会启动第二个服务。
 - **自动刷新。** 页面可见时每 5 秒轮询一次；标签页隐藏时暂停轮询，恢复可见时立即刷新一次。
   请求不会重叠，刷新失败时保留上一次已渲染的数据。
 - **跟随会话生命周期。** Pi 在退出、reload、新建、恢复或 fork 会话时关闭服务：旧页面不再可用，
@@ -159,10 +160,18 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # 日常回路:在 Pi 内用 /r
 ```text
 .
 ├── mise.toml / package.json / biome.jsonc / tsconfig.json / pnpm-workspace.yaml
-├── AGENTS.md / CONTEXT.md / DESIGN.md
-├── docs/                      # Git 工作流与仓库约束
+├── AGENTS.md / CONTEXT.md / DESIGN.md / THEMES.md
+├── README.md / README.zh-CN.md / LICENSE
+├── docs/                      # Git 工作流、仓库约束与参考资料
 └── src/
-    └── index.ts               # 扩展入口(register 函数)
+    ├── index.ts               # 扩展入口(register 函数)
+    ├── config.ts              # config.yaml 读取与 ${ENV_VAR} 展开
+    ├── types.ts               # 共享领域类型
+    ├── collectors/            # 会话内用量累加
+    ├── monitors/              # 定时供应商探测
+    ├── storage/               # SQLite 持久化
+    ├── lib/                   # 日志、格式化、浏览器唤起
+    └── ui/                    # 面板 HTTP 服务、页面渲染与主题
 ```
 
 ## 设计规范
@@ -172,7 +181,7 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # 日常回路:在 Pi 内用 /r
 ## 约定与约束
 
 - **术语表**:[`CONTEXT.md`](./CONTEXT.md) 定义了本仓库的统一语言,代码、文档与提交中禁止术语漂移。
-- **Git 纪律**:提交或推送前先读 [`docs/GIT-WORKFLOW.md`](./docs/GIT-WORKFLOW.md) 与 [`docs/GITHUB-GUARD.md`](./docs/GITHUB-GUARD.md)。默认不直推 `main`,使用小粒度 Conventional Commits。
+- **Git 纪律**:提交或推送前先读 [`docs/GIT-WORKFLOW.md`](./docs/GIT-WORKFLOW.md) 与 [`docs/GITHUB-GUARD.md`](./docs/GITHUB-GUARD.md)。以 `docs/GIT-WORKFLOW.md` 为单一事实来源:默认直接在 `main` 上以小粒度 Conventional Commits 提交并推送,分支与 PR 只在你显式提出时才进入流程。
 - **Token 安全**:密钥与 Token 绝不写入代码、日志、示例或文档。
 - **Agent 契约**:[`AGENTS.md`](./AGENTS.md) 是本仓库的唯一事实来源。口头约定、历史代码或本 README 与它冲突时,以 `AGENTS.md` 为准。
 

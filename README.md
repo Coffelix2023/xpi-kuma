@@ -27,7 +27,7 @@ page needs none of it, and it uses the browser you already have.
 Every extension in this repository starts from the same four rules:
 
 - **No build step.** Pi loads `./src/index.ts` directly. No `dist/`, no bundler, no committed artifacts.
-- **Pi-native UI.** Rendering goes through `ctx.ui.*` and `@earendil-works/pi-tui`. It never hijacks the terminal or pulls in a competing terminal framework.
+- **Pi-native UI.** Everything the extension shows in the terminal goes through `ctx.ui.*` (the status line and notifications). It never hijacks the terminal or pulls in a competing terminal framework; the dashboard is a loopback web page rather than a terminal render.
 - **No heavy runtime dependencies.** Host-provided APIs plus strict types; `typebox` for tool schemas, and nothing else unless it earns its place.
 - **Strict gates, no exceptions.** TypeScript strict, Biome, and Vitest must all pass before any commit.
 
@@ -68,7 +68,7 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 
 | Command | Description |
 | --- | --- |
-| `/xpi-kuma` | Start the local dashboard service and open it in your browser (vendor status, usage stats, cost/token trend) |
+| `/xpi-kuma` | Start the local dashboard service and open it in your browser — run it again to reopen a page you closed (vendor status, usage stats, cost/token trend) |
 
 ### Configuration
 
@@ -120,6 +120,7 @@ instead of starting a second one.
 - **Browser did not open?** The service stays up and Pi shows a notification with the same URL, ready to copy.
 - **Auto refresh.** A visible page polls every 5 seconds; a hidden tab pauses polling and refreshes
   immediately when you come back. Requests never overlap, and a failed refresh keeps the last rendered data.
+- **Closed the page by mistake?** The service keeps running for the whole session, so run `/xpi-kuma` again to reopen the same dashboard with the same credential. No second service is started.
 - **Session-scoped.** Pi shuts the service down on quit, reload, new, resume, or fork. The old page stops
   working and the old credential is rejected — run `/xpi-kuma` again in the new session.
 
@@ -165,10 +166,18 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # live loop: /reload inside Pi
 ```text
 .
 ├── mise.toml / package.json / biome.jsonc / tsconfig.json / pnpm-workspace.yaml
-├── AGENTS.md / CONTEXT.md / DESIGN.md
-├── docs/                      # Git workflow and repository guardrails
+├── AGENTS.md / CONTEXT.md / DESIGN.md / THEMES.md
+├── README.md / README.zh-CN.md / LICENSE
+├── docs/                      # Git workflow, repository guardrails, reference material
 └── src/
-    └── index.ts               # Extension entrypoint (register function)
+    ├── index.ts               # Extension entrypoint (register function)
+    ├── config.ts              # config.yaml loading and ${ENV_VAR} expansion
+    ├── types.ts               # Shared domain types
+    ├── collectors/            # In-memory session usage accumulation
+    ├── monitors/              # Scheduled vendor probes
+    ├── storage/               # SQLite persistence
+    ├── lib/                   # Logger, formatting, browser launch
+    └── ui/                    # Dashboard HTTP service, page rendering, theme
 ```
 
 ## Design baseline
@@ -178,7 +187,7 @@ This project adopts the [Google Labs DESIGN.md format](https://github.com/google
 ## Conventions & constraints
 
 - **Glossary** — [`CONTEXT.md`](./CONTEXT.md) defines the repository's unified terminology; terms must not drift in code, docs, or commits.
-- **Git discipline** — read [`docs/GIT-WORKFLOW.md`](./docs/GIT-WORKFLOW.md) and [`docs/GITHUB-GUARD.md`](./docs/GITHUB-GUARD.md) before committing or pushing. Do not push to `main` by default; use small, granular Conventional Commits.
+- **Git discipline** — read [`docs/GIT-WORKFLOW.md`](./docs/GIT-WORKFLOW.md) and [`docs/GITHUB-GUARD.md`](./docs/GITHUB-GUARD.md) before committing or pushing. `docs/GIT-WORKFLOW.md` is the single source of truth: commit and push directly on `main` in small, granular Conventional Commits. Branches and pull requests enter the flow only when you ask for them.
 - **Token safety** — credentials and secret tokens are never written into code, logs, examples, or documentation.
 - **Agent contract** — [`AGENTS.md`](./AGENTS.md) is the single source of truth for this repository. When an oral agreement, older code, or this README disagrees with it, `AGENTS.md` wins.
 

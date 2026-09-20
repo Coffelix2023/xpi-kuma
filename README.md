@@ -124,6 +124,46 @@ instead of starting a second one.
 - **Session-scoped.** Pi shuts the service down on quit, reload, new, resume, or fork. The old page stops
   working and the old credential is rejected — run `/xpi-kuma` again in the new session.
 
+### Dashboard pages
+
+Four pages are served by the same loopback service. Entry points live on the main panel, and every
+in-page link carries the credential forward in its URL fragment, so a page opened from another page
+stays authenticated.
+
+| Page | Path | What it shows |
+| --- | --- | --- |
+| Main panel | `/` | Cost overview, attribution by project / session / vendor·model, statistics, trend, vendor health |
+| Accounts | `/accounts` | Balance per vendor, where that number came from, and the action needed to refresh it |
+| Config checkup | `/settings` | Read-only report on `config.yaml`: six checks per vendor, plus global and storage facts |
+| Getting started | `/empty` | Guidance when no vendor is configured, or none has recorded usage yet |
+
+The page header carries a language toggle (`#kuma-lang`) for English and Simplified Chinese. The choice
+is stored in `localStorage` under `kuma.lang` and applied before the first paint.
+
+**Balances fall back through three tiers**, per vendor and in order. A tier that fails only adds a reason;
+it never aborts the row.
+
+1. **Balance API** — `balance.api_path` is requested relative to `endpoint`. No path is ever guessed.
+2. **OAuth** — requires `oauth.authorize_url`, `token_url`, `client_id`, and `scopes`; a missing field means
+   the tier is simply unconfigured. Start it from the accounts page. Tokens are stored in
+   `~/.pi/agent/data/xpi-kuma/oauth.json` with `0600` permissions and never include a client secret.
+   Expired tokens (with a 30-second margin) are excluded from queries and the row is marked
+   "authorization expired".
+3. **Manual entry** — written from the accounts page into `<project>/.pi/xpi-kuma/config.yaml` in place,
+   after saving a `config.yaml.bak-<timestamp>` backup. Comments and unknown fields survive the rewrite.
+
+When all three tiers fail, the page shows "unknown" rather than `0`. A previously fetched value is kept
+and marked stale instead of being dropped.
+
+**The config checkup page is strictly read-only.** It never creates the config template, never repairs a
+broken file, and never displays an API key — only the `${ENV_VAR}` placeholder name and whether that
+variable is currently set. A file that fails to parse hides the vendor table and the global section
+entirely, showing the error, its line number, and the path instead of half the data.
+
+Vendors without a usable balance endpoint are the expected case, not a bug: none of the three samples in
+`config.example.yaml` expose a public balance API today. See
+[`docs/probe-balance-and-oauth.md`](./docs/probe-balance-and-oauth.md) for the probe results.
+
 ### Boundaries
 
 `/xpi-kuma` is the only command this extension registers. It:
@@ -131,8 +171,10 @@ instead of starting a second one.
 - **Reads** `<project>/.pi/xpi-kuma/config.yaml` and the `usage_records` / `probe_records` tables.
 - **Starts** a loopback HTTP service owned by the current Pi session, then opens it in your default browser.
 - **Writes** only when you trigger a probe: one minimal request per vendor, costing a few tokens.
-- **Refuses** to listen on a non-loopback interface, to hand vendor API keys to the browser, or to keep
-  serving after the Pi session ends.
+- **Writes** only when you ask it to: a probe sends one minimal request per vendor, costing a few tokens;
+  a balance sync queries the vendor; manual entry rewrites the project config after taking a backup.
+- **Refuses** to listen on a non-loopback interface, to hand vendor API keys to the browser, to edit the
+  config file outside the balance fields, or to keep serving after the Pi session ends.
 
 ## Development
 

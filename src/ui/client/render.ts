@@ -1,0 +1,171 @@
+/**
+ * 渲染片段：状态样式、格式化与供应商卡片、统计表、提示的 DOM 渲染。
+ */
+export function renderFragment(): string {
+  return `
+      function cssVar(style, name) {
+        var value = style.getPropertyValue(name);
+        return value && value.trim() ? value.trim() : "#808080";
+      }
+
+      function statusClass(status) {
+        if (status === "up") { return "kuma-up"; }
+        if (status === "down") { return "kuma-down"; }
+        if (status === "degraded") { return "kuma-degraded"; }
+        return "kuma-unknown";
+      }
+
+      function statusIcon(status) {
+        if (status === "up") { return "🟢"; }
+        if (status === "down" || status === "degraded") { return "🔴"; }
+        return "⚪";
+      }
+
+      function money(n) {
+        if (typeof n !== "number" || !isFinite(n)) { return "¥-"; }
+        return "¥" + n.toFixed(2);
+      }
+
+      function ms(n) {
+        if (typeof n !== "number" || !isFinite(n)) { return "—"; }
+        return Math.round(n) + " ms";
+      }
+
+      function price(p) {
+        if (!p) { return "未配置"; }
+        return "¥" + p.input + " / ¥" + p.output;
+      }
+
+      function text(tag, className, content) {
+        var node = document.createElement(tag);
+        if (className) { node.className = className; }
+        node.textContent = content;
+        return node;
+      }
+
+      function renderVendors(vendors) {
+        var host = el("kuma-vendors");
+        if (!host) { return; }
+        host.textContent = "";
+        var grid = document.createElement("div");
+        grid.className = "kuma-grid";
+
+        vendors.forEach(function (v) {
+          var card = document.createElement("article");
+          card.className = "kuma-card";
+
+          var head = document.createElement("div");
+          head.className = "kuma-card-head";
+          head.appendChild(text("span", "", statusIcon(v.status)));
+          head.appendChild(text("span", "kuma-card-name", v.name));
+          head.appendChild(text("span", "kuma-card-model", v.model));
+          card.appendChild(head);
+
+          card.appendChild(text("span", "kuma-badge " + statusClass(v.status), v.status));
+
+          var dl = document.createElement("dl");
+          dl.className = "kuma-kv";
+          [
+            ["价格/千tok", price(v.price)],
+            ["TTFT", ms(v.ttft)],
+            ["响应时间", ms(v.totalTime)],
+            ["最近探测", v.lastProbeTime ? new Date(v.lastProbeTime).toLocaleTimeString() : "从未"],
+          ].forEach(function (pair) {
+            dl.appendChild(text("dt", "", pair[0]));
+            dl.appendChild(text("dd", "", pair[1]));
+          });
+          card.appendChild(dl);
+
+          var foot = document.createElement("div");
+          foot.className = "kuma-card-foot";
+          var btn = text("button", "", "刷新");
+          btn.type = "button";
+          btn.setAttribute("aria-label", "立即探测 " + v.name);
+          btn.addEventListener("click", function () {
+            btn.disabled = true;
+            btn.textContent = "探测中…";
+            probe(v.name);
+          });
+          foot.appendChild(btn);
+          card.appendChild(foot);
+
+          grid.appendChild(card);
+        });
+
+        host.appendChild(grid);
+      }
+
+      /** 无供应商时给出可操作提示，而不是让用户面对空白页。 */
+      function renderNotice(vendors) {
+        var notice = el("kuma-notice");
+        if (!notice) { return; }
+        if (vendors.length > 0) {
+          notice.hidden = true;
+          notice.textContent = "";
+          return;
+        }
+        notice.className = "kuma-empty";
+        notice.textContent = NO_VENDOR;
+        notice.hidden = false;
+      }
+
+      var COLUMNS = [
+        ["供应商 / 模型", function (r) { return [r.provider + " · " + r.model]; }],
+        ["输入 tok", function (r) { return [r.tokensInput, money(r.costInput)]; }],
+        ["输出 tok", function (r) { return [r.tokensOutput, money(r.costOutput)]; }],
+        ["缓存读", function (r) { return [r.tokensCacheRead, money(r.costCacheRead)]; }],
+        ["缓存写", function (r) { return [r.tokensCacheWrite, money(r.costCacheWrite)]; }],
+      ];
+
+      function renderStats(rows, currentPeriod) {
+        var host = el("kuma-stats");
+        if (!host) { return; }
+        host.textContent = "";
+
+        var box = document.createElement("div");
+        box.className = "kuma-scroll";
+        var table = document.createElement("table");
+
+        var thead = document.createElement("thead");
+        var headRow = document.createElement("tr");
+        COLUMNS.forEach(function (col) {
+          headRow.appendChild(text("th", "", col[0]));
+        });
+        ["总费用", "请求数"].forEach(function (name) {
+          headRow.appendChild(text("th", "", name));
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        var tbody = document.createElement("tbody");
+        if (rows.length === 0) {
+          var emptyRow = document.createElement("tr");
+          var cell = text("td", "", "暂无数据（" + currentPeriod + "）");
+          cell.colSpan = COLUMNS.length + 2;
+          emptyRow.appendChild(cell);
+          tbody.appendChild(emptyRow);
+        }
+        rows.forEach(function (r) {
+          var tr = document.createElement("tr");
+          COLUMNS.forEach(function (col) {
+            var pair = col[1](r);
+            tr.appendChild(text("td", "", String(pair[0])));
+            tr.appendChild(text("td", "", pair[1]));
+          });
+          tr.appendChild(text("td", "kuma-total", money(r.costTotal)));
+          tr.appendChild(text("td", "", String(r.requestCount)));
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        box.appendChild(table);
+        host.appendChild(box);
+      }
+
+      /**
+       * 内联 SVG 折线图。
+       *
+       * 不用任何图表库：整页零外部请求，离线也完整可用。颜色取自主题 token，
+       * 主题或家族切换后由 redrawChart() 重建。
+       */
+  `;
+}

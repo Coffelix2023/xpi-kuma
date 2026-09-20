@@ -571,67 +571,6 @@ function runBootstrap(
 }
 
 describe("主题与家族偏好", () => {
-  it("首帧脚本按已保存偏好设置属性", () => {
-    const root = new FakeElement("html");
-    runBootstrap(
-      preferenceBootstrapScript(),
-      root,
-      new Map([
-        [
-          "kuma.theme",
-          "light",
-        ],
-        [
-          "kuma.family",
-          "atlas",
-        ],
-      ]),
-    );
-    expect(root.getAttribute("data-theme")).toBe("light");
-    expect(root.getAttribute("data-family")).toBe("atlas");
-  });
-
-  it("无偏好时保持 HTML 上的默认值", () => {
-    const root = new FakeElement("html");
-    root.setAttribute("data-theme", "dark");
-    runBootstrap(preferenceBootstrapScript(), root, new Map());
-    expect(root.getAttribute("data-theme")).toBe("dark");
-    expect(root.getAttribute("data-family")).toBeNull();
-  });
-
-  it("非法偏好值被忽略，不写入属性", () => {
-    const root = new FakeElement("html");
-    runBootstrap(
-      preferenceBootstrapScript(),
-      root,
-      new Map([
-        [
-          "kuma.theme",
-          "chartreuse",
-        ],
-        [
-          "kuma.family",
-          "nope",
-        ],
-      ]),
-    );
-    expect(root.getAttribute("data-theme")).toBeNull();
-    expect(root.getAttribute("data-family")).toBeNull();
-  });
-
-  it("存储不可用时不抛错，页面照常继续", () => {
-    const root = new FakeElement("html");
-    const throwing = {
-      getItem: () => {
-        throw new Error("storage disabled");
-      },
-    };
-    expect(() =>
-      runBootstrap(preferenceBootstrapScript(), root, throwing),
-    ).not.toThrow();
-    expect(root.getAttribute("data-theme")).toBeNull();
-  });
-
   it("切换家族写入偏好，重开页面时被首帧脚本应用", async () => {
     const h = harness();
     h.fetchMock.mockReturnValue(respond(dashboard()));

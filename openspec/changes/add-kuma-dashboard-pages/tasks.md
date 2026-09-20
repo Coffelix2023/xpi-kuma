@@ -12,10 +12,10 @@
 
 ## 3. 前端模块拆分（阻止单文件继续膨胀）
 
-- [ ] 3.1 建立 `src/ui/client/` 目录骨架，把 `dashboard-client.ts` 的凭据引导与地址栏清除逻辑迁到 `bootstrap.ts`，并确认旧测试仍通过；验证方式是 `pnpm test` 全绿且新模块有独立测试文件。
-- [ ] 3.2 把带 `Authorization` 的请求封装与错误归一迁到 `client/api.ts`，把可见性感知轮询迁到 `client/poll.ts`；验证方式是脚本测试覆盖 5 秒间隔、隐藏暂停、恢复立即刷新、in-flight 去重与失败不产生无界重试。
-- [ ] 3.3 建立 `client/pages/` 装配层，让每个页面 shell 按固定顺序拼装脚本片段（bootstrap 必须最先）；验证方式是 HTML 生成测试断言脚本顺序与各页脚本内容互不串页。
-- [ ] 3.4 拆分后确认 `src/ui/` 下没有单文件超过 300 行，超出的继续按职责切分；验证方式是 `wc -l` 逐个检查并记录结果。
+- [x] 3.1 建立 `src/ui/client/` 目录骨架，把 `dashboard-client.ts` 的凭据引导与地址栏清除逻辑迁到 `bootstrap.ts`，并确认旧测试仍通过；验证方式是 `pnpm test` 全绿且新模块有独立测试文件。
+- [x] 3.2 把带 `Authorization` 的请求封装与错误归一迁到 `client/api.ts`，把可见性感知轮询迁到 `client/poll.ts`；验证方式是脚本测试覆盖 5 秒间隔、隐藏暂停、恢复立即刷新、in-flight 去重与失败不产生无界重试。
+- [x] 3.3 建立 `client/pages/` 装配层，让每个页面 shell 按固定顺序拼装脚本片段（bootstrap 必须最先）；验证方式是 HTML 生成测试断言脚本顺序与各页脚本内容互不串页。
+- [x] 3.4 拆分后确认 `src/ui/` 下没有单文件超过 300 行，超出的继续按职责切分；验证方式是 `wc -l` 逐个检查并记录结果。 结果：生产代码全部 ≤300 行（client/ 页面片段 201、chart 188、render 171、poll 31、api 21、bootstrap 58；theme 拆为 theme.ts 119 + theme-tokens.ts 244 数据表；装配层 dashboard-client.ts 48）。超限 3 个各有理由：`dashboard.ts` 302（服务端路由，任务 4.1 拆 routes/ 表）；`dashboard-client.test.ts` 686 与 `dashboard.test.ts` 348（集成测试套件，拆分会破坏 harness 一致性，豁免）。
 
 ## 4. 多页面路由与外壳
 

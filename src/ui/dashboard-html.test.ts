@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { NO_VENDOR_NOTICE, POLL_INTERVAL_MS } from "./dashboard-client.ts";
+import {
+  dashboardClientScript,
+  NO_VENDOR_NOTICE,
+  POLL_INTERVAL_MS,
+} from "./dashboard-client.ts";
 import { dashboardCss } from "./dashboard-css.ts";
 import { generateDashboardHTML } from "./dashboard-html.ts";
 import { escapeHtml, jsonForScript } from "./html.ts";
@@ -210,5 +214,35 @@ describe("注入防护", () => {
     expect(html).toContain(
       'var NO_VENDOR = "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml";',
     );
+  });
+});
+
+describe("脚本片段装配", () => {
+  it("装配顺序：bootstrap → api → poll → render → chart → page", () => {
+    const script = dashboardClientScript();
+    const order = [
+      "function readToken",
+      "function api(path",
+      "function startPolling",
+      "function cssVar(style",
+      "function renderChart(trend",
+      "function wireRanges",
+    ];
+    let cursor = -1;
+    for (const marker of order) {
+      const at = script.indexOf(marker);
+      expect(at, marker).toBeGreaterThan(cursor);
+      cursor = at;
+    }
+  });
+
+  it("主面板页内脚本包含全部六个片段的关键内容", () => {
+    const script = dashboardClientScript();
+    expect(script).toContain("function readToken");
+    expect(script).toContain("Authorization");
+    expect(script).toContain("visibilitychange");
+    expect(script).toContain("renderVendors");
+    expect(script).toContain("polyline");
+    expect(script).toContain("kuma-family");
   });
 });

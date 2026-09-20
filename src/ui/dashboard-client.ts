@@ -1,22 +1,63 @@
 /**
  * 面板页内脚本。
  *
- * 负责时间范围切换、刷新按钮、主题切换与 Chart.js 折线图。
- * 与 Node 侧通过 `window.glimpse.send()` 单向发消息，
- * Node 侧用 `win.send("__kuma.<method>(...)")` 回灌数据。
+ * 负责凭据引导、数据拉取、时间范围切换、探测按钮、主题切换与 Chart.js 折线图。
+ *
+ * 访问凭据来自 URL fragment：fragment 不进入 HTTP 请求、不写访问日志、也不
+ * 出现在第三方资源 Referer 中。脚本读取后立即从地址栏清除，并在 API 请求里
+ * 通过 `Authorization` 头发送。
  */
 
 /** Chart.js 版本固定，避免 CDN 漂移导致面板突然不可用。 */
 export const CHART_JS_CDN =
   "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
 
+/** 可见页面的数据轮询间隔；新 usage 必须在 5 秒内反映到面板。 */
+export const POLL_INTERVAL_MS = 5000;
+
+/** 无供应商时展示的提示文案。 */
+export const NO_VENDOR_NOTICE = "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml";
+
 export function dashboardClientScript(): string {
   return `
     (function () {
       "use strict";
 
-      var state = window.__kumaInitialState;
+      var POLL_MS = ${POLL_INTERVAL_MS};
+      var DEFAULT_PERIOD = "24h";
+      var NO_VENDOR = ${JSON.stringify(NO_VENDOR_NOTICE)};
+
+      var token = readToken();
+      var period = DEFAULT_PERIOD;
       var chart = null;
+      var lastTrend = [];
+      var busy = false;
+      var timer = null;
+
+      function el(id) { return document.getElementById(id); }
+
+      /** 读取凭据并立刻抹掉地址栏 fragment：不留在历史记录，也不进 Referer。 */
+      function readToken() {
+        var hash = window.location.hash || "";
+        var value = hash.charAt(0) === "#" ? hash.slice(1) : hash;
+        window.history.replaceState(null, "", window.location.pathname);
+        return value;
+      }
+
+      function setStatus(message) {
+        var stamp = el("kuma-updated");
+        if (stamp) { stamp.textContent = message; }
+      }
+
+      function api(path, method) {
+        return fetch(path, {
+          method: method || "GET",
+          headers: { "Authorization": "Bearer " + token },
+        }).then(function (response) {
+          if (!response.ok) { throw new Error("HTTP " + response.status); }
+          return response.json();
+        });
+      }
 
       /** 读取 CSS 变量；缺失时回退到 muted，保证图表始终有颜色。 */
       function cssVar(style, name) {
@@ -24,49 +65,44 @@ export function dashboardClientScript(): string {
         return value && value.trim() ? value.trim() : "#808080";
       }
 
-      function post(data) {
-        try { window.glimpse.send(data); } catch (e) { /* 非 Glimpse 环境（浏览器预览）时忽略 */ }
-      }
-
-      function el(id) { return document.getElementById(id); }
-
       function statusClass(status) {
-        if (status === "up") return "kuma-up";
-        if (status === "down") return "kuma-down";
-        if (status === "degraded") return "kuma-degraded";
+        if (status === "up") { return "kuma-up"; }
+        if (status === "down") { return "kuma-down"; }
+        if (status === "degraded") { return "kuma-degraded"; }
         return "kuma-unknown";
       }
 
       function statusIcon(status) {
-        if (status === "up") return "🟢";
-        if (status === "down" || status === "degraded") return "🔴";
+        if (status === "up") { return "🟢"; }
+        if (status === "down" || status === "degraded") { return "🔴"; }
         return "⚪";
       }
 
       function money(n) {
-        if (typeof n !== "number" || !isFinite(n)) return "¥-";
+        if (typeof n !== "number" || !isFinite(n)) { return "¥-"; }
         return "¥" + n.toFixed(2);
       }
 
       function ms(n) {
-        if (typeof n !== "number" || !isFinite(n)) return "—";
+        if (typeof n !== "number" || !isFinite(n)) { return "—"; }
         return Math.round(n) + " ms";
       }
 
       function price(p) {
-        if (!p) return "未配置";
+        if (!p) { return "未配置"; }
         return "¥" + p.input + " / ¥" + p.output;
       }
 
       function text(tag, className, content) {
         var node = document.createElement(tag);
-        if (className) node.className = className;
+        if (className) { node.className = className; }
         node.textContent = content;
         return node;
       }
 
       function renderVendors(vendors) {
         var host = el("kuma-vendors");
+        if (!host) { return; }
         host.textContent = "";
         var grid = document.createElement("div");
         grid.className = "kuma-grid";
@@ -82,8 +118,7 @@ export function dashboardClientScript(): string {
           head.appendChild(text("span", "kuma-card-model", v.model));
           card.appendChild(head);
 
-          var badge = text("span", "kuma-badge " + statusClass(v.status), v.status);
-          card.appendChild(badge);
+          card.appendChild(text("span", "kuma-badge " + statusClass(v.status), v.status));
 
           var dl = document.createElement("dl");
           dl.className = "kuma-kv";
@@ -106,7 +141,7 @@ export function dashboardClientScript(): string {
           btn.addEventListener("click", function () {
             btn.disabled = true;
             btn.textContent = "探测中…";
-            post({ type: "refresh", vendor: v.name });
+            probe(v.name);
           });
           foot.appendChild(btn);
           card.appendChild(foot);
@@ -117,6 +152,20 @@ export function dashboardClientScript(): string {
         host.appendChild(grid);
       }
 
+      /** 无供应商时给出可操作提示，而不是让用户面对空白页。 */
+      function renderNotice(vendors) {
+        var notice = el("kuma-notice");
+        if (!notice) { return; }
+        if (vendors.length > 0) {
+          notice.hidden = true;
+          notice.textContent = "";
+          return;
+        }
+        notice.className = "kuma-empty";
+        notice.textContent = NO_VENDOR;
+        notice.hidden = false;
+      }
+
       var COLUMNS = [
         ["供应商 / 模型", function (r) { return [r.provider + " · " + r.model]; }],
         ["输入 tok", function (r) { return [r.tokensInput, money(r.costInput)]; }],
@@ -125,8 +174,9 @@ export function dashboardClientScript(): string {
         ["缓存写", function (r) { return [r.tokensCacheWrite, money(r.costCacheWrite)]; }],
       ];
 
-      function renderStats(rows, period) {
+      function renderStats(rows, currentPeriod) {
         var host = el("kuma-stats");
+        if (!host) { return; }
         host.textContent = "";
 
         var box = document.createElement("div");
@@ -147,7 +197,7 @@ export function dashboardClientScript(): string {
         var tbody = document.createElement("tbody");
         if (rows.length === 0) {
           var emptyRow = document.createElement("tr");
-          var cell = text("td", "", "暂无数据（" + period + "）");
+          var cell = text("td", "", "暂无数据（" + currentPeriod + "）");
           cell.colSpan = COLUMNS.length + 2;
           emptyRow.appendChild(cell);
           tbody.appendChild(emptyRow);
@@ -170,12 +220,12 @@ export function dashboardClientScript(): string {
 
       function renderChart(trend) {
         var canvas = el("kuma-chart");
-        if (!canvas || typeof Chart === "undefined") return;
+        if (!canvas || typeof Chart === "undefined") { return; }
 
         var providers = [];
         trend.forEach(function (point) {
           Object.keys(point.byProvider).forEach(function (name) {
-            if (providers.indexOf(name) === -1) providers.push(name);
+            if (providers.indexOf(name) === -1) { providers.push(name); }
           });
         });
 
@@ -221,7 +271,7 @@ export function dashboardClientScript(): string {
           tension: 0.25,
         });
 
-        if (chart) chart.destroy();
+        if (chart) { chart.destroy(); }
         chart = new Chart(canvas.getContext("2d"), {
           type: "line",
           data: { labels: labels, datasets: datasets },
@@ -247,35 +297,112 @@ export function dashboardClientScript(): string {
         });
       }
 
-      function markRangeButtons(period) {
+      function markRangeButtons(current) {
         var buttons = document.querySelectorAll("[data-range]");
         Array.prototype.forEach.call(buttons, function (btn) {
-          btn.setAttribute("aria-pressed", String(btn.getAttribute("data-range") === period));
+          btn.setAttribute("aria-pressed", String(btn.getAttribute("data-range") === current));
         });
       }
 
-      function render(next) {
-        state = next;
-        markRangeButtons(state.period);
-        renderVendors(state.vendors);
-        renderStats(state.stats, state.period);
-        renderChart(state.trend);
-        var stamp = el("kuma-updated");
-        if (stamp) stamp.textContent = "更新于 " + new Date().toLocaleTimeString();
+      function render(data) {
+        var vendors = data.vendors || [];
+        if (data.period) { period = data.period; }
+        markRangeButtons(period);
+        renderVendors(vendors);
+        renderNotice(vendors);
+        renderStats(data.stats || [], period);
+        lastTrend = data.trend || [];
+        renderChart(lastTrend);
+        setStatus("更新于 " + new Date().toLocaleTimeString());
+      }
+
+      function enableButtons() {
+        var buttons = document.querySelectorAll("button");
+        Array.prototype.forEach.call(buttons, function (btn) {
+          if (btn.id === "kuma-theme") { return; }
+          btn.disabled = false;
+        });
+        var all = el("kuma-refresh-all");
+        if (all) { all.textContent = "全部刷新"; }
+        var cardButtons = document.querySelectorAll(".kuma-card-foot button");
+        Array.prototype.forEach.call(cardButtons, function (btn) {
+          btn.textContent = "刷新";
+        });
+      }
+
+      /** 连接错误只更新状态文案，保留已渲染数据，不启动重试风暴。 */
+      function showError(error) {
+        var message = error && error.message ? error.message : String(error);
+        setStatus("连接失败（" + message + "），请重新执行 /xpi-kuma");
+      }
+
+      /** 同一时刻只允许一个在途请求：重复触发被丢弃，既不排队也不重试。 */
+      function withBusy(task) {
+        if (busy) { return Promise.resolve(false); }
+        busy = true;
+        return Promise.resolve()
+          .then(task)
+          .then(
+            function () { return true; },
+            function (error) { showError(error); return false; }
+          )
+          .then(function (ok) {
+            busy = false;
+            enableButtons();
+            return ok;
+          });
+      }
+
+      function load() {
+        return api("/api/dashboard?period=" + encodeURIComponent(period)).then(render);
+      }
+
+      function refresh() {
+        return withBusy(load);
+      }
+
+      function probe(vendor) {
+        var path = vendor ? "/api/probes/" + encodeURIComponent(vendor) : "/api/probes";
+        return withBusy(function () {
+          return api(path, "POST").then(load);
+        });
+      }
+
+      function stopPolling() {
+        if (timer === null) { return; }
+        window.clearInterval(timer);
+        timer = null;
+      }
+
+      function startPolling() {
+        if (timer !== null) { return; }
+        timer = window.setInterval(function () {
+          if (document.hidden) { return; }
+          refresh();
+        }, POLL_MS);
+      }
+
+      function onVisibilityChange() {
+        if (document.hidden) { stopPolling(); return; }
+        // 恢复可见时先立即刷新一次，再恢复轮询
+        refresh();
+        startPolling();
       }
 
       function wireRanges() {
         var buttons = document.querySelectorAll("[data-range]");
         Array.prototype.forEach.call(buttons, function (btn) {
           btn.addEventListener("click", function () {
-            post({ type: "range", period: btn.getAttribute("data-range") });
+            period = btn.getAttribute("data-range") || period;
+            markRangeButtons(period);
+            refresh();
           });
         });
       }
 
       function wireTheme() {
         var btn = el("kuma-theme");
-        if (!btn) return;
+        if (!btn) { return; }
         btn.addEventListener("click", function () {
           var current = document.documentElement.getAttribute("data-theme") || "dark";
           var next = current === "dark" ? "light" : "dark";
@@ -286,47 +413,30 @@ export function dashboardClientScript(): string {
             chart.destroy();
             chart = null;
           }
-          renderChart(state.trend);
+          renderChart(lastTrend);
         });
       }
 
       function wireRefreshAll() {
         var btn = el("kuma-refresh-all");
-        if (!btn) return;
+        if (!btn) { return; }
         btn.addEventListener("click", function () {
           btn.disabled = true;
-          post({ type: "refresh" });
+          probe(null);
         });
       }
 
-      function enableRefreshButtons() {
-        var buttons = document.querySelectorAll("button");
-        Array.prototype.forEach.call(buttons, function (btn) {
-          if (btn.id === "kuma-theme") return;
-          btn.disabled = false;
-        });
-        var all = el("kuma-refresh-all");
-        if (all) all.textContent = "全部刷新";
-        var cardButtons = document.querySelectorAll(".kuma-card-foot button");
-        Array.prototype.forEach.call(cardButtons, function (btn) {
-          btn.textContent = "刷新";
-        });
+      if (!token) {
+        setStatus("缺少访问凭据，请重新执行 /xpi-kuma");
+        return;
       }
-
-      window.__kuma = {
-        render: render,
-        clearBusy: enableRefreshButtons,
-        error: function (message) {
-          enableRefreshButtons();
-          var stamp = el("kuma-updated");
-          if (stamp) stamp.textContent = "错误：" + message;
-        },
-      };
 
       wireRanges();
       wireTheme();
       wireRefreshAll();
-      render(state);
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      startPolling();
+      refresh();
     })();
   `;
 }

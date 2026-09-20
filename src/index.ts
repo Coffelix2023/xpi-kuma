@@ -11,10 +11,11 @@ import { UsageCollector } from "./collectors/usage-collector.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import { formatStatus } from "./lib/format.ts";
 import { FileLogger } from "./lib/log.ts";
+import { openInBrowser } from "./lib/open-browser.ts";
 import { VendorMonitor } from "./monitors/vendor-monitor.ts";
 import { Database } from "./storage/database.ts";
 import type { KumaConfig, UsageRecord } from "./types.ts";
-import { openDashboard } from "./ui/dashboard.ts";
+import { type DashboardServer, startDashboardServer } from "./ui/dashboard.ts";
 
 const VERSION = "0.1.0";
 const STATUS_KEY = "xpi-kuma";
@@ -22,18 +23,20 @@ const STATUS_KEY = "xpi-kuma";
 /** 会话级运行时状态；`session_shutdown` 后清空。 */
 interface Runtime {
   config: KumaConfig;
+  /** 当前会话的监控 Web 服务；未打开时为 null */
+  dashboardServer: DashboardServer | null;
   database: Database;
   usageCollector: UsageCollector;
   vendorMonitor: VendorMonitor;
 }
 
+/** 在途的服务启动 Promise；同一时刻只允许一个，成功后清空。 */
+let dashboardStart: Promise<DashboardServer> | null = null;
 let runtime: Runtime | null = null;
 const logger = new FileLogger(join(getAgentDir(), "data", "xpi-kuma", "xpi-kuma.log"));
 
 export default function xpiKuma(pi: ExtensionAPI): void {
-  pi.on("session_start", (event, ctx) => {
-    startSession(event, ctx);
-  });
+  pi.on("session_start", (event, ctx) => startSession(event, ctx));
 
   pi.on("message_end", (event) => {
     handleMessageEnd(event);
@@ -43,36 +46,44 @@ export default function xpiKuma(pi: ExtensionAPI): void {
     handleTurnEnd(event, ctx);
   });
 
-  pi.on("session_shutdown", (_event, ctx) => {
-    stopSession(ctx);
-  });
+  pi.on("session_shutdown", (_event, ctx) => stopSession(ctx));
 
   pi.registerCommand("xpi-kuma", {
     description: "打开监控面板",
     handler: async (_args, ctx) => {
-      if (!runtime) {
+      const current = runtime;
+      if (!current) {
         ctx.ui.notify(`xpi-kuma ${VERSION}：会话尚未初始化，请稍后重试`, "warning");
         return;
       }
-      if (runtime.config.vendors.length === 0) {
+      if (current.config.vendors.length === 0) {
         ctx.ui.notify("未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml", "warning");
       }
+      let server: DashboardServer;
       try {
-        await openDashboard(runtime.usageCollector, runtime.vendorMonitor, {
-          period: "24h",
-        });
+        server = await ensureDashboardServer(current);
       } catch (error) {
-        logger.error("打开监控面板失败", error);
-        ctx.ui.notify(`打开监控面板失败：${describeOpenFailure(error)}`, "error");
+        logger.error("启动监控面板服务失败", error);
+        ctx.ui.notify(`启动监控面板服务失败：${describeError(error)}`, "error");
+        return;
+      }
+      try {
+        await openInBrowser(server.url);
+      } catch (error) {
+        logger.error("打开默认浏览器失败", error);
+        ctx.ui.notify(`无法自动打开浏览器，请手动访问：${server.url}`, "warning");
       }
     },
   });
 }
 
 /** 初始化数据库、配置与探测任务；失败不抛错，避免阻断 Pi 启动。 */
-function startSession(event: SessionStartEvent, ctx: ExtensionContext): void {
+async function startSession(
+  event: SessionStartEvent,
+  ctx: ExtensionContext,
+): Promise<void> {
   try {
-    stopSession(ctx);
+    await stopSession(ctx);
     const config = loadConfig({
       cwd: ctx.cwd,
     });
@@ -91,6 +102,7 @@ function startSession(event: SessionStartEvent, ctx: ExtensionContext): void {
     vendorMonitor.start();
     runtime = {
       config,
+      dashboardServer: null,
       database,
       usageCollector,
       vendorMonitor,
@@ -107,20 +119,60 @@ function startSession(event: SessionStartEvent, ctx: ExtensionContext): void {
   }
 }
 
-/** 停止探测任务、关闭数据库并清除 footer 状态。 */
-function stopSession(ctx: ExtensionContext): void {
-  if (!runtime) {
+/**
+ * 关闭监控 Web 服务、停止探测并关闭数据库，最后清除 footer 状态。
+ *
+ * 先置空 runtime，重复调用会立即返回，因此 `session_start` 与
+ * `session_shutdown` 都可以安全地等待它。顺序固定：先停 HTTP 服务，再停
+ * 探测，最后关数据库，避免在途 API 请求读到已关闭的连接。
+ */
+async function stopSession(ctx: ExtensionContext): Promise<void> {
+  const current = runtime;
+  if (!current) {
     return;
   }
+  runtime = null;
+  dashboardStart = null;
+  await quietly(() => current.dashboardServer?.close());
+  await quietly(() => current.vendorMonitor.stop());
+  await quietly(() => current.database.close());
+  await quietly(() => ctx.ui.setStatus(STATUS_KEY, undefined));
+}
+
+/** 清理步骤彼此独立：单步失败只记日志，不阻断后续步骤。 */
+async function quietly(action: () => unknown): Promise<void> {
   try {
-    runtime.vendorMonitor.stop();
-    runtime.database.close();
+    await action();
   } catch (error) {
     logger.error("会话清理失败", error);
-  } finally {
-    runtime = null;
-    ctx.ui.setStatus(STATUS_KEY, undefined);
   }
+}
+
+/**
+ * 启动或复用本会话的监控 Web 服务。
+ *
+ * 同一时刻只允许一个启动 Promise：并发执行 `/xpi-kuma` 不会创建第二个
+ * 监听器；启动失败后清空缓存，允许用户重试。
+ */
+function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
+  if (current.dashboardServer) {
+    return Promise.resolve(current.dashboardServer);
+  }
+  dashboardStart ??= startDashboardServer(
+    current.usageCollector,
+    current.vendorMonitor,
+  ).then(
+    (server) => {
+      current.dashboardServer = server;
+      dashboardStart = null;
+      return server;
+    },
+    (error: unknown) => {
+      dashboardStart = null;
+      throw error;
+    },
+  );
+  return dashboardStart;
 }
 
 /**
@@ -175,16 +227,8 @@ function handleTurnEnd(_event: TurnEndEvent, ctx: ExtensionContext): void {
   }
 }
 
-/**
- * 把面板打开失败的原因压缩成一行用户可读文案。
- *
- * 最常见原因是原生宿主二进制缺失（glimpseui 的 postinstall 被跳过），
- * 此时上游抛出的消息很长，直接展示会撑爆通知区域。
- */
-function describeOpenFailure(error: unknown): string {
+/** 把失败原因压缩成一行用户可读文案，避免上游长消息撑爆通知区域。 */
+function describeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (/host not found|glimpse/i.test(message)) {
-    return "Glimpse 原生宿主不可用，请在扩展目录执行 pnpm rebuild glimpseui 后重试";
-  }
   return message.split("\n")[0];
 }

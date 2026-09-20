@@ -157,10 +157,19 @@ ${themeToCssVariables(LIGHT_THEME)}
       text-align: center;
       color: var(--kuma-muted);
     }
+    /* hidden 属性优先于 .kuma-empty 的布局，保证提示可被脚本收起 */
+    .kuma-empty[hidden] { display: none; }
 
     .kuma-chart-wrap { border: 1px solid var(--kuma-rule); border-radius: var(--kuma-radius); padding: var(--kuma-space-2); }
     .kuma-chart-wrap canvas { width: 100%; height: 260px; display: block; }
 
     .kuma-perf { margin-left: auto; color: var(--kuma-muted); }
+
+    /* 窄视口：卡片换更多列，表格继续横向滚动，图表压低高度 */
+    @media (max-width: 800px) {
+      body { padding: var(--kuma-space-2); }
+      .kuma-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+      .kuma-chart-wrap canvas { height: 200px; }
+    }
   `;
 }

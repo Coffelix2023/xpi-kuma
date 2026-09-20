@@ -1,14 +1,29 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type {
   ExtensionAPI,
   ExtensionContext,
   MessageEndEvent,
+  SessionShutdownEvent,
+  SessionStartEvent,
   TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readConfigTemplate, resolveConfigPath } from "./config.ts";
+
+/**
+ * 记录浏览器打开请求。
+ *
+ * 测试里一律让打开失败，这样既不会真的弹出浏览器，又可以从 Pi 通知里拿到
+ * 本机 URL —— 这条降级路径本身就是 spec 要求的行为。
+ */
+const openBrowser = vi.fn();
+
+vi.mock("./lib/open-browser.ts", () => ({
+  openInBrowser: (url: string) => openBrowser(url),
+}));
 
 const cleanups: (() => void)[] = [];
 let extensionFactory: (pi: ExtensionAPI) => void;
@@ -70,18 +85,43 @@ function setupCwd(): string {
   return dir;
 }
 
-function sessionStart(
+async function sessionStart(
   handlers: ReturnType<typeof fakePi>["handlers"],
   ctx: ExtensionContext,
   reason = "startup",
-) {
-  handlers.get("session_start")?.(
+): Promise<void> {
+  await handlers.get("session_start")?.(
     {
       reason,
       type: "session_start",
-    },
+    } as unknown as SessionStartEvent,
     ctx,
   );
+}
+
+async function sessionShutdown(
+  handlers: ReturnType<typeof fakePi>["handlers"],
+  ctx: ExtensionContext,
+  reason = "quit",
+): Promise<void> {
+  await handlers.get("session_shutdown")?.(
+    {
+      reason,
+      type: "session_shutdown",
+    } as unknown as SessionShutdownEvent,
+    ctx,
+  );
+}
+
+async function runCommand(
+  commands: ReturnType<typeof fakePi>["commands"],
+  ctx: ExtensionContext,
+): Promise<void> {
+  const handler = commands.get("xpi-kuma")?.handler;
+  if (!handler) {
+    throw new Error("/xpi-kuma 命令未注册");
+  }
+  await handler("", ctx);
 }
 
 function messageEnd(
@@ -113,11 +153,45 @@ function turnEndEvent(): TurnEndEvent {
   } as unknown as TurnEndEvent;
 }
 
+/** 每次新建连接，避免连接池掩盖端口是否真的释放。 */
+function rawStatus(url: string, headers: Record<string, string> = {}): Promise<number> {
+  const parsed = new URL(url);
+  return new Promise<number>((resolve, reject) => {
+    const req = request(
+      {
+        agent: false,
+        headers,
+        host: parsed.hostname,
+        method: "GET",
+        path: `${parsed.pathname}${parsed.search}`,
+        port: parsed.port,
+      },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+function lastUrl(): string {
+  return String(openBrowser.mock.calls.at(-1)?.[0] ?? "");
+}
+
 beforeAll(async () => {
   // Database 与 logger 都从 agent dir 取路径，测试必须隔离到临时目录
   process.env.PI_CODING_AGENT_DIR = mkdtempSync(join(tmpdir(), "xpi-kuma-agentdir-"));
   const mod = await import("./index.ts");
   extensionFactory = mod.default;
+});
+
+beforeEach(() => {
+  openBrowser.mockClear();
+  openBrowser.mockImplementation(() =>
+    Promise.reject(new Error("测试环境不打开浏览器")),
+  );
 });
 
 afterAll(() => {
@@ -148,21 +222,22 @@ describe("扩展注册", () => {
 });
 
 describe("会话生命周期", () => {
-  it("session_start 后 footer 显示零值统计", () => {
+  it("session_start 后 footer 显示零值统计", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
     const { ctx, setStatus } = fakeCtx(setupCwd());
 
-    sessionStart(handlers, ctx);
+    await sessionStart(handlers, ctx);
 
     expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 0");
+    await sessionShutdown(handlers, ctx);
   });
 
-  it("message_end 累加会话统计并写入数据库", () => {
+  it("message_end 累加会话统计并写入数据库", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
     const { ctx } = fakeCtx(setupCwd());
-    sessionStart(handlers, ctx);
+    await sessionStart(handlers, ctx);
 
     messageEnd(
       handlers,
@@ -185,13 +260,14 @@ describe("会话生命周期", () => {
     const { ctx: turnCtx, setStatus } = fakeCtx(setupCwd());
     handlers.get("turn_end")?.(turnEndEvent(), turnCtx);
     expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 165");
+    await sessionShutdown(handlers, ctx);
   });
 
-  it("忽略非 assistant 消息与缺少 usage 的 assistant 消息", () => {
+  it("忽略非 assistant 消息与缺少 usage 的 assistant 消息", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
     const { ctx } = fakeCtx(setupCwd());
-    sessionStart(handlers, ctx);
+    await sessionStart(handlers, ctx);
 
     handlers.get("message_end")?.(
       {
@@ -208,27 +284,22 @@ describe("会话生命周期", () => {
     const { ctx: turnCtx, setStatus } = fakeCtx(setupCwd());
     handlers.get("turn_end")?.(turnEndEvent(), turnCtx);
     expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 0");
+    await sessionShutdown(handlers, ctx);
   });
 
-  it("session_shutdown 清除 footer 状态", () => {
+  it("session_shutdown 清除 footer 状态", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
     const { ctx, setStatus } = fakeCtx(setupCwd());
-    sessionStart(handlers, ctx);
+    await sessionStart(handlers, ctx);
     setStatus.mockClear();
 
-    handlers.get("session_shutdown")?.(
-      {
-        reason: "quit",
-        type: "session_shutdown",
-      },
-      ctx,
-    );
+    await sessionShutdown(handlers, ctx, "quit");
 
     expect(setStatus).toHaveBeenCalledWith("xpi-kuma", undefined);
   });
 
-  it("配置无法创建时提示用户而不抛错", () => {
+  it("配置无法创建时提示用户而不抛错", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
     const dir = setupCwd();
@@ -237,17 +308,130 @@ describe("会话生命周期", () => {
     writeFileSync(blocker, "");
     const { ctx, notify } = fakeCtx(blocker);
 
-    expect(() => sessionStart(handlers, ctx)).not.toThrow();
+    await expect(sessionStart(handlers, ctx)).resolves.toBeUndefined();
     expect(notify).toHaveBeenCalled();
   });
 });
 
+describe("监控面板服务", () => {
+  it("执行命令启动本机服务并打开浏览器", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    await runCommand(commands, ctx);
+
+    expect(openBrowser).toHaveBeenCalledTimes(1);
+    expect(lastUrl()).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/#/);
+    await sessionShutdown(handlers, ctx);
+  });
+
+  it("重复执行命令复用同一服务与凭据，不创建重复监听器", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    await runCommand(commands, ctx);
+    const first = lastUrl();
+    await runCommand(commands, ctx);
+
+    expect(openBrowser).toHaveBeenCalledTimes(2);
+    expect(lastUrl()).toBe(first);
+    await sessionShutdown(handlers, ctx);
+  });
+
+  it("浏览器无法打开时通过通知给出可复制的本机 URL", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx, notify } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    await runCommand(commands, ctx);
+
+    const url = lastUrl();
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining(url), "warning");
+    await sessionShutdown(handlers, ctx);
+  });
+
+  it("会话未初始化时只提示，不启动服务", async () => {
+    const { api, commands } = fakePi();
+    extensionFactory(api);
+    const { ctx, notify } = fakeCtx(setupCwd());
+
+    await runCommand(commands, ctx);
+
+    expect(openBrowser).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
+      expect.stringContaining("会话尚未初始化"),
+      "warning",
+    );
+  });
+
+  it("无配置供应商时仍启动服务并提示配置路径", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const dir = setupCwd();
+    const configPath = resolveConfigPath(dir);
+    writeFileSync(configPath, "vendors: []\nretention:\n  raw_records: 7\n");
+    const { ctx, notify } = fakeCtx(dir);
+    await sessionStart(handlers, ctx);
+
+    await runCommand(commands, ctx);
+
+    expect(notify).toHaveBeenCalledWith(
+      "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml",
+      "warning",
+    );
+    expect(openBrowser).toHaveBeenCalledTimes(1);
+    await sessionShutdown(handlers, ctx);
+  });
+});
+
+describe("会话切换释放服务", () => {
+  const reasons = [
+    "quit",
+    "reload",
+    "new",
+    "resume",
+    "fork",
+  ] as const;
+
+  for (const reason of reasons) {
+    it(`session_shutdown(${reason}) 释放端口并使旧凭据失效`, async () => {
+      const { api, commands, handlers } = fakePi();
+      extensionFactory(api);
+      const { ctx } = fakeCtx(setupCwd());
+      await sessionStart(handlers, ctx);
+      await runCommand(commands, ctx);
+      const first = lastUrl();
+      const oldToken = new URL(first).hash.slice(1);
+
+      await sessionShutdown(handlers, ctx, reason);
+      await expect(rawStatus(first)).rejects.toThrow();
+
+      await sessionStart(handlers, ctx, "new");
+      await runCommand(commands, ctx);
+      const second = lastUrl();
+
+      expect(second).not.toBe(first);
+      expect(
+        await rawStatus(`${new URL(second).origin}/api/dashboard`, {
+          authorization: `Bearer ${oldToken}`,
+        }),
+      ).toBe(401);
+      await sessionShutdown(handlers, ctx);
+    });
+  }
+});
+
 describe("统计累加语义", () => {
-  it("同一 turn 内多条 assistant 消息都会累加", () => {
+  it("同一 turn 内多条 assistant 消息都会累加", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
     const { ctx } = fakeCtx(setupCwd());
-    sessionStart(handlers, ctx);
+    await sessionStart(handlers, ctx);
 
     const usage = {
       cacheRead: 0,
@@ -264,13 +448,14 @@ describe("统计累加语义", () => {
     const { ctx: turnCtx, setStatus } = fakeCtx(setupCwd());
     handlers.get("turn_end")?.(turnEndEvent(), turnCtx);
     expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.02 | 📊 30");
+    await sessionShutdown(handlers, ctx);
   });
 
-  it("重新 session_start 重置累加器", () => {
+  it("重新 session_start 重置累加器", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
     const { ctx } = fakeCtx(setupCwd());
-    sessionStart(handlers, ctx);
+    await sessionStart(handlers, ctx);
     messageEnd(
       handlers,
       {
@@ -284,8 +469,9 @@ describe("统计累加语义", () => {
     );
 
     const { ctx: newSessionCtx, setStatus } = fakeCtx(setupCwd());
-    sessionStart(handlers, newSessionCtx, "new");
+    await sessionStart(handlers, newSessionCtx, "new");
 
     expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 0");
+    await sessionShutdown(handlers, newSessionCtx);
   });
 });

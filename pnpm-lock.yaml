@@ -115,9 +115,6 @@ importers:
       better-sqlite3:
         specifier: ^13.0.3
         version: 13.0.3
-      glimpseui:
-        specifier: ^0.8.1
-        version: 0.8.1
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -972,12 +969,6 @@ packages:
   get-east-asian-width@1.6.0:
     resolution: {integrity: sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==}
     engines: {node: '>=18'}
-
-  glimpseui@0.8.1:
-    resolution: {integrity: sha512-p0MWbRh5Bq0MtMG0qxJBBKghfB3c7U2zW+J3EXJTQe3XdVKM4ncyhQXAyHokw0LHvCysLTO/63c+4gducg1zhQ==}
-    engines: {node: '>=18'}
-    os: [darwin, linux, win32]
-    hasBin: true
 
   google-auth-library@10.9.1:
     resolution: {integrity: sha512-i1ydyHrqcIxXkWh/uBmVkzCvIuq5yiK2ATndIe5XxKholrG/MTYP9xGYka4sQhrbIAgGjL2B6NOE7rFaiF3fXw==}
@@ -2151,8 +2142,6 @@ snapshots:
       - supports-color
 
   get-east-asian-width@1.6.0: {}
-
-  glimpseui@0.8.1: {}
 
   google-auth-library@10.9.1:
     dependencies:

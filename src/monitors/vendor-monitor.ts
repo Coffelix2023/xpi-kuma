@@ -83,6 +83,11 @@ export class VendorMonitor {
     return this.timers.size;
   }
 
+  /** 已配置的供应商名称，供路由做允许列表校验。 */
+  get vendorNames(): string[] {
+    return this.config.vendors.map((vendor) => vendor.name);
+  }
+
   /** 执行一次探测并落库。 */
   private async runProbe(vendor: VendorConfig): Promise<void> {
     const result = await this.probeVendor(vendor);

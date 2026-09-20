@@ -4,9 +4,9 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { UsageCollector } from "../collectors/usage-collector.ts";
 import { FileLogger } from "../lib/log.ts";
 import type { VendorMonitor } from "../monitors/vendor-monitor.ts";
-import type { TrendSeries } from "../storage/database.ts";
-import type { AggregatedStats, StatsPeriod, VendorStatus } from "../types.ts";
-import { DEFAULT_PERIOD, generateDashboardHTML } from "./dashboard-html.ts";
+import { handleApi } from "./routes/api.ts";
+import { cspFor, respond } from "./routes/http.ts";
+import { PAGES } from "./routes/pages.ts";
 
 /** 只监听 IPv4 回环，不暴露局域网或公网，见 dashboard-ui spec。 */
 const LOOPBACK = "127.0.0.1";
@@ -20,32 +20,8 @@ const NONCE_BYTES = 16;
 /** `close()` 的最长等待：超时后强制断开在途连接，不阻塞 Pi 退出。 */
 const CLOSE_TIMEOUT_MS = 1000;
 
-const VALID_PERIODS: StatsPeriod[] = [
-  "1h",
-  "24h",
-  "7d",
-  "30d",
-];
-
-const PROBES_PREFIX = "/api/probes/";
-
 /** 页内脚本从 URL fragment 取凭据，请求头里带这个前缀。 */
 const BEARER_PREFIX = "Bearer ";
-
-/**
- * 面板数据接口的响应体。
- *
- * 各字段都有界：stats 是 `provider × model` 聚合结果，trend 最多 100 个
- * 数据点，vendors 等于配置的供应商数量。
- */
-export interface DashboardData {
-  /** 数据生成时间（毫秒时间戳） */
-  generatedAt: number;
-  period: StatsPeriod;
-  stats: AggregatedStats[];
-  trend: TrendSeries[];
-  vendors: VendorStatus[];
-}
 
 export interface DashboardServer {
   /** 关闭监听并释放端口；可重复调用 */
@@ -65,30 +41,17 @@ function getLogger(): FileLogger {
   return logger;
 }
 
-function isPeriod(value: unknown): value is StatsPeriod {
-  return typeof value === "string" && (VALID_PERIODS as string[]).includes(value);
-}
-
-/** 汇总面板当前需要的全部数据。 */
-function collectData(
-  usageCollector: UsageCollector,
-  vendorMonitor: VendorMonitor,
-  period: StatsPeriod,
-): DashboardData {
-  return {
-    generatedAt: Date.now(),
-    period,
-    stats: usageCollector.getStats(period),
-    trend: usageCollector.getTrend(period),
-    vendors: vendorMonitor.getVendorStatus(),
-  };
-}
-
 /**
  * 启动本会话的监控 Web 服务。
  *
- * 绑定 `127.0.0.1` 的随机端口，页面与数据接口分离：根页面只返回静态 shell，
- * 其余接口一律要求本次启动生成的 Bearer 凭据。
+ * 绑定 `127.0.0.1` 的随机端口。请求分两段处理：
+ *
+ * 1. **页面外壳**（`routes/pages.ts` 的表）：无凭据可访问，但只返回不含任何数据与
+ *    凭据的静态结构 —— 凭据在 URL fragment 里，首帧请求无法携带。
+ * 2. **数据接口**（`routes/api.ts` 的表）：一律要求本次启动生成的 Bearer 凭据，
+ *    修改类请求额外校验 `Origin`。
+ *
+ * 本文件只保留启动、凭据、Host/Origin 校验、CSP 与关闭逻辑。
  */
 export async function startDashboardServer(
   usageCollector: UsageCollector,
@@ -122,13 +85,11 @@ export async function startDashboardServer(
     const url = new URL(req.url ?? "/", `http://${host}`);
     const method = req.method ?? "GET";
 
-    // 根页面只含静态 shell，凭据在 fragment 里，首次请求无法携带
-    if (method === "GET" && url.pathname === "/") {
+    // 页面外壳只含静态结构，凭据在 fragment 里，首次请求无法携带
+    const renderPage = method === "GET" ? PAGES.get(url.pathname) : undefined;
+    if (renderPage) {
       const nonce = randomBytes(NONCE_BYTES).toString("base64");
-      const html = generateDashboardHTML({
-        nonce,
-      });
-      respond(res, 200, "text/html; charset=utf-8", html, cspFor(nonce));
+      respond(res, 200, "text/html; charset=utf-8", renderPage(nonce), cspFor(nonce));
       return;
     }
 
@@ -137,73 +98,15 @@ export async function startDashboardServer(
       return;
     }
 
-    if (method === "GET" && url.pathname === "/api/dashboard") {
-      const period = url.searchParams.get("period") ?? DEFAULT_PERIOD;
-      if (!isPeriod(period)) {
-        respond(res, 400, "text/plain; charset=utf-8", "非法的时间范围", null);
-        return;
-      }
-      const data = collectData(usageCollector, vendorMonitor, period);
-      respond(res, 200, "application/json; charset=utf-8", JSON.stringify(data), null);
-      return;
+    const handled = handleApi(method, url, req, res, {
+      logger: getLogger(),
+      originMatches: (request) => sameOrigin(request, host),
+      usageCollector,
+      vendorMonitor,
+    });
+    if (!handled) {
+      respond(res, 404, "text/plain; charset=utf-8", "未找到", null);
     }
-
-    if (method === "POST" && url.pathname === "/api/probes") {
-      if (!sameOrigin(req, host)) {
-        respond(res, 403, "text/plain; charset=utf-8", "拒绝访问", null);
-        return;
-      }
-      void vendorMonitor.triggerAllProbes().then(
-        () => {
-          respond(
-            res,
-            200,
-            "application/json; charset=utf-8",
-            JSON.stringify({
-              ok: true,
-            }),
-            null,
-          );
-        },
-        (error: unknown) => {
-          getLogger().error("面板探测失败", error);
-          respond(res, 500, "text/plain; charset=utf-8", "探测失败", null);
-        },
-      );
-      return;
-    }
-
-    if (method === "POST" && url.pathname.startsWith(PROBES_PREFIX)) {
-      if (!sameOrigin(req, host)) {
-        respond(res, 403, "text/plain; charset=utf-8", "拒绝访问", null);
-        return;
-      }
-      const name = decodeURIComponent(url.pathname.slice(PROBES_PREFIX.length));
-      if (!vendorMonitor.vendorNames.includes(name)) {
-        respond(res, 404, "text/plain; charset=utf-8", "未知的供应商", null);
-        return;
-      }
-      void vendorMonitor.triggerProbe(name).then(
-        () => {
-          respond(
-            res,
-            200,
-            "application/json; charset=utf-8",
-            JSON.stringify({
-              ok: true,
-            }),
-            null,
-          );
-        },
-        (error: unknown) => {
-          getLogger().error("面板探测失败", error);
-          respond(res, 500, "text/plain; charset=utf-8", "探测失败", null);
-        },
-      );
-      return;
-    }
-
-    respond(res, 404, "text/plain; charset=utf-8", "未找到", null);
   }
 
   return {
@@ -268,35 +171,4 @@ function authorized(req: IncomingMessage, token: string): boolean {
 /** 修改状态的请求必须来自本服务自身页面。 */
 function sameOrigin(req: IncomingMessage, host: string): boolean {
   return req.headers.origin === `http://${host}`;
-}
-
-function respond(
-  res: ServerResponse,
-  status: number,
-  contentType: string,
-  body: string,
-  csp: string | null,
-): void {
-  res.writeHead(status, {
-    "Cache-Control": "no-store",
-    "Content-Security-Policy": csp ?? "default-src 'none'",
-    "Content-Type": contentType,
-    "Referrer-Policy": "no-referrer",
-    "X-Content-Type-Options": "nosniff",
-  });
-  res.end(body);
-}
-
-/** 只放行页面自身：脚本与样式都经 nonce 授权，不允许任何外部来源。 */
-function cspFor(nonce: string): string {
-  return [
-    "default-src 'none'",
-    `script-src 'nonce-${nonce}'`,
-    `style-src 'nonce-${nonce}'`,
-    "connect-src 'self'",
-    "img-src 'self' data:",
-    "base-uri 'none'",
-    "form-action 'none'",
-    "frame-ancestors 'none'",
-  ].join("; ");
 }

@@ -5,6 +5,11 @@
  * 避免页面装配层与片段层互相 import 造成循环依赖。
  */
 
+import type { StatsPeriod } from "../../types.ts";
+
+/** 面板默认时间范围；主面板脚本与子页脚本共用同一个默认值。 */
+export const DEFAULT_PERIOD: StatsPeriod = "24h";
+
 /** Atlas 家族标识；取值与 `theme.ts` 的 `ThemeFamily` 一致。 */
 export const ATLAS_FAMILY = "atlas";
 

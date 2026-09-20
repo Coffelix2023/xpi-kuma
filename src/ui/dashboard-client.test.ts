@@ -4,6 +4,7 @@ import {
   NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
   preferenceBootstrapScript,
+  sharedClientScript,
 } from "./dashboard-client.ts";
 
 /**
@@ -184,6 +185,9 @@ function shell(): FakeDocument {
   doc.add("button", "kuma-refresh-all");
   doc.add("button", "kuma-theme");
   doc.add("button", "kuma-family");
+  const navLink = doc.add("a");
+  navLink.setAttribute("data-kuma-nav", "/accounts");
+  navLink.setAttribute("href", "/accounts");
   for (const period of [
     "1h",
     "24h",
@@ -682,5 +686,83 @@ describe("趋势图内联 SVG", () => {
 
     const host = h.doc.getElementById("kuma-chart");
     expect(host?.textContent).toBe("");
+  });
+});
+
+describe("站内导航与缺凭据提示", () => {
+  it("有凭据时给站内链接补上 fragment", async () => {
+    const h = harness("#secret-token");
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const link = h.doc.querySelectorAll("[data-kuma-nav]")[0];
+    expect(link?.getAttribute("href")).toBe("/accounts#secret-token");
+  });
+
+  it("主面板无凭据时提示重新执行命令，且不改链接", () => {
+    const h = harness("");
+    h.start();
+
+    expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("缺少访问凭据");
+    const link = h.doc.querySelectorAll("[data-kuma-nav]")[0];
+    expect(link?.getAttribute("href")).toBe("/accounts");
+  });
+
+  it("子页脚本无凭据时给出可操作提示", () => {
+    const stamp = {
+      textContent: "",
+    };
+    const factory = new Function("window", "document", sharedClientScript());
+    factory(
+      {
+        history: {
+          replaceState: vi.fn(),
+        },
+        location: {
+          hash: "",
+          pathname: "/accounts",
+        },
+      },
+      {
+        getElementById: (id: string) => (id === "kuma-updated" ? stamp : null),
+        querySelectorAll: () => [],
+      },
+    );
+    expect(stamp.textContent).toContain("缺少访问凭据");
+  });
+
+  it("子页脚本有凭据时补全站内链接", () => {
+    const attrs = new Map<string, string>([
+      [
+        "data-kuma-nav",
+        "/",
+      ],
+    ]);
+    const link = {
+      getAttribute: (name: string) => attrs.get(name) ?? null,
+      setAttribute: (name: string, value: string) => {
+        attrs.set(name, value);
+      },
+    };
+    const factory = new Function("window", "document", sharedClientScript());
+    factory(
+      {
+        history: {
+          replaceState: vi.fn(),
+        },
+        location: {
+          hash: "#tok",
+          pathname: "/accounts",
+        },
+      },
+      {
+        getElementById: () => null,
+        querySelectorAll: () => [
+          link,
+        ],
+      },
+    );
+    expect(attrs.get("href")).toBe("/#tok");
   });
 });

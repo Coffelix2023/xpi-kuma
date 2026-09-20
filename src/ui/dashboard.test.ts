@@ -143,6 +143,59 @@ describe("服务启动与路由", () => {
     expect(res.body).not.toContain(server.token);
   });
 
+  it("四个页面路径都返回不含凭据的静态外壳", async () => {
+    const { server } = await start();
+    for (const path of [
+      "/",
+      "/empty",
+      "/accounts",
+      "/settings",
+    ]) {
+      const res = await call(server.port, path);
+      expect(res.status, path).toBe(200);
+      expect(res.headers["content-type"], path).toContain("text/html");
+      expect(res.body, path).not.toContain(server.token);
+    }
+  });
+
+  it("子页面各有自己的容器，不混入主面板的数据区块", async () => {
+    const { server } = await start();
+    const accounts = await call(server.port, "/accounts");
+    expect(accounts.body).toContain('id="kuma-accounts"');
+    expect(accounts.body).not.toContain('id="kuma-vendors"');
+
+    const settings = await call(server.port, "/settings");
+    expect(settings.body).toContain('id="kuma-diagnostics"');
+    expect(settings.body).not.toContain('id="kuma-vendors"');
+
+    const empty = await call(server.port, "/empty");
+    expect(empty.body).toContain('id="kuma-guide-title"');
+    expect(empty.body).not.toContain('id="kuma-vendors"');
+  });
+
+  it("页面外壳开放不影响数据接口的凭据校验", async () => {
+    const { server } = await start();
+    const dashboard = await call(server.port, "/api/dashboard");
+    expect(dashboard.status).toBe(401);
+
+    const probes = await call(server.port, "/api/probes", {
+      method: "POST",
+    });
+    expect(probes.status).toBe(401);
+  });
+
+  it("原型链路径不会命中页面路由", async () => {
+    const { server } = await start();
+    for (const path of [
+      "/__proto__",
+      "/constructor",
+    ]) {
+      const res = await call(server.port, path);
+      expect(res.status, path).toBe(401);
+      expect(res.body, path).not.toContain("function");
+    }
+  });
+
   it("数据接口按请求的时间范围返回有界 JSON", async () => {
     const { server } = await start();
     const res = await call(server.port, "/api/dashboard?period=7d", {

@@ -185,6 +185,27 @@ ${spacing}
 
     .kuma-perf { margin-left: auto; color: var(--muted-foreground); }
 
+    /* 子页用的行内链接与引导步骤 */
+    a.kuma-link {
+      color: var(--foreground);
+      font-size: 11px;
+      text-decoration: none;
+      border-bottom: 1px solid var(--border);
+    }
+    a.kuma-link:hover { border-bottom-color: var(--primary); color: var(--primary); }
+    a.kuma-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+    .kuma-steps { margin: 0; padding-left: var(--kuma-space-3); }
+    .kuma-steps li { margin-bottom: var(--kuma-space-1); }
+    .kuma-steps code,
+    code {
+      font-family: var(--font-mono);
+      background: var(--muted);
+      color: var(--foreground);
+      padding: 1px 4px;
+      border-radius: ${radius(-4)};
+    }
+
     /* 窄视口：卡片换更多列，表格继续横向滚动，图表压低高度 */
     @media (max-width: 800px) {
       body { padding: var(--kuma-space-2); }

@@ -194,6 +194,7 @@ export function dashboardPageFragment(): string {
       wireTheme();
       wireFamily();
       wireRefreshAll();
+      wireNav();
       document.addEventListener("visibilitychange", onVisibilityChange);
       startPolling();
       refresh();

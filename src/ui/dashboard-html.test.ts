@@ -7,6 +7,9 @@ import {
 import { dashboardCss } from "./dashboard-css.ts";
 import { generateDashboardHTML } from "./dashboard-html.ts";
 import { escapeHtml, jsonForScript } from "./html.ts";
+import { generateAccountsHTML } from "./pages/accounts.ts";
+import { generateEmptyHTML } from "./pages/empty.ts";
+import { generateSettingsHTML } from "./pages/settings.ts";
 
 describe("generateDashboardHTML 结构", () => {
   it("包含供应商卡片容器、统计表容器与趋势图 canvas", () => {
@@ -244,5 +247,55 @@ describe("脚本片段装配", () => {
     expect(script).toContain("renderVendors");
     expect(script).toContain("polyline");
     expect(script).toContain("kuma-family");
+  });
+});
+
+describe("页面互链", () => {
+  it("主面板供应商区块提供账户详情与配置体检入口", () => {
+    const html = generateDashboardHTML();
+    expect(html).toContain('data-kuma-nav="/accounts"');
+    expect(html).toContain('data-kuma-nav="/settings"');
+    expect(html).toContain("账户详情");
+    expect(html).toContain("配置体检");
+  });
+
+  it("站内链接的兜底 href 不带凭据，凭据由脚本补 fragment", () => {
+    const html = generateDashboardHTML();
+    expect(html).toContain('href="/accounts"');
+    expect(html).not.toContain("?token");
+    expect(html).not.toContain("token=");
+  });
+
+  it("三个子页都提供返回主面板入口", () => {
+    const pages = [
+      [
+        "empty",
+        generateEmptyHTML(),
+      ],
+      [
+        "accounts",
+        generateAccountsHTML(),
+      ],
+      [
+        "settings",
+        generateSettingsHTML(),
+      ],
+    ] as const;
+    for (const [name, html] of pages) {
+      expect(html, name).toContain('data-kuma-nav="/"');
+      expect(html, name).toContain("返回主面板");
+      expect(html, name).not.toContain("token=");
+    }
+  });
+
+  it("每个页面都带首帧偏好脚本且 nonce 位一致", () => {
+    const dashboard = generateDashboardHTML({
+      nonce: "n1",
+    });
+    expect(dashboard.match(/nonce="n1"/g)?.length).toBe(3);
+    const accounts = generateAccountsHTML({
+      nonce: "n2",
+    });
+    expect(accounts.match(/nonce="n2"/g)?.length).toBe(3);
   });
 });

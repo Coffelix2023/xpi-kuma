@@ -1,3 +1,4 @@
+import { type MessageKey, zh } from "./client/messages.ts";
 import { preferenceBootstrapScript } from "./dashboard-client.ts";
 import { dashboardCss } from "./dashboard-css.ts";
 import { escapeHtml } from "./html.ts";
@@ -9,8 +10,8 @@ export interface PageShellOptions {
   nonce?: string;
   /** 页内脚本；缺省时不输出脚本块（纯静态外壳） */
   script?: string;
-  /** 页面标题，用于 `<title>` */
-  title: string;
+  /** 页面标题的词条键；`<title>` 随语言切换，标签页不留另一种语言 */
+  titleKey: MessageKey;
 }
 
 /** 页面生成器共用的选项：目前只有 CSP nonce。 */
@@ -35,12 +36,12 @@ export function pageShell(options: PageShellOptions): string {
     : "";
 
   return `<!doctype html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="dark" data-title-key="${options.titleKey}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>${escapeHtml(options.title)}</title>
+<title>${escapeHtml(zh(options.titleKey))}</title>
 <style${nonce}>
 ${dashboardCss()}
 </style>

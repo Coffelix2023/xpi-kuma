@@ -32,7 +32,9 @@ export function accountsPageFragment(): string {
       }
 
       function syncText(row) {
-        return row.syncedAt ? new Date(row.syncedAt).toLocaleString() : t("common.never");
+        return row.syncedAt
+          ? new Date(row.syncedAt).toLocaleString(dateLocale())
+          : t("common.never");
       }
 
       /** 该行可做的下一步：授权过期的给「重新授权」，没有数字的给「授权」或「填写」。 */
@@ -60,7 +62,7 @@ export function accountsPageFragment(): string {
           parts.push(t("accounts.trustAllFresh"));
         }
         parts.push(t("accounts.trustFx"));
-        return parts.join("；") + "。";
+        return parts.join(t("common.separator")) + t("common.sentenceEnd");
       }
 
       function renderAccountsOverview(overview) {
@@ -90,7 +92,7 @@ export function accountsPageFragment(): string {
         if (!label) { return cell; }
         var btn = text("button", "", label);
         btn.type = "button";
-        btn.setAttribute("aria-label", label + "：" + row.vendor);
+        btn.setAttribute("aria-label", label + t("common.colon") + row.vendor);
         btn.addEventListener("click", function () {
           if (label === "填写") { fillManual(row.vendor); return; }
           authorizeVendor(row.vendor, btn);
@@ -150,7 +152,7 @@ export function accountsPageFragment(): string {
         var overview = payload.overview || {};
         renderAccountsOverview(overview);
         renderAccountRows(payload.rows || []);
-        setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString());
+        setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString(dateLocale()));
       }
 
       function loadAccounts() {
@@ -167,7 +169,7 @@ export function accountsPageFragment(): string {
 
       function showAccountError(error) {
         var message = error && error.message ? error.message : String(error);
-        setStatus(t("common.connectionFailed") + "（" + message + "），" + t("common.reopenHint"));
+        setStatus(failureStatus(message));
       }
 
       function authorizeVendor(vendor, btn) {

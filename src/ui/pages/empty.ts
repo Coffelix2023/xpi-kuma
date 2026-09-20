@@ -44,6 +44,6 @@ export function generateEmptyHTML(options: PageOptions = {}): string {
 `,
     nonce: options.nonce,
     script: emptyClientScript(),
-    title: zh("page.empty.title"),
+    titleKey: "page.empty.title",
   });
 }

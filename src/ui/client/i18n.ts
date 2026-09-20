@@ -45,6 +45,21 @@ export function i18nFragment(): string {
       }
 
       /**
+       * 连接失败提示：前缀 + 括注原因 + 收尾提示。
+       *
+       * 标点随语言切换（中文全角、英文半角），所以不写死在调用点。
+       */
+      function failureStatus(reason) {
+        var head = t("common.connectionFailed") + t("common.periodOpen") + reason + t("common.periodClose");
+        return head + t("common.comma") + t("common.reopenHint");
+      }
+
+      /** 日期时间的 locale：图表刻度与悬停详情跟随界面语言，不跟随系统 locale。 */
+      function dateLocale() {
+        return currentLanguage() === "en" ? "en-US" : "zh-CN";
+      }
+
+      /**
        * 应用语言：正文、aria-label 与 <html lang> 一起更新，并持久化偏好。
        *
        * 只替换 [data-i18n] 元素的文本内容 —— 这些元素在模板里都是纯文本叶子节点，
@@ -66,6 +81,9 @@ export function i18nFragment(): string {
         } catch (error) {
           // 写入失败不影响本次会话
         }
+        // <title> 也要换：浏览器标签页不该留着另一种语言的标题；键写在 <html> 上
+        var titleKey = document.documentElement.getAttribute("data-title-key");
+        if (titleKey) { document.title = t(titleKey); }
         syncLanguageButton();
       }
 

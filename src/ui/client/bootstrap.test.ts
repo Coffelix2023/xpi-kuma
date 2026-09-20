@@ -51,7 +51,6 @@ function runBootstrapFragment(
     `${[
       "var POLL_MS = 5000;",
       'var DEFAULT_PERIOD = "24h";',
-      'var NO_VENDOR = "";',
     ].join("\n")}\n${bootstrapFragment()}\n${epilogue}`,
   );
   return factory(windowObj, documentObj);

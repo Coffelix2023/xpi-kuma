@@ -72,7 +72,12 @@ export function renderFragment(): string {
             [t("vendor.pricePerK"), price(v.price)],
             [t("vendor.ttft"), ms(v.ttft)],
             [t("vendor.responseTime"), ms(v.totalTime)],
-            [t("vendor.lastProbe"), v.lastProbeTime ? new Date(v.lastProbeTime).toLocaleTimeString() : t("common.never")]
+            [
+              t("vendor.lastProbe"),
+              v.lastProbeTime
+                ? new Date(v.lastProbeTime).toLocaleTimeString(dateLocale())
+                : t("common.never")
+            ]
           ].forEach(function (pair) {
             dl.appendChild(text("dt", "", pair[0]));
             dl.appendChild(text("dd", "", pair[1]));
@@ -144,7 +149,11 @@ export function renderFragment(): string {
         var tbody = document.createElement("tbody");
         if (rows.length === 0) {
           var emptyRow = document.createElement("tr");
-          var cell = text("td", "", t("common.noData") + "（" + currentPeriod + "）");
+          var cell = text(
+            "td",
+            "",
+            t("common.noData") + t("common.periodOpen") + currentPeriod + t("common.periodClose"),
+          );
           cell.colSpan = COLUMNS.length + 2;
           emptyRow.appendChild(cell);
           tbody.appendChild(emptyRow);

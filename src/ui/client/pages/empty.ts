@@ -45,7 +45,7 @@ export function emptyPageFragment(): string {
             "&dimension=project"
         ).then(function (payload) {
           renderGuide(payload);
-          setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString());
+          setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString(dateLocale()));
         });
       }
 
@@ -59,7 +59,7 @@ export function emptyPageFragment(): string {
 
       function showGuideError(error) {
         var message = error && error.message ? error.message : String(error);
-        setStatus(t("common.connectionFailed") + "（" + message + "），" + t("common.reopenHint"));
+        setStatus(failureStatus(message));
       }
 
       if (!token) {

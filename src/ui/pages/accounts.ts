@@ -36,6 +36,6 @@ export function generateAccountsHTML(options: PageOptions = {}): string {
 `,
     nonce: options.nonce,
     script: accountsClientScript(),
-    title: zh("page.accounts.title"),
+    titleKey: "page.accounts.title",
   });
 }

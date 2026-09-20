@@ -4,7 +4,6 @@ import {
   accountsClientScript,
   dashboardClientScript,
   emptyClientScript,
-  NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
   settingsClientScript,
 } from "./dashboard-client.ts";
@@ -101,7 +100,6 @@ describe("无供应商提示占位", () => {
     const html = generateDashboardHTML();
     expect(html).toContain('id="kuma-notice"');
     expect(html).toContain("hidden");
-    expect(NO_VENDOR_NOTICE).toBe("未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml");
   });
 
   it("客户端脚本使用 textContent 注入提示，不做 HTML 拼接", () => {
@@ -215,13 +213,6 @@ describe("注入防护", () => {
     expect(escaped).toContain("\\u2028");
     expect(escaped).toContain("\\u2029");
     expect(escaped).not.toContain("\u2028");
-  });
-
-  it("脚本内的动态文案经 JSON.stringify 转义", () => {
-    const html = generateDashboardHTML();
-    expect(html).toContain(
-      'var NO_VENDOR = "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml";',
-    );
   });
 });
 

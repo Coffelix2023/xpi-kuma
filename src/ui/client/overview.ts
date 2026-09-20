@@ -44,7 +44,13 @@ export function overviewFragment(): string {
         host.appendChild(box);
         setNotice(
           el("kuma-overview-notice"),
-          data.requestCount ? "" : t("overview.emptyPrefix") + "（" + currentPeriod + "）。"
+          data.requestCount
+            ? ""
+            : t("overview.emptyPrefix") +
+              t("common.periodOpen") +
+              currentPeriod +
+              t("common.periodClose") +
+              t("common.sentenceEnd")
         );
       }
 

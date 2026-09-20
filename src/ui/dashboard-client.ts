@@ -1,11 +1,7 @@
 import { apiFragment } from "./client/api.ts";
 import { bootstrapFragment, preferenceBootstrapScript } from "./client/bootstrap.ts";
 import { chartFragment } from "./client/chart.ts";
-import {
-  DEFAULT_PERIOD,
-  NO_VENDOR_NOTICE,
-  POLL_INTERVAL_MS,
-} from "./client/constants.ts";
+import { DEFAULT_PERIOD, POLL_INTERVAL_MS } from "./client/constants.ts";
 import { i18nFragment } from "./client/i18n.ts";
 import { navFragment } from "./client/nav.ts";
 import { overviewFragment } from "./client/overview.ts";
@@ -16,7 +12,7 @@ import { settingsPageFragment } from "./client/pages/settings.ts";
 import { pollFragment } from "./client/poll.ts";
 import { renderFragment } from "./client/render.ts";
 
-export { NO_VENDOR_NOTICE, POLL_INTERVAL_MS, preferenceBootstrapScript };
+export { POLL_INTERVAL_MS, preferenceBootstrapScript };
 
 /**
  * 页面脚本的公共装配。
@@ -35,7 +31,6 @@ function pageScript(pageFragment: string): string {
 
       var POLL_MS = ${POLL_INTERVAL_MS};
       var DEFAULT_PERIOD = ${JSON.stringify(DEFAULT_PERIOD)};
-      var NO_VENDOR = ${JSON.stringify(NO_VENDOR_NOTICE)};
 ${bootstrapFragment()}
 ${apiFragment()}
 ${pollFragment()}

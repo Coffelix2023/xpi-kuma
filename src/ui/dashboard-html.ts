@@ -189,6 +189,6 @@ export function generateDashboardHTML(options: DashboardOptions = {}): string {
     body: dashboardBody(),
     nonce: options.nonce,
     script: dashboardClientScript(),
-    title: zh("page.dashboard.title"),
+    titleKey: "page.dashboard.title",
   });
 }

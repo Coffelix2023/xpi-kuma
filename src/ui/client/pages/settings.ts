@@ -49,7 +49,7 @@ export function settingsPageFragment(): string {
         kvRow(dl, t("settings.row.fileState"), payload.configExists ? t("settings.fileExists") : t("settings.fileMissing"));
         kvRow(dl, t("settings.row.parseResult"), payload.error ? t("settings.parseFail") : t("settings.parseOk"));
         kvRow(dl, t("settings.row.modifiedAt"), payload.configModifiedAt
-          ? new Date(payload.configModifiedAt).toLocaleString()
+          ? new Date(payload.configModifiedAt).toLocaleString(dateLocale())
           : t("common.unknown"));
         host.appendChild(dl);
       }
@@ -155,7 +155,7 @@ export function settingsPageFragment(): string {
           if (issues) { issues.textContent = ""; }
           renderDiagnosticsError(payload);
           showSection("section-diagnostics-error", true);
-          setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString());
+          setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString(dateLocale()));
           return;
         }
 
@@ -164,7 +164,7 @@ export function settingsPageFragment(): string {
         renderGlobal(payload.global || {});
         showSection("section-diagnostics-vendors", true);
         showSection("section-diagnostics-global", true);
-        setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString());
+        setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString(dateLocale()));
       }
 
       function loadDiagnostics() {
@@ -181,7 +181,7 @@ export function settingsPageFragment(): string {
 
       function showDiagnosticsError(error) {
         var message = error && error.message ? error.message : String(error);
-        setStatus(t("common.connectionFailed") + "（" + message + "），" + t("common.reopenHint"));
+        setStatus(failureStatus(message));
       }
 
       function wireReload() {

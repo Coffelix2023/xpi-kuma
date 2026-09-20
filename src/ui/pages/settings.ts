@@ -49,6 +49,6 @@ export function generateSettingsHTML(options: PageOptions = {}): string {
 `,
     nonce: options.nonce,
     script: settingsClientScript(),
-    title: zh("page.settings.title"),
+    titleKey: "page.settings.title",
   });
 }

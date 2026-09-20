@@ -1,14 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MESSAGES } from "./client/messages.ts";
 import {
   accountsClientScript,
   dashboardClientScript,
   emptyClientScript,
-  NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
   preferenceBootstrapScript,
   settingsClientScript,
   sharedClientScript,
 } from "./dashboard-client.ts";
+
+/** 中文全角标点：英文界面里出现它们就说明标点没走字典。 */
+const CJK_PUNCTUATION = /[（）。，；：]/;
+
+/** 汉字：英文界面里出现它们就说明那段文案没走字典。 */
+const CJK_IDEOGRAPHS = /[\u4e00-\u9fff]/;
 
 /**
  * 极简假 DOM：只实现页内脚本真正用到的那部分接口。
@@ -133,6 +139,7 @@ class FakeDocument {
   readonly body = new FakeElement("body");
   readonly root = new FakeElement("html");
   hidden = false;
+  title = "";
   private readonly byId = new Map<string, FakeElement>();
   private readonly listeners = new Map<string, Listener[]>();
 
@@ -694,7 +701,7 @@ describe("错误状态", () => {
 
     const notice = h.doc.getElementById("kuma-notice");
     expect(notice?.hidden).toBe(false);
-    expect(notice?.textContent).toBe(NO_VENDOR_NOTICE);
+    expect(notice?.textContent).toBe(MESSAGES["vendor.noVendor"]?.zh);
   });
 
   it("有供应商时提示保持隐藏", async () => {
@@ -1365,9 +1372,12 @@ describe("零数据引导页脚本", () => {
 function langShell(): FakeDocument {
   const doc = new FakeDocument();
   doc.root.setAttribute("data-theme", "dark");
+  doc.root.setAttribute("data-title-key", "page.dashboard.title");
   doc.add("div", "kuma-updated");
   doc.add("div", "kuma-vendors");
   doc.add("div", "kuma-notice");
+  doc.add("div", "kuma-overview");
+  doc.add("div", "kuma-overview-notice");
   doc.add("div", "kuma-stats");
   doc.add("div", "kuma-chart");
   doc.add("button", "kuma-refresh-all");
@@ -1407,6 +1417,7 @@ describe("中英双语", () => {
 
     expect(h.doc.root.getAttribute("lang")).toBe("zh-CN");
     expect(title?.textContent).toBe("xpi-kuma 监控面板");
+    expect(h.doc.title).toBe("xpi-kuma 监控面板");
     expect(button?.textContent).toBe("English");
 
     button?.click();
@@ -1414,6 +1425,7 @@ describe("中英双语", () => {
 
     expect(h.doc.root.getAttribute("lang")).toBe("en");
     expect(title?.textContent).toBe("xpi-kuma Dashboard");
+    expect(h.doc.title).toBe("xpi-kuma Dashboard");
     expect(group?.getAttribute("aria-label")).toBe("Time range");
     expect(button?.textContent).toBe("中文");
     expect(h.storage.get("kuma.lang")).toBe("en");
@@ -1439,9 +1451,41 @@ describe("中英双语", () => {
     await flush();
 
     expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("Updated at");
+    // 空态文案的括注与句末标点随语言切换，英文界面不出现全角标点
+    const notice = h.doc.getElementById("kuma-overview-notice")?.textContent ?? "";
+    expect(notice).toContain("No usage recorded this period (24h).");
+    expect(notice).not.toMatch(CJK_PUNCTUATION);
   });
 
   it("首帧偏好脚本按已存语言写 <html lang>", () => {
     expect(preferenceBootstrapScript()).toContain("kuma.lang");
+  });
+
+  it("图表时间刻度跟随界面语言，不跟随系统 locale", async () => {
+    const h = harness("#token-abc", langShell);
+    h.storage.set("kuma.lang", "en");
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          trend: [
+            {
+              bucketStart: 1_700_000_000_000,
+              cost: 0.1,
+              tokens: 10,
+              byProvider: {
+                "[OI]": 0.1,
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    h.start(dashboardClientScript());
+    await flush();
+    const labels = (h.doc.getElementById("kuma-chart")?.descendants() ?? [])
+      .filter((node) => node.tagName === "TEXT")
+      .map((node) => node.textContent)
+      .join(" | ");
+    expect(labels).not.toMatch(CJK_IDEOGRAPHS);
   });
 });

@@ -17,8 +17,5 @@ export const ATLAS_FAMILY = "atlas";
 export const FAMILY_KEY = "kuma.family";
 export const THEME_KEY = "kuma.theme";
 
-/** 无供应商时展示的提示文案。 */
-export const NO_VENDOR_NOTICE = "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml";
-
 /** 可见页面的数据轮询间隔；新 usage 必须在 5 秒内反映到面板。 */
 export const POLL_INTERVAL_MS = 5000;

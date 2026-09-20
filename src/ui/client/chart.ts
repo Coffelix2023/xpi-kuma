@@ -81,8 +81,11 @@ export function chartFragment(): string {
         var ticks = Math.min(6, trend.length);
         for (var tick = 0; tick < ticks; tick += 1) {
           var index = ticks === 1 ? 0 : Math.round((tick * (trend.length - 1)) / (ticks - 1));
-          var when = new Date(trend[index].bucketStart).toLocaleString(undefined, {
-            day: "2-digit", hour: "2-digit", minute: "2-digit",
+          var when = new Date(trend[index].bucketStart).toLocaleString(dateLocale(), {
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            month: "short",
           });
           svg.appendChild(svgLabel(xAt(index), height - 8, when, ink, "middle"));
         }
@@ -176,7 +179,7 @@ export function chartFragment(): string {
 
       /** 悬停详情：时间点 + 各供应商费用 + token 总量。 */
       function pointSummary(point) {
-        var parts = [new Date(point.bucketStart).toLocaleString()];
+        var parts = [new Date(point.bucketStart).toLocaleString(dateLocale())];
         Object.keys(point.byProvider || {}).forEach(function (name) {
           parts.push(name + " ¥" + (point.byProvider[name] || 0).toFixed(4));
         });

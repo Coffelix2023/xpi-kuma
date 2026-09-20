@@ -155,6 +155,14 @@ export const MESSAGES = {
     en: "Required fields",
     zh: "必填字段",
   },
+  "common.colon": {
+    en: ": ",
+    zh: "：",
+  },
+  "common.comma": {
+    en: ", ",
+    zh: "，",
+  },
   "common.connectionFailed": {
     en: "Connection failed",
     zh: "连接失败",
@@ -176,6 +184,14 @@ export const MESSAGES = {
     en: "must be a number",
     zh: "必须是数字",
   },
+  "common.periodClose": {
+    en: ")",
+    zh: "）",
+  },
+  "common.periodOpen": {
+    en: " (",
+    zh: "（",
+  },
   "common.probing": {
     en: "Probing…",
     zh: "探测中…",
@@ -187,6 +203,14 @@ export const MESSAGES = {
   "common.reopenHint": {
     en: "Re-run /xpi-kuma",
     zh: "请重新执行 /xpi-kuma",
+  },
+  "common.sentenceEnd": {
+    en: ".",
+    zh: "。",
+  },
+  "common.separator": {
+    en: "; ",
+    zh: "；",
   },
   "common.unknown": {
     en: "Unknown",

@@ -35,7 +35,7 @@ export function dashboardPageFragment(): string {
         renderStats(data.stats || [], period);
         lastTrend = data.trend || [];
         renderChart(lastTrend);
-        setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString());
+        setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString(dateLocale()));
       }
 
       function enableButtons() {
@@ -55,7 +55,7 @@ export function dashboardPageFragment(): string {
       /** 连接错误只更新状态文案，保留已渲染数据，不启动重试风暴。 */
       function showError(error) {
         var message = error && error.message ? error.message : String(error);
-        setStatus(t("common.connectionFailed") + "（" + message + "），" + t("common.reopenHint"));
+        setStatus(failureStatus(message));
       }
 
       /** 同一时刻只允许一个在途请求：重复触发被丢弃，既不排队也不重试。 */

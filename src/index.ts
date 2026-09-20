@@ -49,7 +49,7 @@ export default function xpiKuma(pi: ExtensionAPI): void {
   pi.on("session_shutdown", (_event, ctx) => stopSession(ctx));
 
   pi.registerCommand("xpi-kuma", {
-    description: "打开监控面板",
+    description: "打开或重新打开监控面板",
     handler: async (_args, ctx) => {
       const current = runtime;
       if (!current) {
@@ -69,6 +69,11 @@ export default function xpiKuma(pi: ExtensionAPI): void {
       }
       try {
         await openInBrowser(server.url);
+        // 成功通知只给重开入口，不带本机 URL 与访问凭据（凭据在 URL fragment 里）
+        ctx.ui.notify(
+          "监控面板已在浏览器打开，关闭后可再次运行 /xpi-kuma 重新打开",
+          "info",
+        );
       } catch (error) {
         logger.error("打开默认浏览器失败", error);
         ctx.ui.notify(`无法自动打开浏览器，请手动访问：${server.url}`, "warning");

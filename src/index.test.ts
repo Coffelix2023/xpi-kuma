@@ -217,7 +217,7 @@ describe("扩展注册", () => {
       "turn_end",
     ]);
     expect(commands.has("xpi-kuma")).toBe(true);
-    expect(commands.get("xpi-kuma")?.description).toBe("打开监控面板");
+    expect(commands.get("xpi-kuma")?.description).toBe("打开或重新打开监控面板");
   });
 });
 
@@ -339,6 +339,26 @@ describe("监控面板服务", () => {
 
     expect(openBrowser).toHaveBeenCalledTimes(2);
     expect(lastUrl()).toBe(first);
+    await sessionShutdown(handlers, ctx);
+  });
+
+  it("浏览器成功打开后提示重开方式，且通知不含 URL 与凭据", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx, notify } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    openBrowser.mockResolvedValueOnce(undefined);
+    await runCommand(commands, ctx);
+
+    const url = lastUrl();
+    expect(notify).toHaveBeenCalledWith(
+      expect.stringContaining("再次运行 /xpi-kuma"),
+      "info",
+    );
+    const text = String(notify.mock.calls.at(-1)?.[0] ?? "");
+    expect(text).not.toContain("http");
+    expect(text).not.toContain(new URL(url).hash.slice(1));
     await sessionShutdown(handlers, ctx);
   });
 

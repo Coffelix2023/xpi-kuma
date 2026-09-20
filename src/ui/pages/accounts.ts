@@ -1,4 +1,4 @@
-import { sharedClientScript } from "../dashboard-client.ts";
+import { accountsClientScript } from "../dashboard-client.ts";
 import { type PageOptions, pageShell } from "../shell.ts";
 
 /**
@@ -12,9 +12,10 @@ export function generateAccountsHTML(options: PageOptions = {}): string {
     body: `  <header>
     <div>
       <h1>供应商账户</h1>
-      <div class="kuma-generated">余额单位与供应商计费币种一致</div>
+      <div class="kuma-generated" id="kuma-updated">正在加载…</div>
     </div>
     <div class="kuma-actions">
+      <button type="button" id="kuma-sync">同步全部余额</button>
       <a class="kuma-link" data-kuma-nav="/" href="/">返回主面板</a>
     </div>
   </header>
@@ -24,9 +25,15 @@ export function generateAccountsHTML(options: PageOptions = {}): string {
     <div id="kuma-accounts"></div>
     <div id="kuma-accounts-notice" hidden></div>
   </section>
+
+  <section aria-labelledby="kuma-account-rows-title">
+    <h2 id="kuma-account-rows-title">账户明细</h2>
+    <div id="kuma-account-rows"></div>
+    <p class="kuma-generated">来源图例：接口查询 / OAuth 授权 / 手动填写；「未知」表示取不到值，不是 0。</p>
+  </section>
 `,
     nonce: options.nonce,
-    script: sharedClientScript(),
+    script: accountsClientScript(),
     title: "xpi-kuma · 供应商账户",
   });
 }

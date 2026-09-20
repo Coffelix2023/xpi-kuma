@@ -71,6 +71,32 @@ ${spacing}
 
     .kuma-actions { display: flex; gap: var(--kuma-space-1); align-items: center; }
 
+    /* 区块头：标题在左，该块的切换按钮在右 */
+    .kuma-section-head { justify-content: space-between; align-items: baseline; }
+
+    .kuma-layout { display: flex; gap: var(--kuma-space-3); align-items: flex-start; }
+    .kuma-layout main { flex: 1 1 auto; min-width: 0; }
+
+    /* 花费概览：四项数字，窄视口自动折行 */
+    .kuma-overview {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--kuma-space-2);
+    }
+    .kuma-metric {
+      border: 1px solid var(--border);
+      border-radius: ${radius()};
+      padding: var(--kuma-space-2);
+    }
+    .kuma-metric dt { color: var(--muted-foreground); font-size: 11px; }
+    .kuma-metric dd {
+      margin: 4px 0 0;
+      font-size: 18px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
     button {
       font-family: inherit;
       font-size: 11px;
@@ -207,6 +233,33 @@ ${spacing}
     }
 
     /* 窄视口：卡片换更多列，表格继续横向滚动，图表压低高度 */
+    /*
+     * 分区索引轨：家族专属装饰，只在 Atlas 家族显示。
+     *
+     * 元素同时带 .kuma-atlas-only（display: none + atlas 下 revert），这里用更高
+     * 特异性的 [data-family="atlas"] .kuma-rail 给出实际的轨布局 —— 必须排在
+     * .kuma-atlas-only 规则之后，否则 revert 会把轨打回 block。
+     */
+    .kuma-rail { display: none; }
+    [data-family="atlas"] .kuma-rail {
+      display: flex;
+      flex-direction: column;
+      flex: 0 0 auto;
+      gap: 2px;
+      position: sticky;
+      top: var(--kuma-space-2);
+      border-left: 1px solid var(--border);
+      padding-left: var(--kuma-space-1);
+    }
+    .kuma-rail a { color: var(--muted-foreground); font-size: 11px; text-decoration: none; padding: 2px 0; }
+    .kuma-rail a:hover { color: var(--primary); }
+    .kuma-rail a[aria-current="location"] { color: var(--primary); font-weight: 700; }
+
+    /* 窄视口放不下正文与索引轨：隐藏索引轨，正文保持可读 */
+    @media (max-width: 1100px) {
+      [data-family="atlas"] .kuma-rail { display: none; }
+    }
+
     @media (max-width: 800px) {
       body { padding: var(--kuma-space-2); }
       .kuma-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }

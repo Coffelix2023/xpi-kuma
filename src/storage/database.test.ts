@@ -542,3 +542,84 @@ describe("getAttribution", () => {
     expect(db.getAttribution("24h", "project")).toEqual([]);
   });
 });
+
+describe("余额快照", () => {
+  it("写入后可读，覆盖更新只保留一行，重开数据库仍在", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-balance-"));
+    const dbPath = join(dir, "usage.db");
+    cleanups.push(() =>
+      rmSync(dir, {
+        force: true,
+        recursive: true,
+      }),
+    );
+
+    const first = new Database({
+      dbPath,
+    });
+    first.upsertAccountBalance({
+      balance: 10.5,
+      currency: "CNY",
+      error: null,
+      source: "api",
+      stale: false,
+      syncedAt: 1_700_000_000_000,
+      topup: 100,
+      vendor: "A",
+    });
+    first.upsertAccountBalance({
+      balance: 8.25,
+      currency: "CNY",
+      error: null,
+      source: "manual",
+      stale: false,
+      syncedAt: 1_700_000_100_000,
+      topup: null,
+      vendor: "A",
+    });
+    expect(first.getAccountBalances()).toHaveLength(1);
+    first.close();
+
+    const second = new Database({
+      dbPath,
+    });
+    cleanups.push(() => second.close());
+
+    expect(second.getAccountBalance("A")).toEqual({
+      balance: 8.25,
+      currency: "CNY",
+      error: null,
+      source: "manual",
+      stale: false,
+      syncedAt: 1_700_000_100_000,
+      topup: null,
+      vendor: "A",
+    });
+  });
+
+  it("从未同步过的供应商返回 null，且未知值存为 null 而不是 0", () => {
+    const db = openTempDatabase();
+    db.upsertAccountBalance({
+      balance: null,
+      currency: "CNY",
+      error: "授权已过期",
+      source: "oauth",
+      stale: true,
+      syncedAt: 1_700_000_000_000,
+      topup: null,
+      vendor: "B",
+    });
+
+    expect(db.getAccountBalance("missing")).toBeNull();
+    expect(db.getAccountBalance("B")).toEqual({
+      balance: null,
+      currency: "CNY",
+      error: "授权已过期",
+      source: "oauth",
+      stale: true,
+      syncedAt: 1_700_000_000_000,
+      topup: null,
+      vendor: "B",
+    });
+  });
+});

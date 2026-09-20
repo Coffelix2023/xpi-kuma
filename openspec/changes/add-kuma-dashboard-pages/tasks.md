@@ -34,21 +34,21 @@
 
 ## 6. 主面板新区块
 
-- [ ] 6.1 落地花费概览区块（本期花费 / token 总量 / 请求数 / 覆盖项目数），随周期切换刷新；验证方式是 HTML 测试断言四项结构存在，且数据接口返回的概览值与统计一致。
-- [ ] 6.2 落地用量归因区块：维度切换（项目 / 会话 / 供应商·模型）+ 明细表（维度 / 花费 / token / 请求数 / 占比），按花费倒序；验证方式是脚本测试覆盖维度切换与占比计算，并在无数据时显示「暂无数据」。
-- [ ] 6.3 落地分区索引轨（仅 Atlas 家族显示，点击滚动到对应区块并更新 `aria-current`，窄视口隐藏）；验证方式是脚本测试覆盖滚动定位与视口隐藏分支。
-- [ ] 6.4 调整主面板信息层级：花费概览置于首屏，供应商健康降为次级块，趋势图保持在归因之后；验证方式是 HTML 测试断言区块顺序，并人工核对首屏一眼能看出「本期花了多少」。
+- [x] 6.1 落地花费概览区块（本期花费 / token 总量 / 请求数 / 覆盖项目数），随周期切换刷新；验证方式是 HTML 测试断言四项结构存在，且数据接口返回的概览值与统计一致。结论：四项由 `GET /api/dashboard` 新增的 `overview` 字段返回，服务端在同一份 `stats` 上累加（覆盖项目数取项目维度归因的非空分组数，「未知」不算项目），因此概览与统计表口径天然一致；断言见 `dashboard-client.test.ts`「花费概览与用量归因」与 `dashboard.test.ts`「概览四项与统计一致」。
+- [x] 6.2 落地用量归因区块：维度切换（项目 / 会话 / 供应商·模型）+ 明细表（维度 / 花费 / token / 请求数 / 占比），按花费倒序；验证方式是脚本测试覆盖维度切换与占比计算，并在无数据时显示「暂无数据」。结论：归因改由 `GET /api/dashboard?dimension=` 与统计一起返回（一次刷新只发一个请求，`/api/attribution` 仍保留给其它消费方）；占比在页内按总花费现算，会话维度显示标识短前缀、空键显示「未知」；断言见 `dashboard-client.test.ts`「花费概览与用量归因」。
+- [x] 6.3 落地分区索引轨（仅 Atlas 家族显示，点击滚动到对应区块并更新 `aria-current`，窄视口隐藏）；验证方式是脚本测试覆盖滚动定位与视口隐藏分支。结论：轨在 `[data-family="atlas"] .kuma-rail` 下才得到 `display: flex`，`@media (max-width: 1100px)` 内再置 `display: none`（该媒体查询必须排在 `.kuma-atlas-only` 规则之后才压得住 `revert`，已写进注释）；脚本测试覆盖点击滚动与 `aria-current` 互斥，视口隐藏以 CSS 断言覆盖。
+- [x] 6.4 调整主面板信息层级：花费概览置于首屏，供应商健康降为次级块，趋势图保持在归因之后；验证方式是 HTML 测试断言区块顺序，并人工核对首屏一眼能看出「本期花了多少」。结论：区块顺序为 花费概览 → 用量归因 → 使用量统计 → 费用与 token 趋势 → 供应商健康，时间范围按钮随概览移到首屏（切换后概览、归因、统计与趋势一起刷新）；顺序断言见 `dashboard-html.test.ts`「主面板信息层级与分区索引轨」，人工核对归入 11.3 冒烟。
 
 ## 7. 供应商账户页
 
-- [ ] 7.1 扩展配置模型与 `config.example.yaml`：`VendorConfig` 新增可选 `balance`（`api_path` / `manual` / `topup`）与 `oauth`（`authorize_url` / `token_url` / `client_id` / `scopes`）段，解析保持 fail-closed；验证方式是配置测试覆盖「段缺失视为未配置」「字段类型错误抛 `ConfigError`」两种情况，并确认旧配置不改仍能加载。
-- [ ] 7.2 新增 `account_balances` 表与读写方法（vendor、balance、currency、source、topup、synced_at、error）；验证方式是数据库测试覆盖写入、覆盖更新与读取，并断言重开数据库后值仍在。
-- [ ] 7.3 实现第一档余额取数：按配置的 `balance.api_path` 请求供应商接口，复用 `fetch` + `AbortController` 超时形态；验证方式是单测覆盖成功、超时、非 2xx 三种情况，且错误信息不含凭据。
-- [ ] 7.4 实现第二档 OAuth 授权与查询：授权发起、`/oauth/callback` 的 `state` 一次性校验、token 落盘 `~/.pi/agent/data/xpi-kuma/oauth.json`（`0600`）与过期判定；验证方式是单测覆盖 state 不匹配被拒、过期 token 不参与查询、文件权限为 `0600`，以及回调路径之外仍要求凭据。
-- [ ] 7.5 实现第三档手动填写：用 yaml `Document` API 定点改 `<cwd>/.pi/xpi-kuma/config.yaml`，写前生成 `config.yaml.bak-<时间戳>`，临时文件 + `rename` 原子替换，解析失败时拒绝写入；验证方式是单测断言注释与未知字段保留、备份文件生成、解析失败时不改动原文件。
-- [ ] 7.6 实现 `resolveBalance(vendor)` 的三档降级编排，任一档失败只记录不抛错；验证方式是单测覆盖「接口可用」「接口失败回落 OAuth」「两档都不通回落手动」「全部不可得时返回未知而非 0」四条路径。
-- [ ] 7.7 新增账户接口：`GET /api/accounts`（概览 + 明细）、`POST /api/accounts/sync`（同步全部）、`POST /api/accounts/manual`（写入手动值），全部要求凭据且写操作校验 Origin；验证方式是服务测试覆盖未授权 401、错误 Origin 403、单供应商失败不影响其他行。
-- [ ] 7.8 落地账户页 UI：账户概览（累计充值 / 当前余额 + 不可信数字说明）、按余额升序的明细表（供应商·模型 / 数据来源 / 余额 / 累计充值 / 最近同步 / 动作）、来源图例、空态（无供应商 / 无可用数字两条分支）；验证方式是 HTML 测试断言结构与来源标记，并断言「未知」不渲染成 ¥0.00。
+- [x] 7.1 扩展配置模型与 `config.example.yaml`：`VendorConfig` 新增可选 `balance`（`api_path` / `manual` / `topup`）与 `oauth`（`authorize_url` / `token_url` / `client_id` / `scopes`）段，解析保持 fail-closed；验证方式是配置测试覆盖「段缺失视为未配置」「字段类型错误抛 `ConfigError`」两种情况，并确认旧配置不改仍能加载。结论：段缺失 → `undefined`，段存在但字段类型不符 → `ConfigError`；OAuth 四项缺任意一项按「未配置授权」处理（不报错，用户可能只用余额接口）；`config.example.yaml` 补注释样例并注明探测结论（三家样例都无可用接口，不预设路径）；测试见 `config.test.ts`「余额与授权配置段」。
+- [x] 7.2 新增 `account_balances` 表与读写方法（vendor、balance、currency、source、topup、synced_at、error）；验证方式是数据库测试覆盖写入、覆盖更新与读取，并断言重开数据库后值仍在。结论：实现为 vendor 主键 + 上述列（外加 `stale` 标记旧值），`upsertAccountBalance` 用 `ON CONFLICT(vendor) DO UPDATE` 覆盖更新，未知值存 NULL 而不是 0；`getAccountBalances()` / `getAccountBalance(vendor)` 供面板读取；测试见 `database.test.ts`「余额快照」。
+- [x] 7.3 实现第一档余额取数：按配置的 `balance.api_path` 请求供应商接口，复用 `fetch` + `AbortController` 超时形态；验证方式是单测覆盖成功、超时、非 2xx 三种情况，且错误信息不含凭据。结论：`src/accounts/balance-api.ts` 只请求显式声明的路径（未声明直接失败，不猜端点）；响应按键名词根（balance / credit / available / remaining / quota）广度优先取第一个数值，找不到即失败而**不是随便挑一个数字**；错误信息只有状态码或 `timeout`，不含 URL 之外的凭据；测试见 `balance-api.test.ts`。
+- [x] 7.4 实现第二档 OAuth 授权与查询：授权发起、`/oauth/callback` 的 `state` 一次性校验、token 落盘 `~/.pi/agent/data/xpi-kuma/oauth.json`（`0600`）与过期判定；验证方式是单测覆盖 state 不匹配被拒、过期 token 不参与查询、文件权限为 `0600`，以及回调路径之外仍要求凭据。结论：`oauth.ts` 提供 `OAuthTokenStore`（0600、只存令牌与过期时间、损坏即当未授权）与 `OAuthFlow`（state 一次性、授权地址构造、code 换令牌，**不参与 client secret**）；`/oauth/callback` 由 `routes/oauth.ts` 处理并豁免 Bearer，`AccountService.completeAuthorization` 校验 state 后才换令牌落盘；过期判定留 30s 余量，过期令牌不进入第二档查询而是标「授权已过期」；测试见 `oauth.test.ts` 与 `dashboard.test.ts`「账户接口」。
+- [x] 7.5 实现第三档手动填写：用 yaml `Document` API 定点改 `<cwd>/.pi/xpi-kuma/config.yaml`，写前生成 `config.yaml.bak-<时间戳>`，临时文件 + `rename` 原子替换，解析失败时拒绝写入；验证方式是单测断言注释与未知字段保留、备份文件生成、解析失败时不改动原文件。结论：`src/accounts/manual.ts` 已有 `balance` 段就原地补字段（保住既有 `api_path`），没有就整段建出来；供应商不存在同样拒绝写入；测试见 `manual.test.ts`。
+- [x] 7.6 实现 `resolveBalance(vendor)` 的三档降级编排，任一档失败只记录不抛错；验证方式是单测覆盖「接口可用」「接口失败回落 OAuth」「两档都不通回落手动」「全部不可得时返回未知而非 0」四条路径。结论：`src/accounts/resolve.ts` 按 接口 → OAuth → 手动 顺序尝试，每档失败只累加原因；全部失败时若有上次成功值就保留它并标 `stale`（附「显示上次成功获取的值」说明），从未拿到过则 `balance: null`（界面显示「未知」，**绝不返回 0**）；`resolveBalances` 逐供应商执行，单个出错不影响其他行；测试见 `resolve.test.ts`。
+- [x] 7.7 新增账户接口：`GET /api/accounts`（概览 + 明细）、`POST /api/accounts/sync`（同步全部）、`POST /api/accounts/manual`（写入手动值），全部要求凭据且写操作校验 Origin；验证方式是服务测试覆盖未授权 401、错误 Origin 403、单供应商失败不影响其他行。结论：另加 `POST /api/accounts/authorize`（发起授权，返回地址）与 `GET /oauth/callback`（唯一豁免 Bearer 的写路径，靠一次性 state 把关）；`AccountService` 以配置为准生成行（新增供应商落成未知、已删除的不再展示）、按余额升序且未知排最后；请求体读取有 8KB 上限；测试见 `dashboard.test.ts`「账户接口」。
+- [x] 7.8 落地账户页 UI：账户概览（累计充值 / 当前余额 + 不可信数字说明）、按余额升序的明细表（供应商·模型 / 数据来源 / 余额 / 累计充值 / 最近同步 / 动作）、来源图例、空态（无供应商 / 无可用数字两条分支）；验证方式是 HTML 测试断言结构与来源标记，并断言「未知」不渲染成 ¥0.00。结论：概览说明「多少项为手动填写、多少项是授权过期旧值」并声明合计未做汇率换算；明细行给出来源标记与下一步动作（填写 / 授权 / 重新授权）；无供应商时不渲染明细表而提示编辑 `config.yaml`；测试见 `dashboard-client.test.ts`「账户页脚本」与 `dashboard-html.test.ts`「供应商账户页结构」。
 
 ## 8. 配置体检页
 

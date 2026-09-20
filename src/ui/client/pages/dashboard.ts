@@ -8,6 +8,8 @@ import { ATLAS_FAMILY, FAMILY_KEY, THEME_KEY } from "../constants.ts";
  */
 export function dashboardPageFragment(): string {
   return `
+      /** 当前归因维度；由归因区块的按钮切换。 */
+      var dimension = "project";
       function markRangeButtons(current) {
         var buttons = document.querySelectorAll("[data-range]");
         Array.prototype.forEach.call(buttons, function (btn) {
@@ -15,10 +17,19 @@ export function dashboardPageFragment(): string {
         });
       }
 
+      /**
+       * 渲染一次刷新拿到的数据。
+       *
+       * 概览、归因、统计与趋势来自同一个请求、同一个时间范围与同一份总花费，所以归因
+       * 各分组花费之和恒等于概览的本期花费；切换归因维度只需重查这一个请求。
+       */
       function render(data) {
         var vendors = data.vendors || [];
         if (data.period) { period = data.period; }
         markRangeButtons(period);
+        var overview = data.overview || {};
+        renderOverview(overview, period);
+        renderAttribution(data.attribution || [], dimension, overview.costTotal || 0);
         renderVendors(vendors);
         renderNotice(vendors);
         renderStats(data.stats || [], period);
@@ -65,7 +76,21 @@ export function dashboardPageFragment(): string {
       }
 
       function load() {
-        return api("/api/dashboard?period=" + encodeURIComponent(period)).then(render);
+        return api(
+          "/api/dashboard?period=" + encodeURIComponent(period) +
+            "&dimension=" + encodeURIComponent(dimension)
+        ).then(render);
+      }
+
+      function wireDimensions() {
+        var buttons = document.querySelectorAll("[data-dimension]");
+        Array.prototype.forEach.call(buttons, function (btn) {
+          btn.addEventListener("click", function () {
+            dimension = btn.getAttribute("data-dimension") || dimension;
+            markDimensionButtons(dimension);
+            refresh();
+          });
+        });
       }
 
       function refresh() {
@@ -191,6 +216,8 @@ export function dashboardPageFragment(): string {
       }
 
       wireRanges();
+      wireDimensions();
+      wireRail();
       wireTheme();
       wireFamily();
       wireRefreshAll();

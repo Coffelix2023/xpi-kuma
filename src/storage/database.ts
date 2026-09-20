@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import Sqlite from "better-sqlite3";
 import type {
+  AccountBalance,
   AggregatedStats,
   AttributionDimension,
   AttributionRow,
@@ -92,6 +93,31 @@ export interface TrendSeries {
   byProvider: Record<string, number>;
   cost: number;
   tokens: number;
+}
+/** `account_balances` 的原始行（SQLite 列名为 snake_case）。 */
+interface AccountBalanceRow {
+  balance: number | null;
+  currency: string;
+  error: string | null;
+  source: string | null;
+  stale: number;
+  synced_at: number | null;
+  topup: number | null;
+  vendor: string;
+}
+
+/** SQLite 行 → 领域对象：`stale` 由 INTEGER 还原成布尔。 */
+function toAccountBalance(row: AccountBalanceRow): AccountBalance {
+  return {
+    balance: row.balance,
+    currency: row.currency,
+    error: row.error,
+    source: row.source as AccountBalance["source"],
+    stale: row.stale === 1,
+    syncedAt: row.synced_at,
+    topup: row.topup,
+    vendor: row.vendor,
+  };
 }
 
 export interface DatabaseOptions {
@@ -184,6 +210,21 @@ export class Database {
 
       CREATE INDEX IF NOT EXISTS idx_vendor ON probe_records (vendor);
       CREATE INDEX IF NOT EXISTS idx_probe_timestamp ON probe_records (timestamp);
+      /*
+       * 余额快照：一个供应商一行，面板重开后直接读这里，保留上次已知值。
+       * balance / topup 为 NULL 表示「不知道」—— 不用 0 顶替未知。
+       */
+      CREATE TABLE IF NOT EXISTS account_balances (
+        vendor TEXT PRIMARY KEY,
+        balance REAL,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        source TEXT,
+        topup REAL,
+        stale INTEGER NOT NULL DEFAULT 0,
+        synced_at INTEGER,
+        error TEXT
+      );
+
     `);
   }
 
@@ -247,6 +288,58 @@ export class Database {
         record.sessionId,
       );
     return Number(result.lastInsertRowid);
+  }
+
+  /** 写入或覆盖一个供应商的余额快照（按 vendor 主键 upsert）。 */
+  upsertAccountBalance(row: AccountBalance): void {
+    this.db
+      .prepare(
+        `INSERT INTO account_balances (
+          vendor, balance, currency, source, topup, stale, synced_at, error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(vendor) DO UPDATE SET
+          balance = excluded.balance,
+          currency = excluded.currency,
+          source = excluded.source,
+          topup = excluded.topup,
+          stale = excluded.stale,
+          synced_at = excluded.synced_at,
+          error = excluded.error`,
+      )
+      .run(
+        row.vendor,
+        row.balance,
+        row.currency,
+        row.source,
+        row.topup,
+        row.stale ? 1 : 0,
+        row.syncedAt,
+        row.error,
+      );
+  }
+
+  /** 读取全部余额快照，按供应商名升序。 */
+  getAccountBalances(): AccountBalance[] {
+    const rows = this.db
+      .prepare(
+        `SELECT vendor, balance, currency, source, topup, stale, synced_at, error
+         FROM account_balances
+         ORDER BY vendor ASC`,
+      )
+      .all() as AccountBalanceRow[];
+    return rows.map(toAccountBalance);
+  }
+
+  /** 读取单个供应商的余额快照；从未同步过返回 null。 */
+  getAccountBalance(vendor: string): AccountBalance | null {
+    const row = this.db
+      .prepare(
+        `SELECT vendor, balance, currency, source, topup, stale, synced_at, error
+         FROM account_balances
+         WHERE vendor = ?`,
+      )
+      .get(vendor) as AccountBalanceRow | undefined;
+    return row ? toAccountBalance(row) : null;
   }
 
   /** 写入一条探测记录，返回自增主键。 */

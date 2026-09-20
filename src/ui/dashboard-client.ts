@@ -7,6 +7,8 @@ import {
   POLL_INTERVAL_MS,
 } from "./client/constants.ts";
 import { navFragment } from "./client/nav.ts";
+import { overviewFragment } from "./client/overview.ts";
+import { accountsPageFragment } from "./client/pages/accounts.ts";
 import { dashboardPageFragment } from "./client/pages/dashboard.ts";
 import { pollFragment } from "./client/poll.ts";
 import { renderFragment } from "./client/render.ts";
@@ -35,6 +37,7 @@ ${apiFragment()}
 ${pollFragment()}
 ${navFragment()}
 ${renderFragment()}
+${overviewFragment()}
 ${chartFragment()}
 ${dashboardPageFragment()}
     })();`;
@@ -47,6 +50,28 @@ ${dashboardPageFragment()}
  * 只需要读凭据、把站内链接补上 fragment，以及在缺少凭据时给出可操作提示而
  * 不是留一个空白页。
  */
+/**
+ * 账户页的页内脚本。
+ *
+ * 与主面板共用凭据、请求与轮询片段，数据范围只有账户接口：渲染概览与明细表，
+ * 并按 spec 要求沿用同一套「可见性感知轮询 + 失败不重试」的行为。
+ */
+export function accountsClientScript(): string {
+  return `(function () {
+      "use strict";
+
+      var POLL_MS = ${POLL_INTERVAL_MS};
+      var DEFAULT_PERIOD = ${JSON.stringify(DEFAULT_PERIOD)};
+      var NO_VENDOR = ${JSON.stringify(NO_VENDOR_NOTICE)};
+${bootstrapFragment()}
+${apiFragment()}
+${pollFragment()}
+${navFragment()}
+${renderFragment()}
+${accountsPageFragment()}
+    })();`;
+}
+
 export function sharedClientScript(): string {
   return `(function () {
       "use strict";

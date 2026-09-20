@@ -94,12 +94,66 @@ export interface AttributionRow {
   tokens: number;
 }
 
+/** 余额数值的来源；三档降级里各自对应一档。 */
+export type BalanceSource = "api" | "manual" | "oauth";
+
+/**
+ * 一个供应商的余额快照。
+ *
+ * `null` 一律表示「不知道」而不是 0：取不到值时界面显示「未知」，绝不拿 0 顶替。
+ * `stale` 标记数值来自上一次成功获取（如授权已过期）而不是本次同步。
+ */
+export interface AccountBalance {
+  /** 当前余额；未知时为 null */
+  balance: number | null;
+  /** 计费币种，缺省 `CNY` */
+  currency: string;
+  /** 最近一次同步的失败原因（已脱敏）；成功时为 null */
+  error: string | null;
+  /** 数值来源；未知时为 null */
+  source: BalanceSource | null;
+  /** 数值是上一次成功获取的旧值 */
+  stale: boolean;
+  /** 最近一次同步时间（毫秒时间戳）；从未同步过为 null */
+  syncedAt: number | null;
+  /** 累计充值；未知时为 null */
+  topup: number | null;
+  vendor: string;
+}
+
 /** 供应商价格，单位与费用统计一致，标注基准为每千 tokens。 */
 export interface VendorPrice {
   /** 每千输入 token 价格 */
   input: number;
   /** 每千输出 token 价格 */
   output: number;
+}
+
+/**
+ * 供应商余额取数配置；三段全部可选。
+ *
+ * 段缺失即视为「未配置」，不做任何猜测性请求 —— 服务商余额接口的路径必须由用户
+ * 明确声明（探测结论见 `docs/probe-balance-and-oauth.md`）。
+ */
+export interface VendorBalanceConfig {
+  /** 余额接口路径，相对 `endpoint`；以 `http` 开头时按绝对地址请求 */
+  apiPath?: string;
+  /** 手动填写的当前余额 */
+  manual?: number;
+  /** 累计充值 */
+  topup?: number;
+}
+
+/**
+ * 供应商 OAuth 授权配置。
+ *
+ * 四项齐全才算配置完整；缺项视为未配置授权，不发起授权流程。
+ */
+export interface VendorOAuthConfig {
+  authorizeUrl: string;
+  clientId: string;
+  scopes: string[];
+  tokenUrl: string;
 }
 
 /** 单个供应商的探测调度配置。 */
@@ -115,10 +169,14 @@ export interface VendorProbeConfig {
 export interface VendorConfig {
   /** 支持 `${ENV_VAR}` 占位符，解析后仅存在于内存 */
   apiKey?: string;
+  /** 余额取数配置（可选） */
+  balance?: VendorBalanceConfig;
   /** OpenAI-compatible base URL，例如 `https://api.openai.com/v1` */
   endpoint: string;
   model: string;
   name: string;
+  /** OAuth 授权配置（可选） */
+  oauth?: VendorOAuthConfig;
   price?: VendorPrice;
   probe: VendorProbeConfig;
 }

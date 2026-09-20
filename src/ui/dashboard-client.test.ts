@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  accountsClientScript,
   dashboardClientScript,
   NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
@@ -75,9 +76,19 @@ class FakeElement {
     this.listeners.set(type, list);
   }
 
+  /** 分区索引轨点击后调用；只记录是否被滚动，不做真实布局。 */
+  scrolled = false;
+
+  scrollIntoView(): void {
+    this.scrolled = true;
+  }
+
   click(): void {
     for (const handler of this.listeners.get("click") ?? []) {
-      handler({});
+      // 页面脚本会对 rail 链接调用 event.preventDefault()
+      handler({
+        preventDefault: () => {},
+      });
     }
   }
 
@@ -174,10 +185,28 @@ class FakeDocument {
 }
 
 /** 与 `generateDashboardHTML()` 产出的 shell 结构一致的最小 DOM。 */
+/** 与 `generateAccountsHTML()` 产出的 shell 结构一致的最小 DOM（账户页用）。 */
+function accountsShell(): FakeDocument {
+  const doc = new FakeDocument();
+  doc.root.setAttribute("data-theme", "dark");
+  doc.add("div", "kuma-updated");
+  doc.add("div", "kuma-accounts");
+  doc.add("div", "kuma-accounts-notice");
+  doc.add("div", "kuma-account-rows");
+  doc.add("button", "kuma-sync");
+  const navLink = doc.add("a");
+  navLink.setAttribute("data-kuma-nav", "/");
+  navLink.setAttribute("href", "/");
+  return doc;
+}
+
 function shell(): FakeDocument {
   const doc = new FakeDocument();
   doc.root.setAttribute("data-theme", "dark");
   doc.add("div", "kuma-updated");
+  doc.add("div", "kuma-overview");
+  doc.add("div", "kuma-overview-notice");
+  doc.add("div", "kuma-attribution");
   doc.add("div", "kuma-vendors");
   doc.add("div", "kuma-notice");
   doc.add("div", "kuma-stats");
@@ -188,6 +217,22 @@ function shell(): FakeDocument {
   const navLink = doc.add("a");
   navLink.setAttribute("data-kuma-nav", "/accounts");
   navLink.setAttribute("href", "/accounts");
+  for (const dimension of [
+    "project",
+    "session",
+    "vendorModel",
+  ]) {
+    doc.add("button").setAttribute("data-dimension", dimension);
+  }
+  // 分区索引轨：区块与轨链接成对，覆盖滚动定位与 aria-current 更新
+  for (const sectionId of [
+    "section-overview",
+    "section-vendors",
+  ]) {
+    doc.add("div", sectionId);
+    const railLink = doc.add("a");
+    railLink.setAttribute("data-rail-target", sectionId);
+  }
   for (const period of [
     "1h",
     "24h",
@@ -214,10 +259,18 @@ function vendor(overrides: Record<string, unknown> = {}) {
 
 function dashboard(overrides: Record<string, unknown> = {}) {
   return {
+    attribution: [],
+    dimension: "project",
     generatedAt: 1_700_000_000_000,
     period: "24h",
     stats: [],
     trend: [],
+    overview: {
+      costTotal: 0,
+      projectCount: 0,
+      requestCount: 0,
+      totalTokens: 0,
+    },
     vendors: [
       vendor(),
     ],
@@ -242,8 +295,8 @@ interface Harness {
   storage: Map<string, string>;
 }
 
-function harness(hash = "#token-abc"): Harness {
-  const doc = shell();
+function harness(hash = "#token-abc", makeShell = shell): Harness {
+  const doc = makeShell();
   const fetchMock = vi.fn();
   const location = {
     hash,
@@ -329,7 +382,7 @@ describe("凭据引导", () => {
     await flush();
 
     const [path, init] = h.fetchMock.mock.calls[0];
-    expect(path).toBe("/api/dashboard?period=24h");
+    expect(path).toBe("/api/dashboard?period=24h&dimension=project");
     expect(init.headers.Authorization).toBe("Bearer token-abc");
   });
 
@@ -340,6 +393,143 @@ describe("凭据引导", () => {
 
     expect(h.fetchMock).not.toHaveBeenCalled();
     expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("缺少访问凭据");
+  });
+});
+
+describe("花费概览与用量归因", () => {
+  it("概览渲染本期花费、token、请求数与覆盖项目数", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          overview: {
+            costTotal: 12.5,
+            projectCount: 3,
+            requestCount: 7,
+            totalTokens: 1234,
+          },
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    const host = h.doc.getElementById("kuma-overview");
+    expect(host?.textContent).toContain("本期花费");
+    expect(host?.textContent).toContain("¥12.50");
+    expect(host?.textContent).toContain("1234");
+    expect(host?.textContent).toContain("覆盖项目数");
+    expect(h.doc.getElementById("kuma-overview-notice")?.hidden).toBe(true);
+  });
+
+  it("本期没有记录时提示并给出去引导页的入口", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+
+    h.start();
+    await flush();
+
+    const notice = h.doc.getElementById("kuma-overview-notice");
+    expect(notice?.hidden).toBe(false);
+    expect(notice?.textContent).toContain("还没有使用量记录");
+    const guide = h.doc
+      .querySelectorAll("[data-kuma-nav]")
+      .find((link) => link.getAttribute("data-kuma-nav") === "/empty");
+    // 站内链接同样带上本次凭据 fragment
+    expect(guide?.getAttribute("href")).toBe("/empty#token-abc");
+  });
+
+  it("归因表按花费算占比，空键显示未知", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          attribution: [
+            {
+              costTotal: 3,
+              key: "/tmp/a",
+              requestCount: 2,
+              tokens: 30,
+            },
+            {
+              costTotal: 1,
+              key: "",
+              requestCount: 1,
+              tokens: 10,
+            },
+          ],
+          overview: {
+            costTotal: 4,
+            projectCount: 1,
+            requestCount: 3,
+            totalTokens: 40,
+          },
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    const host = h.doc.getElementById("kuma-attribution");
+    expect(host?.textContent).toContain("75.0%");
+    expect(host?.textContent).toContain("25.0%");
+    expect(host?.textContent).toContain("未知");
+  });
+
+  it("切换归因维度后按新维度重查", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+    h.fetchMock.mockClear();
+
+    const buttons = h.doc.querySelectorAll("[data-dimension]");
+    const session = buttons.find(
+      (btn) => btn.getAttribute("data-dimension") === "session",
+    );
+    session?.click();
+    await flush();
+
+    expect(h.fetchMock.mock.calls.at(-1)?.[0]).toBe(
+      "/api/dashboard?period=24h&dimension=session",
+    );
+    expect(session?.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      h.doc
+        .querySelectorAll('[data-dimension="project"]')[0]
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("归因无数据时显示暂无数据，不渲染空表", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+
+    h.start();
+    await flush();
+
+    const host = h.doc.getElementById("kuma-attribution");
+    expect(host?.textContent).toBe("暂无数据");
+    expect(host?.children).toHaveLength(1);
+  });
+});
+
+describe("分区索引轨", () => {
+  it("点击滚动到对应区块并更新 aria-current", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const links = h.doc.querySelectorAll("[data-rail-target]");
+    expect(links).toHaveLength(2);
+    links[1].click();
+
+    expect(h.doc.getElementById("section-vendors")?.scrolled).toBe(true);
+    expect(links[1].getAttribute("aria-current")).toBe("location");
+    expect(links[0].getAttribute("aria-current")).toBeNull();
   });
 });
 
@@ -362,7 +552,9 @@ describe("时间范围与探测", () => {
     h.doc.querySelectorAll('[data-range="7d"]')[0].click();
     await flush();
 
-    expect(h.fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/dashboard?period=7d");
+    expect(h.fetchMock.mock.calls.at(-1)?.[0]).toBe(
+      "/api/dashboard?period=7d&dimension=project",
+    );
     expect(
       h.doc.querySelectorAll('[data-range="7d"]')[0].getAttribute("aria-pressed"),
     ).toBe("true");
@@ -385,7 +577,9 @@ describe("时间范围与探测", () => {
     const [path, init] = h.fetchMock.mock.calls[0];
     expect(path).toBe("/api/probes");
     expect(init.method).toBe("POST");
-    expect(h.fetchMock.mock.calls[1][0]).toBe("/api/dashboard?period=24h");
+    expect(h.fetchMock.mock.calls[1][0]).toBe(
+      "/api/dashboard?period=24h&dimension=project",
+    );
   });
 
   it("卡片刷新按钮只探测该供应商", async () => {
@@ -696,7 +890,9 @@ describe("站内导航与缺凭据提示", () => {
     h.start();
     await flush();
 
-    const link = h.doc.querySelectorAll("[data-kuma-nav]")[0];
+    const link = h.doc
+      .querySelectorAll("[data-kuma-nav]")
+      .find((node) => node.getAttribute("data-kuma-nav") === "/accounts");
     expect(link?.getAttribute("href")).toBe("/accounts#secret-token");
   });
 
@@ -705,7 +901,9 @@ describe("站内导航与缺凭据提示", () => {
     h.start();
 
     expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("缺少访问凭据");
-    const link = h.doc.querySelectorAll("[data-kuma-nav]")[0];
+    const link = h.doc
+      .querySelectorAll("[data-kuma-nav]")
+      .find((node) => node.getAttribute("data-kuma-nav") === "/accounts");
     expect(link?.getAttribute("href")).toBe("/accounts");
   });
 
@@ -764,5 +962,189 @@ describe("站内导航与缺凭据提示", () => {
       },
     );
     expect(attrs.get("href")).toBe("/#tok");
+  });
+});
+
+function accountRow(overrides: Record<string, unknown> = {}) {
+  return {
+    balance: 10,
+    currency: "CNY",
+    error: null,
+    model: "gpt-4o-mini",
+    source: "api",
+    stale: false,
+    syncedAt: 1_700_000_000_000,
+    topup: 100,
+    vendor: "[OI]",
+    ...overrides,
+  };
+}
+
+function accountsPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    generatedAt: 1_700_000_000_000,
+    overview: {
+      balanceTotal: 10,
+      knownCount: 1,
+      manualCount: 0,
+      staleCount: 0,
+      topupTotal: 100,
+      unknownCount: 0,
+      vendorCount: 1,
+    },
+    rows: [
+      accountRow(),
+    ],
+    ...overrides,
+  };
+}
+
+describe("账户页脚本", () => {
+  it("明细表标注数据来源，未知不渲染成 ¥0.00", async () => {
+    const h = harness("#token-abc", accountsShell);
+    h.fetchMock.mockReturnValue(
+      respond(
+        accountsPayload({
+          overview: {
+            balanceTotal: 15,
+            knownCount: 2,
+            manualCount: 1,
+            staleCount: 1,
+            topupTotal: 100,
+            unknownCount: 1,
+            vendorCount: 3,
+          },
+          rows: [
+            accountRow(),
+            accountRow({
+              balance: 5,
+              source: "manual",
+              topup: null,
+              vendor: "手填供应商",
+            }),
+            accountRow({
+              balance: null,
+              error: "授权已过期",
+              source: "oauth",
+              stale: true,
+              vendor: "授权供应商",
+            }),
+          ],
+        }),
+      ),
+    );
+
+    h.start(accountsClientScript());
+    await flush();
+
+    const rows = h.doc.getElementById("kuma-account-rows");
+    expect(rows?.textContent).toContain("接口查询");
+    expect(rows?.textContent).toContain("手动填写");
+    expect(rows?.textContent).toContain("OAuth 授权（旧值）");
+    expect(rows?.textContent).toContain("重新授权");
+    expect(rows?.textContent).toContain("未知");
+    expect(rows?.textContent).not.toContain("¥0.00");
+    // 来源表头齐全，别把「未知」当成 0 顶替
+    expect(rows?.textContent).toContain("数据来源");
+  });
+
+  it("概览说明有多少是手工值、多少是过期旧值", async () => {
+    const h = harness("#token-abc", accountsShell);
+    h.fetchMock.mockReturnValue(
+      respond(
+        accountsPayload({
+          overview: {
+            balanceTotal: 15,
+            knownCount: 2,
+            manualCount: 1,
+            staleCount: 1,
+            topupTotal: 100,
+            unknownCount: 0,
+            vendorCount: 2,
+          },
+        }),
+      ),
+    );
+
+    h.start(accountsClientScript());
+    await flush();
+
+    const host = h.doc.getElementById("kuma-accounts");
+    expect(host?.textContent).toContain("当前余额");
+    expect(host?.textContent).toContain("¥15.00");
+    expect(host?.textContent).toContain("1 项为手动填写");
+    expect(host?.textContent).toContain("1 项为授权过期后保留的旧值");
+  });
+
+  it("两个数字都未知时概览显示未知而不是 ¥0.00", async () => {
+    const h = harness("#token-abc", accountsShell);
+    h.fetchMock.mockReturnValue(
+      respond(
+        accountsPayload({
+          overview: {
+            balanceTotal: null,
+            knownCount: 0,
+            manualCount: 0,
+            staleCount: 0,
+            topupTotal: null,
+            unknownCount: 1,
+            vendorCount: 1,
+          },
+          rows: [
+            accountRow({
+              balance: null,
+              error: "未配置任何余额来源",
+              source: null,
+              syncedAt: null,
+              topup: null,
+            }),
+          ],
+        }),
+      ),
+    );
+
+    h.start(accountsClientScript());
+    await flush();
+
+    const host = h.doc.getElementById("kuma-accounts");
+    expect(host?.textContent).toContain("未知");
+    expect(host?.textContent).not.toContain("¥0.00");
+    expect(host?.textContent).toContain("还没有取到任何余额数字");
+  });
+
+  it("没有供应商时不渲染明细表，改为提示编辑配置", async () => {
+    const h = harness("#token-abc", accountsShell);
+    h.fetchMock.mockReturnValue(
+      respond(
+        accountsPayload({
+          rows: [],
+          overview: {
+            balanceTotal: null,
+            knownCount: 0,
+            manualCount: 0,
+            staleCount: 0,
+            topupTotal: null,
+            unknownCount: 0,
+            vendorCount: 0,
+          },
+        }),
+      ),
+    );
+
+    h.start(accountsClientScript());
+    await flush();
+
+    expect(h.doc.getElementById("kuma-account-rows")?.children).toHaveLength(0);
+    const notice = h.doc.getElementById("kuma-accounts-notice");
+    expect(notice?.hidden).toBe(false);
+    expect(notice?.textContent).toContain("未配置任何供应商");
+  });
+
+  it("缺少凭据时不发请求，只提示重新执行命令", () => {
+    const h = harness("", accountsShell);
+    h.start(accountsClientScript());
+
+    expect(h.fetchMock).not.toHaveBeenCalled();
+    expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("缺少访问凭据");
   });
 });

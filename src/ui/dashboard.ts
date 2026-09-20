@@ -1,11 +1,13 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { AccountService } from "../accounts/service.ts";
 import type { UsageCollector } from "../collectors/usage-collector.ts";
 import { FileLogger } from "../lib/log.ts";
 import type { VendorMonitor } from "../monitors/vendor-monitor.ts";
 import { handleApi } from "./routes/api.ts";
 import { cspFor, respond } from "./routes/http.ts";
+import { handleOAuthCallback } from "./routes/oauth.ts";
 import { PAGES } from "./routes/pages.ts";
 
 /** 只监听 IPv4 回环，不暴露局域网或公网，见 dashboard-ui spec。 */
@@ -56,6 +58,8 @@ function getLogger(): FileLogger {
 export async function startDashboardServer(
   usageCollector: UsageCollector,
   vendorMonitor: VendorMonitor,
+  /** 账户服务；未启用时传 null，账户接口回 503 */
+  accountService: AccountService | null = null,
 ): Promise<DashboardServer> {
   const token = randomBytes(TOKEN_BYTES).toString("base64url");
 
@@ -74,6 +78,8 @@ export async function startDashboardServer(
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : 0;
   const host = `${LOOPBACK}:${port}`;
+  // 端口此刻才确定，授权回调地址只能在监听成功后注入
+  accountService?.setRedirectUri(`http://${host}/oauth/callback`);
 
   function handle(req: IncomingMessage, res: ServerResponse): void {
     // 严格 Host 校验：阻断 DNS rebinding 之类的跨源访问
@@ -84,6 +90,13 @@ export async function startDashboardServer(
 
     const url = new URL(req.url ?? "/", `http://${host}`);
     const method = req.method ?? "GET";
+
+    // OAuth 回调是唯一豁免 Bearer 的写路径：服务商重定向不带我们的凭据，
+    // 改由一次性 state 校验把关（Host 校验已在上一步完成）
+    if (method === "GET" && url.pathname === "/oauth/callback") {
+      handleOAuthCallback(url, res, accountService, getLogger());
+      return;
+    }
 
     // 页面外壳只含静态结构，凭据在 fragment 里，首次请求无法携带
     const renderPage = method === "GET" ? PAGES.get(url.pathname) : undefined;
@@ -99,6 +112,7 @@ export async function startDashboardServer(
     }
 
     const handled = handleApi(method, url, req, res, {
+      accounts: accountService,
       logger: getLogger(),
       originMatches: (request) => sameOrigin(request, host),
       usageCollector,

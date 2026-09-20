@@ -7,6 +7,7 @@ import type {
   TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { AccountService } from "./accounts/service.ts";
 import { UsageCollector } from "./collectors/usage-collector.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import { formatStatus } from "./lib/format.ts";
@@ -22,6 +23,7 @@ const STATUS_KEY = "xpi-kuma";
 
 /** 会话级运行时状态；`session_shutdown` 后清空。 */
 interface Runtime {
+  accountService: AccountService;
   config: KumaConfig;
   /** 当前会话的监控 Web 服务；未打开时为 null */
   dashboardServer: DashboardServer | null;
@@ -95,6 +97,12 @@ async function startSession(
     const database = new Database();
     const usageCollector = new UsageCollector(database);
     const vendorMonitor = new VendorMonitor(database, config);
+    const accountService = new AccountService({
+      config,
+      cwd: ctx.cwd,
+      database,
+      logger,
+    });
 
     // 保留期清理在会话启动时执行一次
     const removed = database.cleanOldRecords(config.retention.rawRecords);
@@ -106,6 +114,7 @@ async function startSession(
 
     vendorMonitor.start();
     runtime = {
+      accountService,
       config,
       dashboardServer: null,
       database,
@@ -166,6 +175,7 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
   dashboardStart ??= startDashboardServer(
     current.usageCollector,
     current.vendorMonitor,
+    current.accountService,
   ).then(
     (server) => {
       current.dashboardServer = server;

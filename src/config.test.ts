@@ -225,3 +225,127 @@ describe("expandEnvPlaceholders", () => {
     expect(config.vendors[0].apiKey).toBe("sk-test");
   });
 });
+
+describe("余额与授权配置段", () => {
+  it("段缺失时视为未配置", () => {
+    const cwd = tempCwd();
+    writeConfig(
+      cwd,
+      [
+        "vendors:",
+        '  - name: "A"',
+        '    endpoint: "https://api.example/v1"',
+        '    model: "m"',
+      ].join("\n"),
+    );
+
+    const config = loadConfig({
+      cwd,
+    });
+
+    expect(config.vendors[0].balance).toBeUndefined();
+    expect(config.vendors[0].oauth).toBeUndefined();
+  });
+
+  it("解析 balance 与 oauth 段", () => {
+    const cwd = tempCwd();
+    writeConfig(
+      cwd,
+      [
+        "vendors:",
+        '  - name: "A"',
+        '    endpoint: "https://api.example/v1"',
+        '    model: "m"',
+        "    balance:",
+        '      api_path: "/v1/balance"',
+        "      manual: 42.6",
+        "      topup: 200",
+        "    oauth:",
+        '      authorize_url: "https://api.example/authorize"',
+        '      token_url: "https://api.example/token"',
+        '      client_id: "cid"',
+        '      scopes: ["balance:read"]',
+      ].join("\n"),
+    );
+
+    const config = loadConfig({
+      cwd,
+    });
+
+    expect(config.vendors[0].balance).toEqual({
+      apiPath: "/v1/balance",
+      manual: 42.6,
+      topup: 200,
+    });
+    expect(config.vendors[0].oauth).toEqual({
+      authorizeUrl: "https://api.example/authorize",
+      clientId: "cid",
+      tokenUrl: "https://api.example/token",
+      scopes: [
+        "balance:read",
+      ],
+    });
+  });
+
+  it("字段类型错误一律抛 ConfigError", () => {
+    const cases = [
+      [
+        'balance: "nope"',
+        /balance 必须是映射/,
+      ],
+      [
+        'balance:\n      manual: "free"',
+        /balance\.manual 必须是数字/,
+      ],
+      [
+        'oauth:\n      scopes: "balance:read"',
+        /oauth\.scopes 必须是字符串列表/,
+      ],
+      [
+        "oauth:\n      client_id: 42",
+        /oauth\.client_id 必须是非空字符串/,
+      ],
+    ] as const;
+
+    for (const [segment, pattern] of cases) {
+      const cwd = tempCwd();
+      writeConfig(
+        cwd,
+        [
+          "vendors:",
+          '  - name: "A"',
+          '    endpoint: "https://api.example/v1"',
+          '    model: "m"',
+          ...segment.split("\n").map((line) => `    ${line}`),
+        ].join("\n"),
+      );
+
+      expect(() =>
+        loadConfig({
+          cwd,
+        }),
+      ).toThrow(pattern);
+    }
+  });
+
+  it("OAuth 段缺项按未配置处理，不报错", () => {
+    const cwd = tempCwd();
+    writeConfig(
+      cwd,
+      [
+        "vendors:",
+        '  - name: "A"',
+        '    endpoint: "https://api.example/v1"',
+        '    model: "m"',
+        "    oauth:",
+        '      client_id: "cid"',
+      ].join("\n"),
+    );
+
+    const config = loadConfig({
+      cwd,
+    });
+
+    expect(config.vendors[0].oauth).toBeUndefined();
+  });
+});

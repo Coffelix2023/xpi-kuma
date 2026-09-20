@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  accountsClientScript,
   dashboardClientScript,
   NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
@@ -297,5 +298,82 @@ describe("页面互链", () => {
       nonce: "n2",
     });
     expect(accounts.match(/nonce="n2"/g)?.length).toBe(3);
+  });
+});
+
+describe("主面板信息层级与分区索引轨", () => {
+  it("花费概览置顶，用量归因在趋势之前，供应商健康降为末块", () => {
+    const html = generateDashboardHTML();
+    const positions = [
+      'id="section-overview"',
+      'id="section-attribution"',
+      'id="section-stats"',
+      'id="section-chart"',
+      'id="section-vendors"',
+    ].map((marker) => html.indexOf(marker));
+    expect(positions.every((index) => index > -1)).toBe(true);
+    expect(positions).toEqual(
+      [
+        ...positions,
+      ].sort((a, b) => a - b),
+    );
+  });
+
+  it("提供概览容器、归因维度按钮与索引轨条目", () => {
+    const html = generateDashboardHTML();
+    expect(html).toContain('id="kuma-overview"');
+    expect(html).toContain('id="kuma-attribution"');
+    for (const dimension of [
+      "project",
+      "session",
+      "vendorModel",
+    ]) {
+      expect(html).toContain(`data-dimension="${dimension}"`);
+    }
+    for (const id of [
+      "section-overview",
+      "section-vendors",
+    ]) {
+      expect(html).toContain(`data-rail-target="${id}"`);
+    }
+  });
+
+  it("索引轨只在 Atlas 家族显示，窄视口隐藏", () => {
+    const css = dashboardCss();
+    expect(css).toContain(".kuma-rail { display: none; }");
+    expect(css).toContain('[data-family="atlas"] .kuma-rail {');
+    const narrow = css.slice(css.indexOf("@media (max-width: 1100px)"));
+    expect(narrow).toContain('[data-family="atlas"] .kuma-rail { display: none; }');
+  });
+});
+
+describe("供应商账户页结构", () => {
+  it("提供概览容器、明细容器、同步按钮与来源图例", () => {
+    const html = generateAccountsHTML();
+    expect(html).toContain('id="kuma-accounts"');
+    expect(html).toContain('id="kuma-accounts-notice"');
+    expect(html).toContain('id="kuma-account-rows"');
+    expect(html).toContain('id="kuma-sync"');
+    expect(html).toContain("来源图例");
+    expect(html).toContain("接口查询");
+  });
+
+  it("外壳不含凭据，脚本自带来源标记与「未知」文案", () => {
+    const html = generateAccountsHTML();
+    expect(html).not.toContain("token=");
+    const script = accountsClientScript();
+    expect(script).toContain("function sourceLabel");
+    expect(script).toContain("function amountText");
+    expect(script).toContain("接口查询");
+    expect(script).toContain("OAuth 授权");
+    expect(script).toContain("手动填写");
+  });
+
+  it("账户页脚本复用同一套凭据、请求与轮询片段", () => {
+    const script = accountsClientScript();
+    expect(script).toContain("function readToken");
+    expect(script).toContain("Authorization");
+    expect(script).toContain("visibilitychange");
+    expect(script).toContain("/api/accounts");
   });
 });

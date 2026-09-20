@@ -18,5 +18,37 @@ export function navFragment(): string {
           link.setAttribute("href", target + "#" + token);
         });
       }
+
+      /**
+       * 分区索引轨：点击滚动到目标区块，并把它标为当前项。
+       *
+       * 轨只在 Atlas 家族下可见（样式负责），但事件绑定对所有家族都做 —— 切换家族时
+       * 不需要重建 DOM。
+       */
+      function wireRail() {
+        var links = document.querySelectorAll("[data-rail-target]");
+        Array.prototype.forEach.call(links, function (link) {
+          link.addEventListener("click", function (event) {
+            var id = link.getAttribute("data-rail-target");
+            var target = id ? document.getElementById(id) : null;
+            if (!target) { return; }
+            event.preventDefault();
+            target.scrollIntoView({ block: "start" });
+            setRailCurrent(id);
+          });
+        });
+      }
+
+      /** 把当前区块写进轨的 aria-current，其余项清除。 */
+      function setRailCurrent(id) {
+        var links = document.querySelectorAll("[data-rail-target]");
+        Array.prototype.forEach.call(links, function (link) {
+          if (link.getAttribute("data-rail-target") === id) {
+            link.setAttribute("aria-current", "location");
+          } else {
+            link.removeAttribute("aria-current");
+          }
+        });
+      }
 `;
 }

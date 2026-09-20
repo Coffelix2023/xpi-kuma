@@ -5,7 +5,9 @@ import { parseDocument } from "yaml";
 import type {
   KumaConfig,
   RetentionConfig,
+  VendorBalanceConfig,
   VendorConfig,
+  VendorOAuthConfig,
   VendorProbeConfig,
 } from "./types.ts";
 
@@ -131,6 +133,116 @@ function parseProbe(value: unknown, index: number): VendorProbeConfig {
   };
 }
 
+/**
+ * 解析供应商的余额配置。
+ *
+ * 段缺失视为「未配置」，不做任何猜测性请求；段存在但字段类型不符即抛
+ * `ConfigError`（fail-closed）。
+ */
+function parseVendorBalance(
+  value: unknown,
+  index: number,
+): VendorBalanceConfig | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new ConfigError(`vendors[${index}].balance 必须是映射`);
+  }
+  const apiPath = readOptionalString(
+    value.api_path,
+    `vendors[${index}].balance.api_path`,
+  );
+  const manual = readOptionalNumber(value.manual, `vendors[${index}].balance.manual`);
+  const topup = readOptionalNumber(value.topup, `vendors[${index}].balance.topup`);
+  const balance: VendorBalanceConfig = {};
+  if (apiPath !== undefined) {
+    balance.apiPath = apiPath;
+  }
+  if (manual !== undefined) {
+    balance.manual = manual;
+  }
+  if (topup !== undefined) {
+    balance.topup = topup;
+  }
+  return balance;
+}
+
+/**
+ * 解析供应商的 OAuth 配置。
+ *
+ * 四项齐全才算配置完整；缺项视为未配置授权，不报错 —— 用户可能只用余额接口。
+ */
+function parseVendorOAuth(
+  value: unknown,
+  index: number,
+): VendorOAuthConfig | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new ConfigError(`vendors[${index}].oauth 必须是映射`);
+  }
+  const authorizeUrl = readOptionalString(
+    value.authorize_url,
+    `vendors[${index}].oauth.authorize_url`,
+  );
+  const tokenUrl = readOptionalString(
+    value.token_url,
+    `vendors[${index}].oauth.token_url`,
+  );
+  const clientId = readOptionalString(
+    value.client_id,
+    `vendors[${index}].oauth.client_id`,
+  );
+  const scopes = readOptionalStringArray(
+    value.scopes,
+    `vendors[${index}].oauth.scopes`,
+  );
+  if (!authorizeUrl || !tokenUrl || !clientId || !scopes) {
+    return undefined;
+  }
+  return {
+    authorizeUrl,
+    clientId,
+    scopes,
+    tokenUrl,
+  };
+}
+
+/** 读取可选字符串；出现但为空或类型不符即抛 `ConfigError`。 */
+function readOptionalString(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new ConfigError(`${field} 必须是非空字符串`);
+  }
+  return value;
+}
+
+/** 读取可选数字；出现但类型不符即抛 `ConfigError`。 */
+function readOptionalNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new ConfigError(`${field} 必须是数字`);
+  }
+  return value;
+}
+
+/** 读取可选字符串列表；出现但元素类型不符即抛 `ConfigError`。 */
+function readOptionalStringArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new ConfigError(`${field} 必须是字符串列表`);
+  }
+  return value as string[];
+}
+
 function parseVendors(value: unknown): VendorConfig[] {
   if (value === undefined || value === null) {
     return [];
@@ -147,11 +259,15 @@ function parseVendors(value: unknown): VendorConfig[] {
       throw new ConfigError(`vendors[${index}].api_key 必须是字符串`);
     }
     const price = entry.price;
+    const balance = parseVendorBalance(entry.balance, index);
+    const oauth = parseVendorOAuth(entry.oauth, index);
     return {
       apiKey: apiKey === undefined ? undefined : expandEnvPlaceholders(apiKey),
+      balance,
       endpoint: requireString(entry.endpoint, "endpoint", index),
       model: requireString(entry.model, "model", index),
       name: requireString(entry.name, "name", index),
+      oauth,
       price:
         isRecord(price) &&
         typeof price.input === "number" &&

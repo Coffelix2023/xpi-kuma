@@ -1,5 +1,8 @@
 /**
  * 渲染片段：状态样式、格式化与供应商卡片、统计表、提示的 DOM 渲染。
+ *
+ * 所有面向用户的固定文案都经 `t()` 取词（见 `client/i18n.ts`），因此切换语言后
+ * 重新渲染即得到对应语言；数字与路径一律不进字典。
  */
 export function renderFragment(): string {
   return `
@@ -32,7 +35,7 @@ export function renderFragment(): string {
       }
 
       function price(p) {
-        if (!p) { return "未配置"; }
+        if (!p) { return t("chart.missingPrice"); }
         return "¥" + p.input + " / ¥" + p.output;
       }
 
@@ -66,10 +69,10 @@ export function renderFragment(): string {
           var dl = document.createElement("dl");
           dl.className = "kuma-kv";
           [
-            ["价格/千tok", price(v.price)],
-            ["TTFT", ms(v.ttft)],
-            ["响应时间", ms(v.totalTime)],
-            ["最近探测", v.lastProbeTime ? new Date(v.lastProbeTime).toLocaleTimeString() : "从未"],
+            [t("vendor.pricePerK"), price(v.price)],
+            [t("vendor.ttft"), ms(v.ttft)],
+            [t("vendor.responseTime"), ms(v.totalTime)],
+            [t("vendor.lastProbe"), v.lastProbeTime ? new Date(v.lastProbeTime).toLocaleTimeString() : t("common.never")]
           ].forEach(function (pair) {
             dl.appendChild(text("dt", "", pair[0]));
             dl.appendChild(text("dd", "", pair[1]));
@@ -78,12 +81,12 @@ export function renderFragment(): string {
 
           var foot = document.createElement("div");
           foot.className = "kuma-card-foot";
-          var btn = text("button", "", "刷新");
+          var btn = text("button", "", t("common.refresh"));
           btn.type = "button";
-          btn.setAttribute("aria-label", "立即探测 " + v.name);
+          btn.setAttribute("aria-label", t("vendor.probeNow") + " " + v.name);
           btn.addEventListener("click", function () {
             btn.disabled = true;
-            btn.textContent = "探测中…";
+            btn.textContent = t("common.probing");
             probe(v.name);
           });
           foot.appendChild(btn);
@@ -105,16 +108,17 @@ export function renderFragment(): string {
           return;
         }
         notice.className = "kuma-empty";
-        notice.textContent = NO_VENDOR;
+        notice.textContent = t("vendor.noVendor");
         notice.hidden = false;
       }
 
+      /** 统计表列：表头词条键 + 取值函数。 */
       var COLUMNS = [
-        ["供应商 / 模型", function (r) { return [r.provider + " · " + r.model]; }],
-        ["输入 tok", function (r) { return [r.tokensInput, money(r.costInput)]; }],
-        ["输出 tok", function (r) { return [r.tokensOutput, money(r.costOutput)]; }],
-        ["缓存读", function (r) { return [r.tokensCacheRead, money(r.costCacheRead)]; }],
-        ["缓存写", function (r) { return [r.tokensCacheWrite, money(r.costCacheWrite)]; }],
+        ["stats.vendorModel", function (r) { return [r.provider + " · " + r.model]; }],
+        ["stats.tokensInput", function (r) { return [r.tokensInput, money(r.costInput)]; }],
+        ["stats.tokensOutput", function (r) { return [r.tokensOutput, money(r.costOutput)]; }],
+        ["stats.cacheRead", function (r) { return [r.tokensCacheRead, money(r.costCacheRead)]; }],
+        ["stats.cacheWrite", function (r) { return [r.tokensCacheWrite, money(r.costCacheWrite)]; }]
       ];
 
       function renderStats(rows, currentPeriod) {
@@ -129,9 +133,9 @@ export function renderFragment(): string {
         var thead = document.createElement("thead");
         var headRow = document.createElement("tr");
         COLUMNS.forEach(function (col) {
-          headRow.appendChild(text("th", "", col[0]));
+          headRow.appendChild(text("th", "", t(col[0])));
         });
-        ["总费用", "请求数"].forEach(function (name) {
+        [t("stats.totalCost"), t("stats.requests")].forEach(function (name) {
           headRow.appendChild(text("th", "", name));
         });
         thead.appendChild(headRow);
@@ -140,7 +144,7 @@ export function renderFragment(): string {
         var tbody = document.createElement("tbody");
         if (rows.length === 0) {
           var emptyRow = document.createElement("tr");
-          var cell = text("td", "", "暂无数据（" + currentPeriod + "）");
+          var cell = text("td", "", t("common.noData") + "（" + currentPeriod + "）");
           cell.colSpan = COLUMNS.length + 2;
           emptyRow.appendChild(cell);
           tbody.appendChild(emptyRow);

@@ -137,7 +137,12 @@ async function start(): Promise<{
     logger: new FileLogger(join(projectDir, "xpi-kuma-test.log")),
   });
   cleanups.push(() => database.close());
-  const server = await startDashboardServer(collector, monitor, accountService);
+  const server = await startDashboardServer(
+    collector,
+    monitor,
+    accountService,
+    projectDir,
+  );
   servers.push(server);
   return {
     accountService,
@@ -216,7 +221,8 @@ describe("服务启动与路由", () => {
     expect(settings.body).not.toContain('id="kuma-vendors"');
 
     const empty = await call(server.port, "/empty");
-    expect(empty.body).toContain('id="kuma-guide-title"');
+    expect(empty.body).toContain('id="kuma-guide-data-title"');
+    expect(empty.body).toContain('id="section-guide-vendors"');
     expect(empty.body).not.toContain('id="kuma-vendors"');
   });
 
@@ -587,6 +593,35 @@ describe("服务生命周期", () => {
     const startedAt = Date.now();
     await server.close();
     expect(Date.now() - startedAt).toBeLessThan(3000);
+  });
+});
+
+describe("体检接口", () => {
+  it("未授权返回 401", async () => {
+    const { server } = await start();
+    const res = await call(server.port, "/api/diagnostics");
+
+    expect(res.status).toBe(401);
+  });
+
+  it("返回只读快照：配置路径、逐供应商检查与全局项", async () => {
+    const { projectDir, server } = await start();
+    const before = readFileSync(resolveConfigPath(projectDir), "utf8");
+    const res = await call(server.port, "/api/diagnostics", {
+      headers: {
+        authorization: `Bearer ${server.token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const data = JSON.parse(res.body);
+    expect(data.configPath).toBe(resolveConfigPath(projectDir));
+    expect(data.configExists).toBe(true);
+    expect(data.vendors).toHaveLength(2);
+    expect(data.vendors[0].checks).toHaveLength(6);
+    expect(data.global.cwd).toBe(projectDir);
+    // 只读：查询不改动配置文件
+    expect(readFileSync(resolveConfigPath(projectDir), "utf8")).toBe(before);
   });
 });
 

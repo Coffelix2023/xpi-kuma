@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   accountsClientScript,
   dashboardClientScript,
+  emptyClientScript,
   NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
   preferenceBootstrapScript,
+  settingsClientScript,
   sharedClientScript,
 } from "./dashboard-client.ts";
 
@@ -185,6 +187,43 @@ class FakeDocument {
 }
 
 /** 与 `generateDashboardHTML()` 产出的 shell 结构一致的最小 DOM。 */
+/** 与 `generateSettingsHTML()` 产出的 shell 结构一致的最小 DOM（体检页用）。 */
+function settingsShell(): FakeDocument {
+  const doc = new FakeDocument();
+  doc.root.setAttribute("data-theme", "dark");
+  doc.add("div", "kuma-updated");
+  const errorSection = doc.add("section", "section-diagnostics-error");
+  errorSection.hidden = true;
+  doc.add("div", "kuma-diagnostics-error");
+  doc.add("section", "section-diagnostics");
+  doc.add("div", "kuma-diagnostics");
+  doc.add("section", "section-diagnostics-vendors");
+  doc.add("div", "kuma-diagnostics-vendors");
+  doc.add("span", "kuma-issues");
+  doc.add("section", "section-diagnostics-global");
+  doc.add("div", "kuma-diagnostics-global");
+  doc.add("button", "kuma-reload");
+  const navLink = doc.add("a");
+  navLink.setAttribute("data-kuma-nav", "/");
+  navLink.setAttribute("href", "/");
+  return doc;
+}
+
+/** 与 `generateEmptyHTML()` 产出的 shell 结构一致的最小 DOM（引导页用）。 */
+function emptyShell(): FakeDocument {
+  const doc = new FakeDocument();
+  doc.root.setAttribute("data-theme", "dark");
+  doc.add("div", "kuma-updated");
+  const vendorsSection = doc.add("section", "section-guide-vendors");
+  vendorsSection.hidden = true;
+  doc.add("section", "section-guide-data");
+  doc.add("div", "kuma-guide-status");
+  const navLink = doc.add("a");
+  navLink.setAttribute("data-kuma-nav", "/");
+  navLink.setAttribute("href", "/");
+  return doc;
+}
+
 /** 与 `generateAccountsHTML()` 产出的 shell 结构一致的最小 DOM（账户页用）。 */
 function accountsShell(): FakeDocument {
   const doc = new FakeDocument();
@@ -511,8 +550,13 @@ describe("花费概览与用量归因", () => {
     await flush();
 
     const host = h.doc.getElementById("kuma-attribution");
-    expect(host?.textContent).toBe("暂无数据");
     expect(host?.children).toHaveLength(1);
+    // 假 DOM 的 textContent 只聚合子节点，这里断言引导入口本身
+    // 空表换成引导入口：主面板无记录时要把用户送去引导页
+    const guide = h.doc
+      .querySelectorAll("[data-kuma-nav]")
+      .find((link) => link.getAttribute("data-kuma-nav") === "/empty");
+    expect(guide?.getAttribute("href")).toBe("/empty#token-abc");
   });
 });
 
@@ -1146,5 +1190,258 @@ describe("账户页脚本", () => {
 
     expect(h.fetchMock).not.toHaveBeenCalled();
     expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("缺少访问凭据");
+  });
+});
+
+function diagnosticsPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    configExists: true,
+    configModifiedAt: 1_700_000_000_000,
+    configPath: "/proj/.pi/xpi-kuma/config.yaml",
+    error: null,
+    errorLine: null,
+    generatedAt: 1_700_000_000_000,
+    issueCount: 1,
+    global: {
+      cwd: "/proj",
+      databaseBytes: null,
+      databaseExists: false,
+      databasePath: "/agent/data/xpi-kuma/usage.db",
+      probeInterval: "5m",
+      probeTimeoutMs: 30_000,
+      retentionDays: 7,
+      retentionIsDefault: true,
+    },
+    vendors: [
+      {
+        endpoint: "https://api.example/v1",
+        issueCount: 1,
+        model: "m",
+        name: "A",
+        checks: [
+          {
+            action: null,
+            detail: "name / endpoint / model 均已配置",
+            key: "required",
+            ok: true,
+          },
+          {
+            action: "export OPENAI_API_KEY=...",
+            detail: "${OPENAI_API_KEY} 当前未设置",
+            key: "apiKey",
+            ok: false,
+          },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("配置体检页脚本", () => {
+  it("解析通过时摊开配置明细、供应商检查与全局项", async () => {
+    const h = harness("#token-abc", settingsShell);
+    h.fetchMock.mockReturnValue(respond(diagnosticsPayload()));
+
+    h.start(settingsClientScript());
+    await flush();
+
+    expect(h.doc.getElementById("kuma-diagnostics")?.textContent).toContain(
+      "/proj/.pi/xpi-kuma/config.yaml",
+    );
+    const vendors = h.doc.getElementById("kuma-diagnostics-vendors");
+    expect(vendors?.textContent).toContain("API Key");
+    expect(vendors?.textContent).toContain("未通过");
+    // 密钥只显示变量名与下一步，不回显值
+    expect(vendors?.textContent).toContain("export OPENAI_API_KEY");
+    expect(h.doc.getElementById("kuma-issues")?.textContent).toBe("待处理 1 项");
+    expect(h.doc.getElementById("kuma-diagnostics-global")?.textContent).toContain(
+      "不存在",
+    );
+    expect(h.doc.getElementById("section-diagnostics-error")?.hidden).toBe(true);
+  });
+
+  it("解析失败时隐藏供应商表与全局项，只留替代卡", async () => {
+    const h = harness("#token-abc", settingsShell);
+    h.fetchMock.mockReturnValue(
+      respond(
+        diagnosticsPayload({
+          error: "配置文件 YAML 语法错误：bad indentation",
+          errorLine: 3,
+          global: null,
+          issueCount: 0,
+          vendors: null,
+        }),
+      ),
+    );
+
+    h.start(settingsClientScript());
+    await flush();
+
+    expect(h.doc.getElementById("section-diagnostics-vendors")?.hidden).toBe(true);
+    expect(h.doc.getElementById("section-diagnostics-global")?.hidden).toBe(true);
+    const card = h.doc.getElementById("kuma-diagnostics-error");
+    expect(card?.hidden).toBe(false);
+    expect(card?.textContent).toContain("出错位置：第 3 行");
+    expect(card?.textContent).toContain("不会自动修复");
+    // fail-closed：不展示半截供应商表
+    expect(h.doc.getElementById("kuma-diagnostics-vendors")?.textContent).toBe("");
+  });
+
+  it("缺少凭据时不发请求，只提示重新执行命令", () => {
+    const h = harness("", settingsShell);
+    h.start(settingsClientScript());
+
+    expect(h.fetchMock).not.toHaveBeenCalled();
+    expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("缺少访问凭据");
+  });
+});
+
+describe("零数据引导页脚本", () => {
+  it("配置里没有供应商时只讲怎么加第一个供应商", async () => {
+    const h = harness("#token-abc", emptyShell);
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          vendors: [],
+        }),
+      ),
+    );
+
+    h.start(emptyClientScript());
+    await flush();
+
+    expect(h.doc.getElementById("section-guide-vendors")?.hidden).toBe(false);
+    expect(h.doc.getElementById("section-guide-data")?.hidden).toBe(true);
+  });
+
+  it("有供应商但没记录时列出三条路径", async () => {
+    const h = harness("#token-abc", emptyShell);
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+
+    h.start(emptyClientScript());
+    await flush();
+
+    expect(h.doc.getElementById("section-guide-vendors")?.hidden).toBe(true);
+    expect(h.doc.getElementById("section-guide-data")?.hidden).toBe(false);
+    expect(h.doc.getElementById("kuma-guide-status")?.textContent).toContain(
+      "还没有任何使用量记录",
+    );
+  });
+
+  it("已有记录时提示可以回主面板", async () => {
+    const h = harness("#token-abc", emptyShell);
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          overview: {
+            costTotal: 1,
+            projectCount: 1,
+            requestCount: 5,
+            totalTokens: 10,
+          },
+        }),
+      ),
+    );
+
+    h.start(emptyClientScript());
+    await flush();
+
+    expect(h.doc.getElementById("kuma-guide-status")?.textContent).toContain(
+      "已经记录 5 次调用",
+    );
+  });
+
+  it("缺少凭据时不发请求", () => {
+    const h = harness("", emptyShell);
+    h.start(emptyClientScript());
+
+    expect(h.fetchMock).not.toHaveBeenCalled();
+    expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("缺少访问凭据");
+  });
+});
+
+/** 带语言按钮与 data-i18n 元素的最小 DOM（双语切换用）。 */
+function langShell(): FakeDocument {
+  const doc = new FakeDocument();
+  doc.root.setAttribute("data-theme", "dark");
+  doc.add("div", "kuma-updated");
+  doc.add("div", "kuma-vendors");
+  doc.add("div", "kuma-notice");
+  doc.add("div", "kuma-stats");
+  doc.add("div", "kuma-chart");
+  doc.add("button", "kuma-refresh-all");
+  doc.add("button", "kuma-theme");
+  doc.add("button", "kuma-family");
+  doc.add("button", "kuma-lang");
+  const title = doc.add("h1", "kuma-title");
+  title.setAttribute("data-i18n", "page.dashboard.title");
+  title.textContent = "xpi-kuma 监控面板";
+  const group = doc.add("div", "kuma-range");
+  group.setAttribute("data-i18n-aria", "aria.timeRange");
+  group.setAttribute("aria-label", "时间范围");
+  for (const period of [
+    "1h",
+    "24h",
+    "7d",
+    "30d",
+  ]) {
+    doc.add("button").setAttribute("data-range", period);
+  }
+  const navLink = doc.add("a");
+  navLink.setAttribute("data-kuma-nav", "/accounts");
+  navLink.setAttribute("href", "/accounts");
+  return doc;
+}
+
+describe("中英双语", () => {
+  it("切换语言同步更新文案、aria-label 与 <html lang>，并持久化", async () => {
+    const h = harness("#token-abc", langShell);
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start(dashboardClientScript());
+    await flush();
+
+    const title = h.doc.getElementById("kuma-title");
+    const group = h.doc.getElementById("kuma-range");
+    const button = h.doc.getElementById("kuma-lang");
+
+    expect(h.doc.root.getAttribute("lang")).toBe("zh-CN");
+    expect(title?.textContent).toBe("xpi-kuma 监控面板");
+    expect(button?.textContent).toBe("English");
+
+    button?.click();
+    await flush();
+
+    expect(h.doc.root.getAttribute("lang")).toBe("en");
+    expect(title?.textContent).toBe("xpi-kuma Dashboard");
+    expect(group?.getAttribute("aria-label")).toBe("Time range");
+    expect(button?.textContent).toBe("中文");
+    expect(h.storage.get("kuma.lang")).toBe("en");
+  });
+
+  it("已保存英文偏好时首帧即为英文（刷新后保持）", async () => {
+    const h = harness("#token-abc", langShell);
+    h.storage.set("kuma.lang", "en");
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start(dashboardClientScript());
+    await flush();
+
+    expect(h.doc.root.getAttribute("lang")).toBe("en");
+    expect(h.doc.getElementById("kuma-title")?.textContent).toBe("xpi-kuma Dashboard");
+    expect(h.doc.getElementById("kuma-lang")?.textContent).toBe("中文");
+  });
+
+  it("英文界面下脚本生成的文案也是英文", async () => {
+    const h = harness("#token-abc", langShell);
+    h.storage.set("kuma.lang", "en");
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start(dashboardClientScript());
+    await flush();
+
+    expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("Updated at");
+  });
+
+  it("首帧偏好脚本按已存语言写 <html lang>", () => {
+    expect(preferenceBootstrapScript()).toContain("kuma.lang");
   });
 });

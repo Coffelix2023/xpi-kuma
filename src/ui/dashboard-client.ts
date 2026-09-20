@@ -6,72 +6,77 @@ import {
   NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
 } from "./client/constants.ts";
+import { i18nFragment } from "./client/i18n.ts";
 import { navFragment } from "./client/nav.ts";
 import { overviewFragment } from "./client/overview.ts";
 import { accountsPageFragment } from "./client/pages/accounts.ts";
 import { dashboardPageFragment } from "./client/pages/dashboard.ts";
+import { emptyPageFragment } from "./client/pages/empty.ts";
+import { settingsPageFragment } from "./client/pages/settings.ts";
 import { pollFragment } from "./client/poll.ts";
 import { renderFragment } from "./client/render.ts";
 
 export { NO_VENDOR_NOTICE, POLL_INTERVAL_MS, preferenceBootstrapScript };
 
 /**
- * 主面板页内脚本装配。
+ * 页面脚本的公共装配。
  *
- * 按固定顺序把 `src/ui/client/` 下各模块的脚本片段拼进同一个 IIFE：
+ * 四个页面的脚本只有最后一段（页面装配）不同，其余片段与顺序完全一致：
  * bootstrap（凭据与状态）→ api（请求）→ poll（轮询）→ nav（站内链接）→
- * render（渲染）→ chart（图表）→ pages/dashboard（页面装配与初始化）。
+ * i18n（双语字典与切换）→ render（渲染工具）→ 页面片段。
  *
- * bootstrap 必须最先：后续片段都依赖它声明的状态变量。所有片段都是函数声明，
- * 在同一 IIFE 作用域内提升，因此互相调用的顺序不影响行为。
+ * bootstrap 必须最先：后续片段都依赖它声明的状态变量；i18n 的 `applyLanguage`
+ * 在片段末尾立即执行，因此要排在 DOM 就绪之后（脚本本就在 `</body>` 前）。
+ * 所有片段都是函数声明，在同一 IIFE 作用域内提升，互相调用与顺序无关。
  */
+function pageScript(pageFragment: string): string {
+  return `(function () {
+      "use strict";
+
+      var POLL_MS = ${POLL_INTERVAL_MS};
+      var DEFAULT_PERIOD = ${JSON.stringify(DEFAULT_PERIOD)};
+      var NO_VENDOR = ${JSON.stringify(NO_VENDOR_NOTICE)};
+${bootstrapFragment()}
+${apiFragment()}
+${pollFragment()}
+${navFragment()}
+${i18nFragment()}
+${renderFragment()}
+${pageFragment}
+    })();`;
+}
+
+/** 主面板页内脚本。 */
 export function dashboardClientScript(): string {
-  return `(function () {
-      "use strict";
-
-      var POLL_MS = ${POLL_INTERVAL_MS};
-      var DEFAULT_PERIOD = ${JSON.stringify(DEFAULT_PERIOD)};
-      var NO_VENDOR = ${JSON.stringify(NO_VENDOR_NOTICE)};
-${bootstrapFragment()}
-${apiFragment()}
-${pollFragment()}
-${navFragment()}
-${renderFragment()}
-${overviewFragment()}
-${chartFragment()}
-${dashboardPageFragment()}
-    })();`;
+  return pageScript(
+    [
+      overviewFragment(),
+      chartFragment(),
+      dashboardPageFragment(),
+    ].join("\n"),
+  );
 }
 
-/**
- * 子页面共用的页内脚本。
- *
- * 子页面与主面板同源、共用一套凭据与偏好，但不需要主面板那套数据渲染与轮询：
- * 只需要读凭据、把站内链接补上 fragment，以及在缺少凭据时给出可操作提示而
- * 不是留一个空白页。
- */
-/**
- * 账户页的页内脚本。
- *
- * 与主面板共用凭据、请求与轮询片段，数据范围只有账户接口：渲染概览与明细表，
- * 并按 spec 要求沿用同一套「可见性感知轮询 + 失败不重试」的行为。
- */
+/** 账户页的页内脚本：数据只来自账户接口。 */
 export function accountsClientScript(): string {
-  return `(function () {
-      "use strict";
-
-      var POLL_MS = ${POLL_INTERVAL_MS};
-      var DEFAULT_PERIOD = ${JSON.stringify(DEFAULT_PERIOD)};
-      var NO_VENDOR = ${JSON.stringify(NO_VENDOR_NOTICE)};
-${bootstrapFragment()}
-${apiFragment()}
-${pollFragment()}
-${navFragment()}
-${renderFragment()}
-${accountsPageFragment()}
-    })();`;
+  return pageScript(accountsPageFragment());
 }
 
+/** 配置体检页的页内脚本：数据只来自 `/api/diagnostics`，页面不产生任何写盘操作。 */
+export function settingsClientScript(): string {
+  return pageScript(settingsPageFragment());
+}
+
+/** 零数据引导页的页内脚本：复用主面板接口判断空态分支。 */
+export function emptyClientScript(): string {
+  return pageScript(emptyPageFragment());
+}
+
+/**
+ * 只读也够用的最小脚本：读凭据 + 补站内链接的 fragment。
+ *
+ * 供不需要数据的第三方外壳使用（当前四个页面都各有一套完整脚本）。
+ */
 export function sharedClientScript(): string {
   return `(function () {
       "use strict";

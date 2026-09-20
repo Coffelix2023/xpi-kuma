@@ -61,8 +61,8 @@ export function chartFragment(): string {
           viewBox: "0 0 " + width + " " + height,
           width: "100%",
         });
-        svg.appendChild(svgNode("title", {}, "费用与 token 趋势"));
-        svg.appendChild(svgNode("desc", {}, "按时间的费用折线（左轴）与 token 总量虚线（右轴），每个供应商一条折线；悬停某一时间点可看该点明细。"));
+        svg.appendChild(svgNode("title", {}, t("chart.svgTitle")));
+        svg.appendChild(svgNode("desc", {}, t("chart.desc")));
 
         // 横向网格与左轴费用刻度
         var gridLines = 4;
@@ -79,8 +79,8 @@ export function chartFragment(): string {
 
         // 横轴时间标签，最多 6 个
         var ticks = Math.min(6, trend.length);
-        for (var t = 0; t < ticks; t += 1) {
-          var index = ticks === 1 ? 0 : Math.round((t * (trend.length - 1)) / (ticks - 1));
+        for (var tick = 0; tick < ticks; tick += 1) {
+          var index = ticks === 1 ? 0 : Math.round((tick * (trend.length - 1)) / (ticks - 1));
           var when = new Date(trend[index].bucketStart).toLocaleString(undefined, {
             day: "2-digit", hour: "2-digit", minute: "2-digit",
           });
@@ -180,7 +180,7 @@ export function chartFragment(): string {
         Object.keys(point.byProvider || {}).forEach(function (name) {
           parts.push(name + " ¥" + (point.byProvider[name] || 0).toFixed(4));
         });
-        parts.push("Token " + (point.tokens || 0));
+        parts.push(t("attribution.tokens") + " " + (point.tokens || 0));
         return parts.join(" · ");
       }
 

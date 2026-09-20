@@ -17,9 +17,10 @@ const CONFIG_RELATIVE_PATH = join(".pi", "xpi-kuma", "config.yaml");
 /** 打包在扩展源码旁的模板。 */
 const TEMPLATE_PATH = fileURLToPath(new URL("./config.example.yaml", import.meta.url));
 
-const DEFAULT_RETENTION_DAYS = 7;
-const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
-const DEFAULT_PROBE_INTERVAL = "5m";
+/** 未显式配置时的默认值；体检页据此标注「默认值」。 */
+export const DEFAULT_RETENTION_DAYS = 7;
+export const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
+export const DEFAULT_PROBE_INTERVAL = "5m";
 
 /** 配置读取或校验失败；`line` 在 YAML 语法错误时有值。 */
 export class ConfigError extends Error {
@@ -70,7 +71,16 @@ export function loadConfig(options: LoadConfigOptions = {}): KumaConfig {
     copyFileSync(TEMPLATE_PATH, configPath);
   }
 
-  const raw = readFileSync(configPath, "utf8");
+  return parseConfigText(readFileSync(configPath, "utf8"));
+}
+
+/**
+ * 解析配置文本（不碰文件系统）。
+ *
+ * 与 `loadConfig` 共用同一套解析器：体检页因此能在不创建模板、不写盘的前提下拿到
+ * **完全一致**的解析结论（fail-closed 的语义只有一份）。
+ */
+export function parseConfigText(raw: string): KumaConfig {
   const document = parseDocument(raw);
   const syntaxError = document.errors[0];
   if (syntaxError) {

@@ -60,6 +60,8 @@ export async function startDashboardServer(
   vendorMonitor: VendorMonitor,
   /** 账户服务；未启用时传 null，账户接口回 503 */
   accountService: AccountService | null = null,
+  /** 当前工作目录；体检页据此解析配置与存储位置 */
+  cwd: string = process.cwd(),
 ): Promise<DashboardServer> {
   const token = randomBytes(TOKEN_BYTES).toString("base64url");
 
@@ -113,6 +115,7 @@ export async function startDashboardServer(
 
     const handled = handleApi(method, url, req, res, {
       accounts: accountService,
+      cwd,
       logger: getLogger(),
       originMatches: (request) => sameOrigin(request, host),
       usageCollector,

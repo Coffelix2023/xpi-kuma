@@ -12,6 +12,7 @@ import type {
 import { DEFAULT_PERIOD } from "../dashboard-html.ts";
 import { ACCOUNT_ROUTES } from "./accounts.ts";
 import type { ApiContext, ApiRoute } from "./context.ts";
+import { DIAGNOSTICS_ROUTES } from "./diagnostics.ts";
 import { respond } from "./http.ts";
 
 const VALID_PERIODS: StatsPeriod[] = [
@@ -249,6 +250,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
     match: (method, url) => method === "POST" && url.pathname.startsWith(PROBES_PREFIX),
   },
   ...ACCOUNT_ROUTES,
+  ...DIAGNOSTICS_ROUTES,
 ];
 
 /** 分派一个已通过凭据校验的 API 请求；返回是否命中某条路由。 */

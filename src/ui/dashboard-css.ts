@@ -221,6 +221,25 @@ ${spacing}
     a.kuma-link:hover { border-bottom-color: var(--primary); color: var(--primary); }
     a.kuma-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 
+    /* 体检页的只读声明：整页最重要的边界，做成一条显眼的横幅 */
+    .kuma-readonly {
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--primary);
+      border-radius: ${radius()};
+      padding: var(--kuma-space-1) var(--kuma-space-2);
+      margin: 0 0 var(--kuma-space-3);
+      color: var(--muted-foreground);
+      font-size: 11px;
+    }
+
+    /* 键值列表的宽版：标签固定、值可折行（路径与错误信息都很长） */
+    .kuma-kv-wide { grid-template-columns: minmax(120px, max-content) 1fr; }
+    .kuma-kv-wide dd { text-align: left; word-break: break-all; }
+
+    /* 体检表：说明与动作要能换行，未通过项用破坏色标记 */
+    .kuma-note { white-space: normal; text-align: left; min-width: 160px; }
+    .kuma-check-fail { color: var(--destructive); font-weight: 700; }
+
     .kuma-steps { margin: 0; padding-left: var(--kuma-space-3); }
     .kuma-steps li { margin-bottom: var(--kuma-space-1); }
     .kuma-steps code,

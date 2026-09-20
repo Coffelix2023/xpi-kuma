@@ -25,6 +25,8 @@ const STATUS_KEY = "xpi-kuma";
 interface Runtime {
   accountService: AccountService;
   config: KumaConfig;
+  /** 当前会话的工作目录；面板的体检页据此解析配置与存储 */
+  cwd: string;
   /** 当前会话的监控 Web 服务；未打开时为 null */
   dashboardServer: DashboardServer | null;
   database: Database;
@@ -116,6 +118,7 @@ async function startSession(
     runtime = {
       accountService,
       config,
+      cwd: ctx.cwd,
       dashboardServer: null,
       database,
       usageCollector,
@@ -176,6 +179,7 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
     current.usageCollector,
     current.vendorMonitor,
     current.accountService,
+    current.cwd,
   ).then(
     (server) => {
       current.dashboardServer = server;

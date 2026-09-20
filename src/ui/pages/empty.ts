@@ -1,34 +1,49 @@
-import { sharedClientScript } from "../dashboard-client.ts";
+import { i18nAttr, zh } from "../client/messages.ts";
+import { emptyClientScript } from "../dashboard-client.ts";
 import { type PageOptions, pageShell } from "../shell.ts";
 
 /**
  * 零数据引导态。
  *
  * 首次运行、没有使用量记录或未配置供应商时替代主面板：把「怎么产生第一份数据」
- * 说清楚，并留一条回主面板的路。页面是静态外壳，不含任何数据与凭据。
+ * 说清楚，并留一条回主面板的路。页面是静态外壳，不含任何数据与凭据；
+ * 两个分支容器由页内脚本按当前配置与记录数显隐。
  */
 export function generateEmptyHTML(options: PageOptions = {}): string {
   return pageShell({
     body: `  <header>
     <div>
-      <h1>还没有可展示的数据</h1>
+      <h1${i18nAttr("page.empty.title")}>${zh("page.empty.title")}</h1>
+      <div class="kuma-generated" id="kuma-updated"${i18nAttr("page.empty.subtitle")}>${zh("page.empty.subtitle")}</div>
     </div>
     <div class="kuma-actions">
-      <a class="kuma-link" data-kuma-nav="/" href="/">返回主面板</a>
+      <a class="kuma-link" data-kuma-nav="/" href="/"${i18nAttr("link.backToDashboard")}>${zh("link.backToDashboard")}</a>
+      <button type="button" id="kuma-lang"></button>
     </div>
   </header>
 
-  <section aria-labelledby="kuma-guide-title">
-    <h2 id="kuma-guide-title">产生数据的三条路径</h2>
+  <section id="section-guide-vendors" aria-labelledby="kuma-guide-vendors-title" hidden>
+    <h2 id="kuma-guide-vendors-title"${i18nAttr("section.guideVendors")}>${zh("section.guideVendors")}</h2>
+    <p${i18nAttr("guide.vendorsIntro")}>${zh("guide.vendorsIntro")}</p>
     <ul class="kuma-steps">
-      <li>在本项目里正常使用 Pi：新的 LLM 调用会经 <code>message_end</code> 自动计入用量。</li>
-      <li>在 <code>.pi/xpi-kuma/config.yaml</code> 里配置供应商，面板才能展示探测与账户信息。</li>
-      <li>执行 <code>/xpi-kuma</code> 重新打开面板；数据出现后主面板会替换本页。</li>
+      <li${i18nAttr("guide.vendorsStep1")}>${zh("guide.vendorsStep1")}</li>
+      <li${i18nAttr("guide.vendorsStep2")}>${zh("guide.vendorsStep2")}</li>
+      <li${i18nAttr("guide.vendorsStep3")}>${zh("guide.vendorsStep3")}</li>
     </ul>
+  </section>
+
+  <section id="section-guide-data" aria-labelledby="kuma-guide-data-title">
+    <h2 id="kuma-guide-data-title"${i18nAttr("section.guideData")}>${zh("section.guideData")}</h2>
+    <ul class="kuma-steps">
+      <li${i18nAttr("guide.dataPath1")}>${zh("guide.dataPath1")}</li>
+      <li${i18nAttr("guide.dataPath2")}>${zh("guide.dataPath2")}</li>
+      <li${i18nAttr("guide.dataPath3")}>${zh("guide.dataPath3")}</li>
+    </ul>
+    <p class="kuma-generated" id="kuma-guide-status"></p>
   </section>
 `,
     nonce: options.nonce,
-    script: sharedClientScript(),
-    title: "xpi-kuma · 还没有数据",
+    script: emptyClientScript(),
+    title: zh("page.empty.title"),
   });
 }

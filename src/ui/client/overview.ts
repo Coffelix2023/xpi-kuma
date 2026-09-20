@@ -2,7 +2,7 @@
  * 概览与归因片段。
  *
  * 两块都是主面板首屏数据：概览给四个总数，归因按维度摊开明细。渲染只用原生 DOM，
- * 数字格式复用 render 片段的 `money()` / `text()`（同为函数声明，拼装顺序无关）。
+ * 数字格式复用 render 片段的 `money()` / `text()`，文案经 `t()` 取词。
  */
 export function overviewFragment(): string {
   return `
@@ -13,7 +13,7 @@ export function overviewFragment(): string {
         if (!message) { notice.hidden = true; return; }
         notice.className = "kuma-empty";
         notice.appendChild(text("span", "", message));
-        var link = text("a", "kuma-link", "查看产生数据的三条路径");
+        var link = text("a", "kuma-link", t("link.guide"));
         link.setAttribute("data-kuma-nav", "/empty");
         link.setAttribute("href", "/empty");
         notice.appendChild(link);
@@ -30,10 +30,10 @@ export function overviewFragment(): string {
         var box = document.createElement("dl");
         box.className = "kuma-overview";
         [
-          ["本期花费", money(data.costTotal)],
-          ["Token 总量", String(data.totalTokens || 0)],
-          ["请求次数", String(data.requestCount || 0)],
-          ["覆盖项目数", String(data.projectCount || 0)],
+          [t("overview.cost"), money(data.costTotal)],
+          [t("overview.tokens"), String(data.totalTokens || 0)],
+          [t("overview.requests"), String(data.requestCount || 0)],
+          [t("overview.projects"), String(data.projectCount || 0)]
         ].forEach(function (pair) {
           var card = document.createElement("div");
           card.className = "kuma-metric";
@@ -44,7 +44,7 @@ export function overviewFragment(): string {
         host.appendChild(box);
         setNotice(
           el("kuma-overview-notice"),
-          data.requestCount ? "" : "本期（" + currentPeriod + "）还没有使用量记录。"
+          data.requestCount ? "" : t("overview.emptyPrefix") + "（" + currentPeriod + "）。"
         );
       }
 
@@ -62,7 +62,7 @@ export function overviewFragment(): string {
        * 会话维度只显示标识的短前缀，完整 sessionId 读起来没有意义。
        */
       function attributionLabel(key, dimension) {
-        if (!key) { return "未知"; }
+        if (!key) { return t("common.unknown"); }
         if (dimension === "session") { return key.slice(0, 8); }
         return key;
       }
@@ -73,7 +73,14 @@ export function overviewFragment(): string {
         if (!host) { return; }
         host.textContent = "";
         if (!rows || rows.length === 0) {
-          host.appendChild(text("div", "kuma-empty", "暂无数据"));
+          // 无记录时不留一张空表：给一条通往零数据引导页的路
+          var empty = text("div", "kuma-empty", t("common.noData"));
+          var guide = text("a", "kuma-link", t("link.guide"));
+          guide.setAttribute("data-kuma-nav", "/empty");
+          guide.setAttribute("href", "/empty");
+          empty.appendChild(guide);
+          host.appendChild(empty);
+          wireNav();
           return;
         }
         var box = document.createElement("div");
@@ -81,7 +88,13 @@ export function overviewFragment(): string {
         var table = document.createElement("table");
         var thead = document.createElement("thead");
         var headRow = document.createElement("tr");
-        ["维度", "花费", "Token", "请求数", "占比"].forEach(function (name) {
+        [
+          t("attribution.dimension"),
+          t("attribution.cost"),
+          t("attribution.tokens"),
+          t("stats.requests"),
+          t("attribution.share")
+        ].forEach(function (name) {
           headRow.appendChild(text("th", "", name));
         });
         thead.appendChild(headRow);

@@ -13,6 +13,8 @@ import type { VendorMonitor } from "../../monitors/vendor-monitor.ts";
 export interface ApiContext {
   /** 账户服务；未启用时为 null，账户接口据此回 503 */
   accounts: AccountService | null;
+  /** 当前会话的工作目录；体检页据此解析配置与存储位置 */
+  cwd: string;
   logger: FileLogger;
   /** 校验请求 Origin 与当前服务一致；由服务端按监听地址构造。 */
   originMatches: (req: IncomingMessage) => boolean;

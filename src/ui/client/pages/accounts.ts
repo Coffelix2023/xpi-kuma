@@ -8,10 +8,10 @@ export function accountsPageFragment(): string {
   return `
       /** 数据来源标记；授权过期时连同「旧值」一起标出来。 */
       function sourceLabel(row) {
-        if (row.source === "api") { return "接口查询"; }
-        if (row.source === "oauth") { return row.stale ? "OAuth 授权（旧值）" : "OAuth 授权"; }
-        if (row.source === "manual") { return "手动填写"; }
-        return "未知";
+        if (row.source === "api") { return t("source.api"); }
+        if (row.source === "oauth") { return row.stale ? t("source.oauthStale") : t("source.oauth"); }
+        if (row.source === "manual") { return t("source.manual"); }
+        return t("common.unknown");
       }
 
       function currencyPrefix(currency) {
@@ -22,24 +22,24 @@ export function accountsPageFragment(): string {
 
       /** 余额文案：取不到值就是「未知」，绝不显示 ¥0.00。 */
       function amountText(value, currency) {
-        if (typeof value !== "number" || !isFinite(value)) { return "未知"; }
+        if (typeof value !== "number" || !isFinite(value)) { return t("common.unknown"); }
         return currencyPrefix(currency) + value.toFixed(2);
       }
 
       function topupText(row) {
-        if (typeof row.topup !== "number" || !isFinite(row.topup)) { return "未知"; }
+        if (typeof row.topup !== "number" || !isFinite(row.topup)) { return t("common.unknown"); }
         return currencyPrefix(row.currency) + row.topup.toFixed(2);
       }
 
       function syncText(row) {
-        return row.syncedAt ? new Date(row.syncedAt).toLocaleString() : "从未";
+        return row.syncedAt ? new Date(row.syncedAt).toLocaleString() : t("common.never");
       }
 
       /** 该行可做的下一步：授权过期的给「重新授权」，没有数字的给「授权」或「填写」。 */
       function actionLabel(row) {
-        if (row.source === "oauth" && row.stale) { return "重新授权"; }
+        if (row.source === "oauth" && row.stale) { return t("action.reauthorize"); }
         if (typeof row.balance !== "number") {
-          return row.error && row.error.indexOf("授权") !== -1 ? "授权" : "填写";
+          return row.error && row.error.indexOf("授权") !== -1 ? t("action.authorize") : t("action.fill");
         }
         return "";
       }
@@ -48,18 +48,18 @@ export function accountsPageFragment(): string {
       function trustNote(overview) {
         var parts = [];
         if (overview.knownCount === 0) {
-          parts.push("还没有取到任何余额数字");
+          parts.push(t("accounts.trustNoNumbers"));
         }
         if (overview.manualCount > 0) {
-          parts.push(overview.manualCount + " 项为手动填写");
+          parts.push(overview.manualCount + t("accounts.trustManualSuffix"));
         }
         if (overview.staleCount > 0) {
-          parts.push(overview.staleCount + " 项为授权过期后保留的旧值");
+          parts.push(overview.staleCount + t("accounts.trustStaleSuffix"));
         }
         if (parts.length === 0) {
-          parts.push("全部为自动获取的最新值");
+          parts.push(t("accounts.trustAllFresh"));
         }
-        parts.push("合计按各供应商上报币种原值累加，未做汇率换算");
+        parts.push(t("accounts.trustFx"));
         return parts.join("；") + "。";
       }
 
@@ -70,8 +70,8 @@ export function accountsPageFragment(): string {
         var box = document.createElement("dl");
         box.className = "kuma-overview";
         [
-          ["累计充值", amountText(overview.topupTotal, "CNY")],
-          ["当前余额", amountText(overview.balanceTotal, "CNY")]
+          [t("accounts.topupTotal"), amountText(overview.topupTotal, "CNY")],
+          [t("accounts.balanceTotal"), amountText(overview.balanceTotal, "CNY")]
         ].forEach(function (pair) {
           var card = document.createElement("div");
           card.className = "kuma-metric";
@@ -109,7 +109,7 @@ export function accountsPageFragment(): string {
           // 未配置任何供应商：不渲染明细表，直接给出可操作提示
           if (notice) {
             notice.className = "kuma-empty";
-            notice.textContent = NO_VENDOR;
+            notice.textContent = t("vendor.noVendor");
             notice.hidden = false;
           }
           return;
@@ -125,7 +125,7 @@ export function accountsPageFragment(): string {
         var thead = document.createElement("thead");
         var headRow = document.createElement("tr");
         ACCOUNT_COLUMNS.forEach(function (name) {
-          headRow.appendChild(text("th", "", name));
+            headRow.appendChild(text("th", "", t(name)));
         });
         thead.appendChild(headRow);
         table.appendChild(thead);
@@ -150,7 +150,7 @@ export function accountsPageFragment(): string {
         var overview = payload.overview || {};
         renderAccountsOverview(overview);
         renderAccountRows(payload.rows || []);
-        setStatus("更新于 " + new Date().toLocaleTimeString());
+        setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString());
       }
 
       function loadAccounts() {
@@ -167,7 +167,7 @@ export function accountsPageFragment(): string {
 
       function showAccountError(error) {
         var message = error && error.message ? error.message : String(error);
-        setStatus("连接失败（" + message + "），请重新执行 /xpi-kuma");
+        setStatus(t("common.connectionFailed") + "（" + message + "），" + t("common.reopenHint"));
       }
 
       function authorizeVendor(vendor, btn) {
@@ -182,10 +182,10 @@ export function accountsPageFragment(): string {
       }
 
       function fillManual(vendor) {
-        var input = window.prompt("请输入 " + vendor + " 的当前余额（写回 .pi/xpi-kuma/config.yaml）");
+        var input = window.prompt(t("accounts.promptPrefix") + vendor + t("accounts.promptSuffix"));
         if (input === null) { return; }
         var value = Number(input);
-        if (!isFinite(value)) { setStatus("余额必须是数字"); return; }
+        if (!isFinite(value)) { setStatus(t("common.notANumber")); return; }
         api("/api/accounts/manual", "POST", { vendor: vendor, balance: value }).then(renderAccounts, showAccountError);
       }
 
@@ -196,32 +196,41 @@ export function accountsPageFragment(): string {
           if (busy) { return; }
           busy = true;
           btn.disabled = true;
-          btn.textContent = "同步中…";
+          btn.textContent = t("page.accounts.syncing");
           api("/api/accounts/sync", "POST").then(
             function (payload) {
               busy = false;
               btn.disabled = false;
-              btn.textContent = "同步全部余额";
+              btn.textContent = t("page.accounts.syncAll");
               renderAccounts(payload);
             },
             function (error) {
               busy = false;
               btn.disabled = false;
-              btn.textContent = "同步全部余额";
+              btn.textContent = t("page.accounts.syncAll");
               showAccountError(error);
             }
           );
         });
       }
 
-      var ACCOUNT_COLUMNS = ["供应商 · 模型", "数据来源", "余额", "累计充值", "最近同步", "动作"];
+      /** 明细表列：词条键 + 取值函数；表头经 t() 取词。 */
+      var ACCOUNT_COLUMNS = [
+        "accounts.col.vendorModel",
+        "accounts.col.source",
+        "accounts.col.balance",
+        "accounts.col.topup",
+        "accounts.col.syncedAt",
+        "accounts.col.action"
+      ];
 
       if (!token) {
-        setStatus("缺少访问凭据，请重新执行 /xpi-kuma");
+        setStatus(t("common.missingToken"));
         return;
       }
 
       wireNav();
+      wireLanguage();
       wireAccountSync();
       document.addEventListener("visibilitychange", onVisibilityChange);
       startPolling();

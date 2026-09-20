@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { MESSAGES } from "./client/messages.ts";
 import {
   accountsClientScript,
   dashboardClientScript,
+  emptyClientScript,
   NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
+  settingsClientScript,
 } from "./dashboard-client.ts";
 import { dashboardCss } from "./dashboard-css.ts";
 import { generateDashboardHTML } from "./dashboard-html.ts";
@@ -64,8 +67,9 @@ describe("generateDashboardHTML 结构", () => {
     ]) {
       expect(html).toContain(`data-range="${period}"`);
     }
-    expect(html).toContain('data-range="24h" aria-pressed="true"');
-    expect(html).toContain('data-range="7d" aria-pressed="false"');
+    // 按钮上还挂着 data-i18n，属性顺序不再固定，改用正则匹配
+    expect(html).toMatch(/data-range="24h"[^>]*aria-pressed="true"/);
+    expect(html).toMatch(/data-range="7d"[^>]*aria-pressed="false"/);
   });
 
   it("页面零外部引用：不加载任何 CDN 脚本", () => {
@@ -102,7 +106,7 @@ describe("无供应商提示占位", () => {
 
   it("客户端脚本使用 textContent 注入提示，不做 HTML 拼接", () => {
     const html = generateDashboardHTML();
-    expect(html).toContain("notice.textContent = NO_VENDOR");
+    expect(html).toContain('notice.textContent = t("vendor.noVendor")');
   });
 });
 
@@ -133,7 +137,7 @@ describe("客户端脚本契约", () => {
 
   it("连接失败保留已渲染数据，只更新状态文案", () => {
     const html = generateDashboardHTML();
-    expect(html).toContain("连接失败（");
+    expect(html).toContain('t("common.connectionFailed")');
     // 失败路径不重新渲染，因此不会清空现有 DOM
     const failure = html.slice(html.indexOf("function showError"));
     expect(failure.slice(0, failure.indexOf("function withBusy"))).not.toContain(
@@ -375,5 +379,113 @@ describe("供应商账户页结构", () => {
     expect(script).toContain("Authorization");
     expect(script).toContain("visibilitychange");
     expect(script).toContain("/api/accounts");
+  });
+});
+
+describe("配置体检页结构", () => {
+  it("提供只读声明、三块容器与重新读取按钮", () => {
+    const html = generateSettingsHTML();
+    expect(html).toContain("不产生任何写盘操作");
+    expect(html).toContain('id="kuma-diagnostics"');
+    expect(html).toContain('id="kuma-diagnostics-vendors"');
+    expect(html).toContain('id="kuma-diagnostics-global"');
+    expect(html).toContain('id="kuma-reload"');
+    expect(html).toContain('id="kuma-issues"');
+  });
+
+  it("解析失败替代卡默认隐藏，避免与正常表格同时出现", () => {
+    const html = generateSettingsHTML();
+    expect(html).toContain('id="section-diagnostics-error"');
+    expect(html).toMatch(/id="section-diagnostics-error"[^>]*hidden/);
+  });
+
+  it("体检脚本只读：只请求 /api/diagnostics，失败时 fail-closed", () => {
+    const script = settingsClientScript();
+    expect(script).toContain("/api/diagnostics");
+    expect(script).toContain("不会自动修复");
+    expect(script).toContain("showSection");
+    // 不提供任何写操作入口
+    expect(script).not.toContain("/api/accounts/manual");
+  });
+});
+
+describe("零数据引导页结构", () => {
+  it("两条分支容器、状态行与返回主面板入口齐备", () => {
+    const html = generateEmptyHTML();
+    expect(html).toContain('id="section-guide-vendors"');
+    expect(html).toContain('id="section-guide-data"');
+    expect(html).toContain('id="kuma-guide-status"');
+    expect(html).toContain('data-kuma-nav="/"');
+    expect(html).toContain("产生数据的三条路径");
+    // 未配供应商分支默认隐藏，有供应商分支默认可见，切换交给脚本
+    expect(html).toMatch(/id="section-guide-vendors"[^>]*hidden/);
+  });
+
+  it("引导页脚本复用主面板数据接口判断空态", () => {
+    const script = emptyClientScript();
+    expect(script).toContain("/api/dashboard");
+    expect(script).toContain("function renderGuide");
+    expect(script).toContain("section-guide-vendors");
+  });
+});
+
+describe("中英双语结构", () => {
+  it("四个页面都有语言按钮，可见文案都带 data-i18n 键", () => {
+    const pages: [
+      string,
+      string,
+    ][] = [
+      [
+        "dashboard",
+        generateDashboardHTML(),
+      ],
+      [
+        "accounts",
+        generateAccountsHTML(),
+      ],
+      [
+        "settings",
+        generateSettingsHTML(),
+      ],
+      [
+        "empty",
+        generateEmptyHTML(),
+      ],
+    ];
+
+    for (const [name, html] of pages) {
+      expect(html, name).toContain('id="kuma-lang"');
+      expect(html, name).toContain("data-i18n=");
+      // aria-label 只在有区域标签的页面出现（主面板的时间范围/维度/索引轨）
+    }
+  });
+
+  it("中英字典覆盖服务端写出的每一个 data-i18n 键", () => {
+    const html = [
+      generateDashboardHTML(),
+      generateAccountsHTML(),
+      generateSettingsHTML(),
+      generateEmptyHTML(),
+    ].join("\n");
+    const keys = [
+      ...html.matchAll(/data-i18n="([^"]+)"/g),
+    ].map((match) => match[1]);
+    const ariaKeys = [
+      ...html.matchAll(/data-i18n-aria="([^"]+)"/g),
+    ].map((match) => match[1]);
+    expect(keys.length).toBeGreaterThan(20);
+    for (const key of [
+      ...keys,
+      ...ariaKeys,
+    ]) {
+      expect(Object.keys(MESSAGES), key).toContain(key);
+    }
+  });
+
+  it("英文文案与中文文案成对存在且不为空", () => {
+    for (const [key, entry] of Object.entries(MESSAGES)) {
+      expect(entry.zh, key).not.toBe("");
+      expect(typeof entry.en, key).toBe("string");
+    }
   });
 });

@@ -5,6 +5,7 @@
  * （token / period / lastTrend / busy / timer）与 el / readToken / setStatus。
  */
 import { ATLAS_FAMILY, FAMILY_KEY, THEME_KEY } from "./constants.ts";
+import { LANGUAGE_KEY } from "./i18n.ts";
 
 /**
  * 首帧前应用主题与家族偏好。
@@ -24,6 +25,11 @@ export function preferenceBootstrapScript(): string {
     }
     if (localStorage.getItem("${FAMILY_KEY}") === "${ATLAS_FAMILY}") {
       document.documentElement.setAttribute("data-family", "${ATLAS_FAMILY}");
+    }
+    // 语言只需要先定 <html lang>：正文由 body 末尾的双语片段按同一偏好替换
+    var lang = localStorage.getItem("${LANGUAGE_KEY}");
+    if (lang === "en" || lang === "zh") {
+      document.documentElement.setAttribute("lang", lang === "en" ? "en" : "zh-CN");
     }
   } catch (error) {
     // 存储不可用时按默认外观继续，不阻断页面

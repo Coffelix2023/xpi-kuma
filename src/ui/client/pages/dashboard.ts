@@ -35,7 +35,7 @@ export function dashboardPageFragment(): string {
         renderStats(data.stats || [], period);
         lastTrend = data.trend || [];
         renderChart(lastTrend);
-        setStatus("更新于 " + new Date().toLocaleTimeString());
+        setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString());
       }
 
       function enableButtons() {
@@ -45,17 +45,17 @@ export function dashboardPageFragment(): string {
           btn.disabled = false;
         });
         var all = el("kuma-refresh-all");
-        if (all) { all.textContent = "全部刷新"; }
+        if (all) { all.textContent = t("page.dashboard.refreshAll"); }
         var cardButtons = document.querySelectorAll(".kuma-card-foot button");
         Array.prototype.forEach.call(cardButtons, function (btn) {
-          btn.textContent = "刷新";
+          btn.textContent = t("common.refresh");
         });
       }
 
       /** 连接错误只更新状态文案，保留已渲染数据，不启动重试风暴。 */
       function showError(error) {
         var message = error && error.message ? error.message : String(error);
-        setStatus("连接失败（" + message + "），请重新执行 /xpi-kuma");
+        setStatus(t("common.connectionFailed") + "（" + message + "），" + t("common.reopenHint"));
       }
 
       /** 同一时刻只允许一个在途请求：重复触发被丢弃，既不排队也不重试。 */
@@ -161,7 +161,7 @@ export function dashboardPageFragment(): string {
       function syncThemeButton(btn) {
         var mode = document.documentElement.getAttribute("data-theme") || "dark";
         btn.setAttribute("aria-pressed", String(mode === "light"));
-        btn.textContent = mode === "dark" ? "亮色" : "暗色";
+        btn.textContent = mode === "dark" ? t("page.dashboard.toLight") : t("page.dashboard.toDark");
       }
 
       function wireFamily() {
@@ -193,7 +193,7 @@ export function dashboardPageFragment(): string {
       function syncFamilyButton(btn) {
         var atlas = document.documentElement.getAttribute("data-family") === "${ATLAS_FAMILY}";
         btn.setAttribute("aria-pressed", String(atlas));
-        btn.textContent = atlas ? "默认风" : "图鉴风";
+        btn.textContent = atlas ? t("page.dashboard.toDefault") : t("page.dashboard.toAtlas");
       }
 
       /** 主题或家族变化后重建图表：颜色取自 CSS 变量，必须重建才能换色。 */
@@ -211,7 +211,7 @@ export function dashboardPageFragment(): string {
       }
 
       if (!token) {
-        setStatus("缺少访问凭据，请重新执行 /xpi-kuma");
+        setStatus(t("common.missingToken"));
         return;
       }
 
@@ -222,6 +222,7 @@ export function dashboardPageFragment(): string {
       wireFamily();
       wireRefreshAll();
       wireNav();
+      wireLanguage();
       document.addEventListener("visibilitychange", onVisibilityChange);
       startPolling();
       refresh();

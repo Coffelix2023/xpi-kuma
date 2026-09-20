@@ -2,11 +2,10 @@
 
 [English](./README.md) · **简体中文**
 
-**一个 &lt;把一件事做好&gt; 的 Pi Coding Agent 扩展。** <!-- TODO: 一句话说清本扩展做什么、给谁用、替代或去掉了什么。 -->
+**一个记录真实 LLM 用量与供应商可用性,并以仅本机可访问的浏览器面板展示的 Pi Coding Agent 扩展。**
 
-**A Pi Coding Agent extension that &lt;does one thing well&gt;.** <!-- TODO: 同上,英文一句话说清本扩展做什么、给谁用、替代或去掉了什么。 -->
+**A Pi Coding Agent extension that records real LLM usage and vendor availability, then serves them as a loopback-only browser dashboard.**
 
-<!-- TODO: 补一个 LICENSE 文件(MIT),下面的徽章指向它 -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 
 ```text
@@ -15,7 +14,13 @@
 
 ## 为什么
 
-<!-- TODO: 写清本扩展消除的那个具体痛点是哪一个。一段短话比一串功能列表有用。 -->
+Pi 会为每条 assistant 消息报告 token 数与费用,但没有任何地方保留累计值,也不告诉你依赖的
+中转站是否真的可达。`xpi-kuma` 同时补上这两块:把每次真实的 `message_end` 用量写入 SQLite,
+按配置的间隔探测各供应商,并把结果以回环地址上的面板呈现出来。
+
+面板刻意跑在你自己已有的浏览器里。上一版通过 Glimpse 渲染到原生窗口,代价是一个平台二进制、
+一层 stderr 隔离转发脚本,以及窗口生命周期处理 —— 对一个只读面板来说都是纯粹的维护面。
+回环 HTTP 服务加一个页面不需要这些,而且用的就是你已经装好的浏览器。
 
 本仓库里的每个扩展都从同样四条规则出发:
 
@@ -61,7 +66,7 @@ pi remove git:github.com/<owner>/xpi-kuma
 
 | 命令 | 说明 |
 | --- | --- |
-| `/xpi-kuma` | 打开监控面板（供应商状态、使用量统计、费用/token 趋势） |
+| `/xpi-kuma` | 启动本机监控服务并用浏览器打开面板（供应商状态、使用量统计、费用/token 趋势） |
 
 ### 配置
 
@@ -99,7 +104,28 @@ retention:
 
 footer 显示当前会话累计值，形如 `💰 ¥0.05 | 📊 1.2K`，每个 turn 结束后刷新。
 
-<!-- TODO: 逐个记录工具与命令,并写清它们的诚实边界:读什么、改什么、拒绝做什么。 -->
+### 监控面板
+
+`/xpi-kuma` 会启动一个仅绑定 `127.0.0.1` 随机端口的会话级 Web 服务，然后用系统默认浏览器打开面板。
+同一会话内重复执行该命令会复用已有服务，不会启动第二个。
+
+- **仅本机。** 服务不监听任何非回环网卡，局域网内无法访问；访问由每次启动生成的 256 位随机凭据保护。
+- **凭据放在 URL fragment**（`http://127.0.0.1:<端口>/#<凭据>`）。fragment 不会进入 HTTP 请求、
+  不写访问日志，也不会通过第三方资源的 `Referer` 外泄；页面加载后立即把它从地址栏清除。
+- **浏览器没自动打开？** 服务保持运行，Pi 会通过通知给出同一个可复制的 URL。
+- **自动刷新。** 页面可见时每 5 秒轮询一次；标签页隐藏时暂停轮询，恢复可见时立即刷新一次。
+  请求不会重叠，刷新失败时保留上一次已渲染的数据。
+- **跟随会话生命周期。** Pi 在退出、reload、新建、恢复或 fork 会话时关闭服务：旧页面不再可用，
+  旧凭据也会被拒绝 —— 在新会话里重新执行 `/xpi-kuma` 即可。
+
+### 边界
+
+`/xpi-kuma` 是本扩展注册的唯一命令。它会:
+
+- **读取** `<项目>/.pi/xpi-kuma/config.yaml` 与 `usage_records` / `probe_records` 两张表。
+- **启动**一个归属当前 Pi 会话的回环 HTTP 服务,然后用系统默认浏览器打开。
+- **写入**仅发生在你触发探测时:每个供应商一次最小请求,消耗几个 token。
+- **拒绝**监听非回环网卡、把供应商 API Key 交给浏览器,或在 Pi 会话结束后继续提供服务。
 
 ## 开发
 
@@ -153,7 +179,8 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # 日常回路:在 Pi 内用 /r
 ## 致谢
 
 - [Pi Coding Agent](https://github.com/earendil-works/pi) —— 由 [earendil-works](https://github.com/earendil-works) 开发。本扩展寄宿其中:扩展 API、`ctx.ui` 契约和包清单规范都来自该项目。
-<!-- TODO: 采用或移植过的第三方仓库都要在这里致谢:项目名、作者、链接、许可证,以及你取了什么。 -->
+- [Chart.js](https://www.chartjs.org/) —— 以固定版本(`4.4.1`)从 jsDelivr CDN 加载,绘制费用与 token
+  趋势。CDN 不可达时图表自行隐藏,统计表与供应商卡片仍然可用。
 
 ## 许可
 

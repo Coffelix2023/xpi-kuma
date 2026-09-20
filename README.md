@@ -2,11 +2,10 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-**A Pi Coding Agent extension that &lt;does one thing well&gt;.** <!-- TODO: replace with one concrete sentence: what it does, for whom, and what it replaces or removes. -->
+**A Pi Coding Agent extension that records real LLM usage and vendor availability, then serves them as a loopback-only browser dashboard.**
 
-**一个 &lt;把一件事做好&gt; 的 Pi Coding Agent 扩展。** <!-- TODO: 同上,中文一句话说清本扩展做什么、给谁用、替代了什么。 -->
+**一个记录真实 LLM 用量与供应商可用性,并以仅本机可访问的浏览器面板展示的 Pi Coding Agent 扩展。**
 
-<!-- TODO: add a LICENSE file (MIT) — the badge below links to it -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 
 ```text
@@ -15,7 +14,15 @@
 
 ## Why
 
-<!-- TODO: describe the concrete pain this extension removes. One short paragraph beats a feature list. -->
+Pi reports token counts and cost for every assistant message, but nothing keeps the running total,
+and nothing tells you whether the gateways you depend on are actually reachable. `xpi-kuma` closes
+both gaps: it records each real `message_end` usage into SQLite, probes every configured vendor on
+its own schedule, and serves the result as a dashboard on loopback.
+
+That dashboard runs in your own browser on purpose. An earlier revision rendered it in a native
+window through Glimpse, which dragged in a platform binary, a stderr-isolation shim, and window
+lifecycle handling — all maintenance surface for a read-only panel. A loopback HTTP service plus a
+page needs none of it, and it uses the browser you already have.
 
 Every extension in this repository starts from the same four rules:
 
@@ -61,7 +68,7 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 
 | Command | Description |
 | --- | --- |
-| `/xpi-kuma` | Open the monitoring dashboard (vendor status, usage stats, cost/token trend) |
+| `/xpi-kuma` | Start the local dashboard service and open it in your browser (vendor status, usage stats, cost/token trend) |
 
 ### Configuration
 
@@ -99,7 +106,32 @@ Data written by the extension:
 
 The footer shows the current session totals as `💰 ¥0.05 | 📊 1.2K`, refreshed on every turn.
 
-<!-- TODO: document every tool and command with its honest boundary: what it reads, what it changes, and what it refuses to do. -->
+### Monitoring dashboard
+
+`/xpi-kuma` starts a session-scoped web service bound to `127.0.0.1` on a random port,
+then opens the dashboard in your default browser. The same command reuses the running service
+instead of starting a second one.
+
+- **Local only.** The service never listens on a non-loopback interface, so nothing on your LAN
+  can reach it. Access is protected by a 256-bit credential generated for that one launch.
+- **The credential lives in the URL fragment** (`http://127.0.0.1:<port>/#<token>`). Fragments are
+  never sent in HTTP requests, written to access logs, or leaked through the `Referer` header of
+  third-party resources. The page clears it from the address bar as soon as it loads.
+- **Browser did not open?** The service stays up and Pi shows a notification with the same URL, ready to copy.
+- **Auto refresh.** A visible page polls every 5 seconds; a hidden tab pauses polling and refreshes
+  immediately when you come back. Requests never overlap, and a failed refresh keeps the last rendered data.
+- **Session-scoped.** Pi shuts the service down on quit, reload, new, resume, or fork. The old page stops
+  working and the old credential is rejected — run `/xpi-kuma` again in the new session.
+
+### Boundaries
+
+`/xpi-kuma` is the only command this extension registers. It:
+
+- **Reads** `<project>/.pi/xpi-kuma/config.yaml` and the `usage_records` / `probe_records` tables.
+- **Starts** a loopback HTTP service owned by the current Pi session, then opens it in your default browser.
+- **Writes** only when you trigger a probe: one minimal request per vendor, costing a few tokens.
+- **Refuses** to listen on a non-loopback interface, to hand vendor API keys to the browser, or to keep
+  serving after the Pi session ends.
 
 ## Development
 
@@ -153,7 +185,9 @@ This project adopts the [Google Labs DESIGN.md format](https://github.com/google
 ## Credits
 
 - [Pi Coding Agent](https://github.com/earendil-works/pi) by [earendil-works](https://github.com/earendil-works) — the host this extension plugs into. The extension API, the `ctx.ui` contract, and the package manifest format are theirs.
-<!-- TODO: credit every third-party repository you adopt or port from: project name, author, link, license, and what you took. -->
+- [Chart.js](https://www.chartjs.org/) — loaded at a pinned version (`4.4.1`) from the jsDelivr CDN to draw
+  the cost and token trend. When the CDN is unreachable the chart hides itself; the statistics table and
+  vendor cards keep working.
 
 ## License
 

@@ -63,6 +63,7 @@
       "!**/build",
       "!**/backend",
       "!**/__fixtures__",
+      "!.pi/**", //排除 Pi 运行时与设计产物（含可能写入明文密钥的 config.yaml）
       "!src/components/ui", //排除 shadcn-ui
       "!src/components/assistant-ui", //排除 assistant-ui
       "!src/components/animate-ui", //排除 animate-ui

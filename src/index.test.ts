@@ -1,7 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -14,6 +15,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { readConfigTemplate, resolveConfigPath } from "./config.ts";
 import { Database, defaultDatabasePath } from "./storage/database.ts";
 import type { AttributionDimension } from "./types.ts";
+
+/** 从源码里取 `VERSION` 常量，用来和 package.json 对表。 */
+const VERSION_PATTERN = /const VERSION = "([^"]+)"/;
+
+/** 版本号形状；发布号必须是 `X.Y.Z`。 */
+const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 
 /**
  * 记录浏览器打开请求。
@@ -236,6 +243,22 @@ describe("扩展注册", () => {
     ]);
     expect(commands.has("xpi-kuma")).toBe(true);
     expect(commands.get("xpi-kuma")?.description).toBe("打开或重新打开监控面板");
+  });
+
+  it("VERSION 常量与 package.json 的 version 保持一致", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("./index.ts", import.meta.url)),
+      "utf8",
+    );
+    const declared = VERSION_PATTERN.exec(source)?.[1];
+    const manifest = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
+    ) as {
+      version: string;
+    };
+
+    expect(declared).toBe(manifest.version);
+    expect(manifest.version).toMatch(SEMVER_PATTERN);
   });
 });
 

@@ -1,14 +1,14 @@
 ## 1. 前置探测（先定未知项，再动代码）
 
-- [ ] 1.1 逐个实测配置样例里三家供应商（[OI] / Anthropic / 9router）是否提供可用的余额查询接口：记录接口路径、认证方式与响应结构，把结论写进 `docs/` 下的探测笔记，并据此决定 `config.example.yaml` 的 `balance.api_path` 样例；验证方式是笔记里每家都有明确的「有 / 无 + 证据」结论，且不出现凭据明文。
-- [ ] 1.2 实测 OAuth 授权可行性：确认目标服务商是否支持 `http://127.0.0.1:<随机端口>` 回调、是否要求预注册 `client_id`；验证方式是在笔记里给出每家的结论与阻塞点，若全不支持则记录「本轮 OAuth 档位无可用供应商」并继续按降级顺序实现。
-- [ ] 1.3 确认 `ctx.sessionManager.getSessionName()` 在 `message_end` 时是否返回可读名称，据此定下归因「会话」维度的展示标识（名称优先，回落到短 id）；验证方式是 `pnpm typecheck` 通过且 `src/index.ts` 的取值逻辑有注释说明回落规则。
+- [x] 1.1 逐个探测配置样例里三家供应商（[OI] / Anthropic / 9router）是否提供可用的余额查询接口，把结论写进 `docs/probe-balance-and-oauth.md`，并据此决定 `config.example.yaml` 的 `balance.api_path` 样例；验证方式是笔记里每家都有明确的「有 / 无 + 证据」结论且不出现凭据明文。**证据等级为文档级**：本机 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `NINE_ROUTER_API_KEY` 均未设置，无法发真实请求；需要凭据才能完成的实测逐条列在笔记 §5，未冒充已完成。结论：三家的第一档余额接口全部不可用（[OI] 的 `credit_grants` 拒绝 API key、Anthropic 只有成本报告、9router 是 `*.example` 占位域名）。
+- [x] 1.2 探测 OAuth 授权可行性并给出每家的结论与阻塞点；验证方式是笔记里逐家列出结论。结论见笔记 §2：对当前三家样例供应商，第二档 OAuth 均不可用或不推荐 —— Anthropic 只有未文档化端点且官方限定 OAuth token 专用于 [CC]、第三方调用有封号风险，[OI] 的 OAuth 面向订阅登录不提供余额接口，9router 无法探测。因此按降级顺序继续实现机制，但**第一、二档对开箱样例均无可用供应商**，这一发现已报告并建议在实现 7.3 / 7.4 前重新确认投入。
+- [x] 1.3 确认 `ctx.sessionManager.getSessionName()` 的可得性并定下归因「会话」维度的标识策略；验证方式是 `pnpm typecheck` 通过，且策略以注释落在 `src/index.ts` 的 `handleMessageEnd` 上方。类型核对结论：`getSessionName()` 返回 `string | undefined`（来自最新的 `session_info` 条目，用户没命名过即为空），而 `getSessionId()` 始终有值 —— 因此策略调整为**分组键用 `sessionId`、会话名不落库、展示用标识短前缀**（原计划的「名称优先」会引入可变元数据快照与额外列）。完整结论见 `docs/probe-balance-and-oauth.md` §6。
 
 ## 2. 主题 token 迁移（先换底座，再改结构）
 
-- [ ] 2.1 把 `THEMES.md` 的 Default 家族全量 token 与 Atlas 家族覆盖块搬进代码（替换 `src/ui/theme.ts` 的 `--kuma-*` 派生 token），半径消费一律写 `max(0px, calc(var(--radius) - Npx))`；验证方式是主题单测断言两套家族的同名变量取值不同、且 Atlas 下不产生负半径。
-- [ ] 2.2 落地明暗 + 家族三态切换：`data-theme` 与 `data-family` 写到 `<html>`，偏好存 `localStorage` 的 `kuma.theme` / `kuma.family`，并在首帧前应用；验证方式是脚本测试断言首帧前应用、切换后刷新保持，以及 Atlas 专属装饰仅在 Atlas 下出现。
-- [ ] 2.3 删除 `CHART_JS_CDN` 与 CSP 里的外部脚本放行，CSP 收紧为仅 `'nonce-...'` 脚本来源；验证方式是服务测试断言响应头不含任何外部来源，且页面 HTML 里不出现外部 `src`/`href`。
+- [x] 2.1 把 `THEMES.md` 的 Default 家族全量 token 与 Atlas 家族覆盖块搬进代码（替换 `src/ui/theme.ts` 的 `--kuma-*` 派生 token），半径消费一律写 `max(0px, calc(var(--radius) - Npx))`；验证方式是主题单测断言两套家族的同名变量取值不同、且 Atlas 下不产生负半径。
+- [x] 2.2 落地明暗 + 家族三态切换：`data-theme` 与 `data-family` 写到 `<html>`，偏好存 `localStorage` 的 `kuma.theme` / `kuma.family`，并在首帧前应用；验证方式是脚本测试断言首帧前应用、切换后刷新保持，以及 Atlas 专属装饰仅在 Atlas 下出现。
+- [x] 2.3 删除 `CHART_JS_CDN` 与 CSP 里的外部脚本放行，并把趋势图从 Chart.js 改写为页内内联 SVG（`design.md` D6），CSP 收紧为仅 `'nonce-...'` 脚本来源；验证方式是服务测试断言响应头不含任何外部来源、页面 HTML 不出现外部 `src`/`href`，且脚本测试断言折线图按数据渲染出 SVG 折线与悬停详情、空数据时不报错。**（原描述遗漏了内联 SVG 重写：只删 CDN 会让趋势图失效并违反 spec 的「零外部请求」。已按用户确认并入本任务。）**
 
 ## 3. 前端模块拆分（阻止单文件继续膨胀）
 

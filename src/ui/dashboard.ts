@@ -58,11 +58,6 @@ export interface DashboardServer {
   readonly url: string;
 }
 
-export interface StartDashboardOptions {
-  /** Chart.js 脚本地址；传 null 则不加载（离线或测试） */
-  chartCdn?: string | null;
-}
-
 let logger: FileLogger | null = null;
 
 function getLogger(): FileLogger {
@@ -98,10 +93,8 @@ function collectData(
 export async function startDashboardServer(
   usageCollector: UsageCollector,
   vendorMonitor: VendorMonitor,
-  options: StartDashboardOptions = {},
 ): Promise<DashboardServer> {
   const token = randomBytes(TOKEN_BYTES).toString("base64url");
-  const chartCdn = options.chartCdn === undefined ? undefined : options.chartCdn;
 
   const server = createServer((req, res) => {
     try {
@@ -133,10 +126,9 @@ export async function startDashboardServer(
     if (method === "GET" && url.pathname === "/") {
       const nonce = randomBytes(NONCE_BYTES).toString("base64");
       const html = generateDashboardHTML({
-        chartCdn,
         nonce,
       });
-      respond(res, 200, "text/html; charset=utf-8", html, cspFor(nonce, chartCdn));
+      respond(res, 200, "text/html; charset=utf-8", html, cspFor(nonce));
       return;
     }
 
@@ -295,18 +287,11 @@ function respond(
   res.end(body);
 }
 
-/** 只放行页面自身与 Chart.js CDN，凭据经 nonce 授权内联脚本。 */
-function cspFor(nonce: string, chartCdn: string | null | undefined): string {
-  const scriptSrc = [
-    `'nonce-${nonce}'`,
-  ];
-  const origin = chartCdn ? originOf(chartCdn) : null;
-  if (origin) {
-    scriptSrc.push(origin);
-  }
+/** 只放行页面自身：脚本与样式都经 nonce 授权，不允许任何外部来源。 */
+function cspFor(nonce: string): string {
   return [
     "default-src 'none'",
-    `script-src ${scriptSrc.join(" ")}`,
+    `script-src 'nonce-${nonce}'`,
     `style-src 'nonce-${nonce}'`,
     "connect-src 'self'",
     "img-src 'self' data:",
@@ -314,13 +299,4 @@ function cspFor(nonce: string, chartCdn: string | null | undefined): string {
     "form-action 'none'",
     "frame-ancestors 'none'",
   ].join("; ");
-}
-
-function originOf(value: string): string | null {
-  try {
-    const origin = new URL(value).origin;
-    return origin === "null" ? null : origin;
-  } catch {
-    return null;
-  }
 }

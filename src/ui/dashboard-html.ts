@@ -1,5 +1,8 @@
 import type { StatsPeriod } from "../types.ts";
-import { CHART_JS_CDN, dashboardClientScript } from "./dashboard-client.ts";
+import {
+  dashboardClientScript,
+  preferenceBootstrapScript,
+} from "./dashboard-client.ts";
 import { dashboardCss } from "./dashboard-css.ts";
 import { escapeHtml } from "./html.ts";
 
@@ -30,8 +33,6 @@ const RANGE_LABELS: [
 ];
 
 export interface DashboardOptions {
-  /** Chart.js 脚本地址；传 null 则不加载（离线或测试） */
-  chartCdn?: string | null;
   /** CSP nonce；缺省时不输出 nonce 属性（离线快照或测试） */
   nonce?: string;
 }
@@ -43,11 +44,6 @@ export interface DashboardOptions {
  * 读取 URL fragment 凭据后通过 `/api/dashboard` 拉取。
  */
 export function generateDashboardHTML(options: DashboardOptions = {}): string {
-  const chartCdn = options.chartCdn === undefined ? CHART_JS_CDN : options.chartCdn;
-  const scriptTag =
-    chartCdn === null
-      ? "<!-- Chart.js 未加载（离线模式），趋势图降级为隐藏 -->"
-      : `<script src="${escapeHtml(chartCdn)}"></script>`;
   const nonce = options.nonce ? ` nonce="${escapeHtml(options.nonce)}"` : "";
 
   return `<!doctype html>
@@ -60,6 +56,9 @@ export function generateDashboardHTML(options: DashboardOptions = {}): string {
 <style${nonce}>
 ${dashboardCss()}
 </style>
+<script${nonce}>
+${preferenceBootstrapScript()}
+</script>
 </head>
 <body>
   <header>
@@ -70,6 +69,7 @@ ${dashboardCss()}
     <div class="kuma-actions">
       <button type="button" id="kuma-refresh-all">全部刷新</button>
       <button type="button" id="kuma-theme" aria-pressed="false">亮色</button>
+      <button type="button" id="kuma-family" aria-pressed="false">图鉴风</button>
     </div>
   </header>
 
@@ -95,11 +95,10 @@ ${RANGE_LABELS.map(
   <section aria-labelledby="kuma-chart-title">
     <h2 id="kuma-chart-title">费用与 token 趋势</h2>
     <div class="kuma-chart-wrap">
-      <canvas id="kuma-chart" role="img" aria-label="按时间的费用与 token 趋势折线图"></canvas>
+      <div id="kuma-chart" role="img" aria-label="按时间的费用与 token 趋势折线图"></div>
     </div>
   </section>
 
-${scriptTag}
 <script${nonce}>
 ${dashboardClientScript()}
 </script>

@@ -3,6 +3,7 @@ import {
   dashboardClientScript,
   NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
+  preferenceBootstrapScript,
 } from "./dashboard-client.ts";
 
 /**
@@ -23,6 +24,7 @@ class FakeElement {
   readonly listeners = new Map<string, Listener[]>();
   className = "";
   colSpan = 0;
+  clientWidth = 0;
   disabled = false;
   hidden = false;
   id = "";
@@ -56,6 +58,10 @@ class FakeElement {
     if (name === "id") {
       this.id = value;
     }
+  }
+
+  removeAttribute(name: string): void {
+    this.attributes.delete(name);
   }
 
   getAttribute(name: string): string | null {
@@ -139,6 +145,10 @@ class FakeDocument {
     return new FakeElement(tagName);
   }
 
+  createElementNS(_namespace: string, tagName: string): FakeElement {
+    return new FakeElement(tagName);
+  }
+
   getElementById(id: string): FakeElement | null {
     return this.byId.get(id) ?? null;
   }
@@ -170,9 +180,10 @@ function shell(): FakeDocument {
   doc.add("div", "kuma-vendors");
   doc.add("div", "kuma-notice");
   doc.add("div", "kuma-stats");
-  doc.add("canvas", "kuma-chart");
+  doc.add("div", "kuma-chart");
   doc.add("button", "kuma-refresh-all");
   doc.add("button", "kuma-theme");
+  doc.add("button", "kuma-family");
   for (const period of [
     "1h",
     "24h",
@@ -224,6 +235,7 @@ interface Harness {
   hash: () => string;
   replaceState: ReturnType<typeof vi.fn>;
   start: (script?: string) => void;
+  storage: Map<string, string>;
 }
 
 function harness(hash = "#token-abc"): Harness {
@@ -237,6 +249,14 @@ function harness(hash = "#token-abc"): Harness {
     location.hash = "";
     location.pathname = url;
   });
+  /** 假 localStorage：偏好读写的唯一去处，测试据此断言持久化。 */
+  const storage = new Map<string, string>();
+  const localStorageStub = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      storage.set(key, value);
+    },
+  };
   const windowObject = {
     clearInterval,
     history: {
@@ -250,6 +270,7 @@ function harness(hash = "#token-abc"): Harness {
     fetchMock,
     hash: () => location.hash,
     replaceState,
+    storage,
     start(script = dashboardClientScript()) {
       // 用真实脚本源码构造函数，测的就是浏览器里跑的那份代码
       const factory = new Function(
@@ -257,11 +278,18 @@ function harness(hash = "#token-abc"): Harness {
         "document",
         "fetch",
         "getComputedStyle",
+        "localStorage",
         script,
       );
-      factory(windowObject, doc, fetchMock, () => ({
-        getPropertyValue: () => "#000000",
-      }));
+      factory(
+        windowObject,
+        doc,
+        fetchMock,
+        () => ({
+          getPropertyValue: () => "#000000",
+        }),
+        localStorageStub,
+      );
     },
   };
 }
@@ -506,5 +534,214 @@ describe("自动轮询", () => {
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 5);
 
     expect(h.fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 用最小假 DOM 执行首帧偏好脚本。
+ *
+ * 这段脚本只碰 `document.documentElement` 与 `localStorage`，所以不必搭整套 shell；
+ * 直接给它一个根元素与一个存储即可，测到的仍是浏览器里跑的那份源码。
+ */
+function runBootstrap(
+  script: string,
+  root: FakeElement,
+  storage:
+    | Map<string, string>
+    | {
+        getItem: (key: string) => string | null;
+      },
+): void {
+  const localStorageStub =
+    storage instanceof Map
+      ? {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            storage.set(key, value);
+          },
+        }
+      : storage;
+  const factory = new Function("document", "localStorage", script);
+  factory(
+    {
+      documentElement: root,
+    },
+    localStorageStub,
+  );
+}
+
+describe("主题与家族偏好", () => {
+  it("首帧脚本按已保存偏好设置属性", () => {
+    const root = new FakeElement("html");
+    runBootstrap(
+      preferenceBootstrapScript(),
+      root,
+      new Map([
+        [
+          "kuma.theme",
+          "light",
+        ],
+        [
+          "kuma.family",
+          "atlas",
+        ],
+      ]),
+    );
+    expect(root.getAttribute("data-theme")).toBe("light");
+    expect(root.getAttribute("data-family")).toBe("atlas");
+  });
+
+  it("无偏好时保持 HTML 上的默认值", () => {
+    const root = new FakeElement("html");
+    root.setAttribute("data-theme", "dark");
+    runBootstrap(preferenceBootstrapScript(), root, new Map());
+    expect(root.getAttribute("data-theme")).toBe("dark");
+    expect(root.getAttribute("data-family")).toBeNull();
+  });
+
+  it("非法偏好值被忽略，不写入属性", () => {
+    const root = new FakeElement("html");
+    runBootstrap(
+      preferenceBootstrapScript(),
+      root,
+      new Map([
+        [
+          "kuma.theme",
+          "chartreuse",
+        ],
+        [
+          "kuma.family",
+          "nope",
+        ],
+      ]),
+    );
+    expect(root.getAttribute("data-theme")).toBeNull();
+    expect(root.getAttribute("data-family")).toBeNull();
+  });
+
+  it("存储不可用时不抛错，页面照常继续", () => {
+    const root = new FakeElement("html");
+    const throwing = {
+      getItem: () => {
+        throw new Error("storage disabled");
+      },
+    };
+    expect(() =>
+      runBootstrap(preferenceBootstrapScript(), root, throwing),
+    ).not.toThrow();
+    expect(root.getAttribute("data-theme")).toBeNull();
+  });
+
+  it("切换家族写入偏好，重开页面时被首帧脚本应用", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const btn = h.doc.getElementById("kuma-family");
+    expect(btn).not.toBeNull();
+    btn?.click();
+    expect(h.doc.documentElement.getAttribute("data-family")).toBe("atlas");
+    expect(h.storage.get("kuma.family")).toBe("atlas");
+
+    // 模拟刷新后重新打开：拿持久化的偏好跑一次首帧脚本
+    const reopened = new FakeElement("html");
+    reopened.setAttribute("data-theme", "dark");
+    runBootstrap(preferenceBootstrapScript(), reopened, h.storage);
+    expect(reopened.getAttribute("data-family")).toBe("atlas");
+  });
+
+  it("再次点击切回默认家族并移除属性", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const btn = h.doc.getElementById("kuma-family");
+    btn?.click();
+    btn?.click();
+    expect(h.doc.documentElement.getAttribute("data-family")).toBeNull();
+    expect(h.storage.get("kuma.family")).toBe("default");
+  });
+
+  it("切换明暗写入偏好，按钮文案跟随", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const btn = h.doc.getElementById("kuma-theme");
+    expect(btn?.textContent).toBe("亮色");
+    btn?.click();
+    expect(h.doc.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(h.storage.get("kuma.theme")).toBe("light");
+    expect(btn?.textContent).toBe("暗色");
+  });
+
+  it("家族按钮的 aria-pressed 反映当前家族", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const btn = h.doc.getElementById("kuma-family");
+    expect(btn?.getAttribute("aria-pressed")).toBe("false");
+    btn?.click();
+    expect(btn?.getAttribute("aria-pressed")).toBe("true");
+    expect(btn?.textContent).toBe("默认风");
+  });
+});
+
+describe("趋势图内联 SVG", () => {
+  it("有数据时渲染出 SVG 折线与悬停详情", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          trend: [
+            {
+              bucketStart: 1_700_000_000_000,
+              cost: 0.1,
+              tokens: 10,
+              byProvider: {
+                "[OI]": 0.1,
+              },
+            },
+            {
+              bucketStart: 1_700_000_060_000,
+              cost: 0.2,
+              tokens: 20,
+              byProvider: {
+                "[OI]": 0.2,
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    h.start();
+    await flush();
+
+    const host = h.doc.getElementById("kuma-chart");
+    const tags = host?.descendants().map((node) => node.tagName);
+    expect(tags).toContain("SVG");
+    expect(tags).toContain("POLYLINE");
+    expect(tags).toContain("TITLE");
+  });
+
+  it("空数据时不渲染图表也不抛错", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          trend: [],
+        }),
+      ),
+    );
+    h.start();
+    await flush();
+
+    const host = h.doc.getElementById("kuma-chart");
+    expect(host?.textContent).toBe("");
   });
 });

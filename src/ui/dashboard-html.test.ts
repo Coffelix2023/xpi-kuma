@@ -3,24 +3,47 @@ import { NO_VENDOR_NOTICE, POLL_INTERVAL_MS } from "./dashboard-client.ts";
 import { dashboardCss } from "./dashboard-css.ts";
 import { generateDashboardHTML } from "./dashboard-html.ts";
 import { escapeHtml, jsonForScript } from "./html.ts";
-import { DARK_THEME, LIGHT_THEME, themeToCssVariables } from "./theme.ts";
 
 describe("generateDashboardHTML 结构", () => {
   it("包含供应商卡片容器、统计表容器与趋势图 canvas", () => {
     const html = generateDashboardHTML();
     expect(html).toContain('id="kuma-vendors"');
     expect(html).toContain('id="kuma-stats"');
-    expect(html).toContain("<canvas");
+    expect(html).toContain('<div id="kuma-chart" role="img"');
     expect(html).toContain('id="kuma-chart"');
   });
 
-  it("默认暗色主题，且色值来自 DESIGN.md 转换的 oklch token", () => {
+  it("默认暗色主题，token 取自 THEMES.md 的家族定义", () => {
     const html = generateDashboardHTML();
     expect(html).toContain('data-theme="dark"');
-    expect(html).toContain("--kuma-canvas: oklch(0.235 0.000 89.9)");
-    expect(html).toContain("--kuma-ink: oklch(0.870 0.000 89.9)");
-    // 亮色变量也在同一张表内，供主题切换直接换值
-    expect(html).toContain('[data-theme="light"]');
+    // 默认家族的暗色背景与前景
+    expect(html).toContain("--background: oklch(0.2679 0.0036 106.6427)");
+    expect(html).toContain("--foreground: oklch(0.8074 0.0142 93.0137)");
+    // 亮色与图鉴家族的选择器同表输出，供切换直接换值
+    expect(html).toContain(':root[data-theme="light"]');
+    expect(html).toContain(':root[data-family="atlas"]');
+  });
+
+  it("首帧偏好脚本位于可见内容之前", () => {
+    const html = generateDashboardHTML();
+    const bootstrapAt = html.indexOf("kuma.theme");
+    const bodyAt = html.indexOf("<body>");
+    expect(bootstrapAt).toBeGreaterThan(-1);
+    expect(bodyAt).toBeGreaterThan(-1);
+    expect(bootstrapAt).toBeLessThan(bodyAt);
+  });
+
+  it("提供主题家族切换按钮", () => {
+    const html = generateDashboardHTML();
+    expect(html).toContain('id="kuma-family"');
+    expect(html).toContain("图鉴风");
+  });
+
+  it("首帧脚本与页内脚本共用 CSP nonce", () => {
+    const html = generateDashboardHTML({
+      nonce: "abc123",
+    });
+    expect(html.match(/nonce="abc123"/g)?.length).toBe(3);
   });
 
   it("提供四个时间范围按钮，默认标记 24h", () => {
@@ -37,12 +60,11 @@ describe("generateDashboardHTML 结构", () => {
     expect(html).toContain('data-range="7d" aria-pressed="false"');
   });
 
-  it("默认通过 CDN 引入 Chart.js，可显式关闭", () => {
-    expect(generateDashboardHTML()).toContain("cdn.jsdelivr.net/npm/chart.js@4.4.1");
-    const offline = generateDashboardHTML({
-      chartCdn: null,
-    });
-    expect(offline).not.toContain("cdn.jsdelivr.net");
+  it("页面零外部引用：不加载任何 CDN 脚本", () => {
+    const html = generateDashboardHTML();
+    expect(html).not.toContain("cdn.jsdelivr.net");
+    expect(html).not.toContain("<script src=");
+    expect(html).not.toContain("<link rel=");
   });
 
   it("shell 不含监控数据与访问凭据", () => {
@@ -127,7 +149,7 @@ describe("响应式契约", () => {
       "grid-template-columns: repeat(auto-fill, minmax(260px, 1fr))",
     );
     expect(css).toContain(".kuma-scroll { overflow-x: auto;");
-    expect(css).toContain(".kuma-chart-wrap canvas { width: 100%;");
+    expect(css).toContain(".kuma-chart-wrap svg { width: 100%;");
   });
 
   it("窄视口下减少卡片列数并压低图表高度", () => {
@@ -138,6 +160,24 @@ describe("响应式契约", () => {
 
   it("hidden 属性优先于提示块的布局", () => {
     expect(dashboardCss()).toContain(".kuma-empty[hidden] { display: none; }");
+  });
+});
+
+describe("主题家族", () => {
+  it("家族专属装饰默认隐藏，仅 Atlas 下显示", () => {
+    const css = dashboardCss();
+    expect(css).toContain(".kuma-atlas-only { display: none; }");
+    expect(css).toContain(
+      '[data-family="atlas"] .kuma-atlas-only { display: revert; }',
+    );
+  });
+
+  it("默认块是默认家族的暗色，Atlas 块在其后", () => {
+    const css = dashboardCss();
+    const defaultAt = css.indexOf("--background: oklch(0.2679 0.0036 106.6427)");
+    const atlasAt = css.indexOf(':root[data-family="atlas"] {');
+    expect(defaultAt).toBeGreaterThan(-1);
+    expect(atlasAt).toBeGreaterThan(defaultAt);
   });
 });
 
@@ -170,20 +210,5 @@ describe("注入防护", () => {
     expect(html).toContain(
       'var NO_VENDOR = "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml";',
     );
-  });
-});
-
-describe("theme token", () => {
-  it("两组主题色相一致、明度不同", () => {
-    expect(DARK_THEME.primary).not.toBe(LIGHT_THEME.primary);
-    expect(DARK_THEME.primary.split(" ").at(-1)).toBe(
-      LIGHT_THEME.primary.split(" ").at(-1),
-    );
-  });
-
-  it("渲染为 CSS 自定义属性且键名转为 kebab-case", () => {
-    const css = themeToCssVariables(DARK_THEME);
-    expect(css).toContain("--kuma-canvas:");
-    expect(css).toContain("--kuma-on-accent:");
   });
 });

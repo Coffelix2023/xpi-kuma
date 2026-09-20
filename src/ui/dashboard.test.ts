@@ -92,9 +92,7 @@ async function start(): Promise<{
   const collector = new UsageCollector(database);
   const monitor = new VendorMonitor(database, CONFIG);
   cleanups.push(() => database.close());
-  const server = await startDashboardServer(collector, monitor, {
-    chartCdn: null,
-  });
+  const server = await startDashboardServer(collector, monitor);
   servers.push(server);
   return {
     collector,

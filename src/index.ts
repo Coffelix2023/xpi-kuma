@@ -184,6 +184,25 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
  * 记录 assistant 消息的真实使用量。
  *
  * 非 assistant 消息或缺少 usage 时不写入任何记录。
+ *
+ * ## 归因元数据策略（add-kuma-dashboard-pages 任务 1.3 定下，5.1 落地）
+ *
+ * 使用量记录还要带上项目路径与会话标识，供归因按项目 / 会话分组。取值与回落规则：
+ *
+ * - 项目路径取 `ctx.cwd`。
+ * - 会话标识取 `ctx.sessionManager.getSessionId()`，类型为 `string`，**始终有值**，
+ *   作为归因会话维度的分组键。
+ * - `ctx.sessionManager.getSessionName()` 的类型是 `string | undefined`（来自最新的
+ *   `session_info` 条目，用户没命名过就是 `undefined`）。它**只用于界面提示「当前会话」**，
+ *   不落库：会话名是可变元数据，存快照会与用户后续重命名不一致，且要多一列去同步。
+ *   历史归因的会话展示改用标识的短前缀。
+ * - 任一取值失败都降级为空字符串而不是抛错：拿不到元数据时照常写入使用量记录，
+ *   归因查询把空值归入「未知」分组。丢一条使用量记录比丢一个维度严重得多。
+ *
+ * 因此 `message_end` 的 handler 需要接第二个参数 `ctx` —— `ExtensionHandler<E, R>` 的签名是
+ * `(event, ctx) => ...`，`message_end` 同样能拿到上下文。
+ *
+ * 类型核对与探测结论见 `docs/probe-balance-and-oauth.md`。
  */
 function handleMessageEnd(event: MessageEndEvent): void {
   if (!runtime || event.message.role !== "assistant") {

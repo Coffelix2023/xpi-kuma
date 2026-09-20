@@ -1,22 +1,50 @@
 /**
  * 面板页内脚本。
  *
- * 负责凭据引导、数据拉取、时间范围切换、探测按钮、主题切换与 Chart.js 折线图。
+ * 负责凭据引导、数据拉取、时间范围切换、探测按钮、主题与家族切换，以及内联 SVG 折线图。
  *
  * 访问凭据来自 URL fragment：fragment 不进入 HTTP 请求、不写访问日志、也不
  * 出现在第三方资源 Referer 中。脚本读取后立即从地址栏清除，并在 API 请求里
  * 通过 `Authorization` 头发送。
  */
 
-/** Chart.js 版本固定，避免 CDN 漂移导致面板突然不可用。 */
-export const CHART_JS_CDN =
-  "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
-
 /** 可见页面的数据轮询间隔；新 usage 必须在 5 秒内反映到面板。 */
 export const POLL_INTERVAL_MS = 5000;
 
 /** 无供应商时展示的提示文案。 */
 export const NO_VENDOR_NOTICE = "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml";
+
+/** 主题与家族偏好的 localStorage 键；与 THEMES.md 约定的键名一致。 */
+export const THEME_KEY = "kuma.theme";
+export const FAMILY_KEY = "kuma.family";
+
+/** Atlas 家族标识；取值与 `theme.ts` 的 `ThemeFamily` 一致。 */
+export const ATLAS_FAMILY = "atlas";
+
+/**
+ * 首帧前应用主题与家族偏好。
+ *
+ * 这段脚本必须放在 `<head>` 里、在任何可见内容之前**同步**执行：否则浏览器会先按
+ * HTML 上的默认外观绘制一帧，再跳到用户偏好，出现可见闪烁。
+ *
+ * localStorage 在隐私模式或禁用存储时可能抛错，因此整体包在 try 里；取不到偏好
+ * 就保持 HTML 的默认值（暗色 + 默认家族）。
+ */
+export function preferenceBootstrapScript(): string {
+  return `(function () {
+  try {
+    var theme = localStorage.getItem("${THEME_KEY}");
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.setAttribute("data-theme", theme);
+    }
+    if (localStorage.getItem("${FAMILY_KEY}") === "${ATLAS_FAMILY}") {
+      document.documentElement.setAttribute("data-family", "${ATLAS_FAMILY}");
+    }
+  } catch (error) {
+    // 存储不可用时按默认外观继续，不阻断页面
+  }
+})();`;
+}
 
 export function dashboardClientScript(): string {
   return `
@@ -29,7 +57,6 @@ export function dashboardClientScript(): string {
 
       var token = readToken();
       var period = DEFAULT_PERIOD;
-      var chart = null;
       var lastTrend = [];
       var busy = false;
       var timer = null;
@@ -218,83 +245,189 @@ export function dashboardClientScript(): string {
         host.appendChild(box);
       }
 
+      /**
+       * 内联 SVG 折线图。
+       *
+       * 不用任何图表库：整页零外部请求，离线也完整可用。颜色取自主题 token，
+       * 主题或家族切换后由 redrawChart() 重建。
+       */
       function renderChart(trend) {
-        var canvas = el("kuma-chart");
-        if (!canvas || typeof Chart === "undefined") { return; }
+        var host = el("kuma-chart");
+        if (!host) { return; }
+        host.textContent = "";
+        if (!trend || trend.length === 0) { return; }
+
+        var style = getComputedStyle(document.documentElement);
+        var palette = [
+          cssVar(style, "--chart-1"),
+          cssVar(style, "--chart-2"),
+          cssVar(style, "--chart-3"),
+          cssVar(style, "--chart-4"),
+          cssVar(style, "--chart-5"),
+        ];
+        var ink = cssVar(style, "--muted-foreground");
+        var rule = cssVar(style, "--border");
 
         var providers = [];
         trend.forEach(function (point) {
-          Object.keys(point.byProvider).forEach(function (name) {
+          Object.keys(point.byProvider || {}).forEach(function (name) {
             if (providers.indexOf(name) === -1) { providers.push(name); }
           });
         });
 
-        var labels = trend.map(function (point) {
-          return new Date(point.bucketStart).toLocaleString(undefined, {
+        var width = host.clientWidth || 720;
+        var height = 260;
+        var padTop = 28;
+        var padRight = 56;
+        var padBottom = 28;
+        var padLeft = 56;
+        var plotW = Math.max(1, width - padLeft - padRight);
+        var plotH = Math.max(1, height - padTop - padBottom);
+
+        var maxCost = 0;
+        var maxTokens = 0;
+        trend.forEach(function (point) {
+          providers.forEach(function (name) {
+            maxCost = Math.max(maxCost, point.byProvider[name] || 0);
+          });
+          maxTokens = Math.max(maxTokens, point.tokens || 0);
+        });
+        if (maxCost <= 0) { maxCost = 1; }
+        if (maxTokens <= 0) { maxTokens = 1; }
+
+        var step = trend.length > 1 ? plotW / (trend.length - 1) : 0;
+        function xAt(index) {
+          return padLeft + (trend.length > 1 ? index * step : plotW / 2);
+        }
+        function yCost(value) { return padTop + plotH - (value / maxCost) * plotH; }
+        function yTokens(value) { return padTop + plotH - (value / maxTokens) * plotH; }
+
+        var svg = svgNode("svg", {
+          height: String(height),
+          viewBox: "0 0 " + width + " " + height,
+          width: "100%",
+        });
+        svg.appendChild(svgNode("title", {}, "费用与 token 趋势"));
+        svg.appendChild(svgNode("desc", {}, "按时间的费用折线（左轴）与 token 总量虚线（右轴），每个供应商一条折线；悬停某一时间点可看该点明细。"));
+
+        // 横向网格与左轴费用刻度
+        var gridLines = 4;
+        for (var g = 0; g <= gridLines; g += 1) {
+          var gridValue = (maxCost * g) / gridLines;
+          var gridY = yCost(gridValue);
+          svg.appendChild(svgNode("line", {
+            stroke: rule,
+            "stroke-width": 1,
+            x1: padLeft, x2: padLeft + plotW, y1: gridY, y2: gridY,
+          }));
+          svg.appendChild(svgLabel(padLeft - 8, gridY + 3, "¥" + gridValue.toFixed(4), ink, "end"));
+        }
+
+        // 横轴时间标签，最多 6 个
+        var ticks = Math.min(6, trend.length);
+        for (var t = 0; t < ticks; t += 1) {
+          var index = ticks === 1 ? 0 : Math.round((t * (trend.length - 1)) / (ticks - 1));
+          var when = new Date(trend[index].bucketStart).toLocaleString(undefined, {
             day: "2-digit", hour: "2-digit", minute: "2-digit",
           });
+          svg.appendChild(svgLabel(xAt(index), height - 8, when, ink, "middle"));
+        }
+
+        // 图例
+        var legendX = padLeft;
+        providers.forEach(function (name, index) {
+          svg.appendChild(svgNode("rect", {
+            fill: palette[index % palette.length],
+            height: 8, width: 8, x: legendX, y: 4,
+          }));
+          svg.appendChild(svgLabel(legendX + 12, 12, name, ink, "start"));
+          legendX += 20 + name.length * 7;
         });
 
-        // 数据点很少时把点画出来，否则单桶数据看起来是一片空白
-        var pointRadius = trend.length <= 2 ? 3 : 0;
-        // 从 CSS 变量取色，保证主题切换后图表随之换色
-        var style = getComputedStyle(document.documentElement);
-        var palette = [
-          cssVar(style, "--kuma-primary"),
-          cssVar(style, "--kuma-success"),
-          cssVar(style, "--kuma-warning"),
-          cssVar(style, "--kuma-accent"),
-          cssVar(style, "--kuma-error"),
-          cssVar(style, "--kuma-muted"),
-        ];
-        var datasets = providers.map(function (name, index) {
-          var color = palette[index % palette.length];
-          return {
-            label: name,
-            data: trend.map(function (point) { return point.byProvider[name] || 0; }),
-            borderColor: color,
-            backgroundColor: color,
-            borderWidth: 2,
-            pointRadius: pointRadius,
-            tension: 0.25,
-          };
+        // 每个供应商一条费用折线
+        providers.forEach(function (name, index) {
+          svg.appendChild(svgNode("polyline", {
+            fill: "none",
+            points: trend.map(function (point, i) {
+              return xAt(i) + "," + yCost(point.byProvider[name] || 0);
+            }).join(" "),
+            stroke: palette[index % palette.length],
+            "stroke-linejoin": "round",
+            "stroke-width": 2,
+          }));
         });
 
-        datasets.push({
-          label: "Token 总量",
-          data: trend.map(function (point) { return point.tokens; }),
-          borderColor: cssVar(style, "--kuma-muted"),
-          borderDash: [4, 4],
-          borderWidth: 1,
-          pointRadius: pointRadius,
-          yAxisID: "tokens",
-          tension: 0.25,
+        // token 总量虚线（右轴）
+        svg.appendChild(svgNode("polyline", {
+          fill: "none",
+          points: trend.map(function (point, i) {
+            return xAt(i) + "," + yTokens(point.tokens || 0);
+          }).join(" "),
+          stroke: ink,
+          "stroke-dasharray": "4 4",
+          "stroke-width": 1,
+        }));
+
+        // 数据点很少时画出点，否则单桶数据看起来是一片空白
+        if (trend.length <= 2) {
+          providers.forEach(function (name, index) {
+            trend.forEach(function (point, i) {
+              svg.appendChild(svgNode("circle", {
+                cx: xAt(i), cy: yCost(point.byProvider[name] || 0), r: 3,
+                fill: palette[index % palette.length],
+              }));
+            });
+          });
+        }
+
+        // 每个时间桶一个透明悬停带：用 SVG 原生 title 显示该点明细
+        trend.forEach(function (point, i) {
+          var bandWidth = trend.length > 1 ? step : plotW;
+          var band = svgNode("rect", {
+            fill: "transparent",
+            height: plotH,
+            width: bandWidth,
+            x: xAt(i) - bandWidth / 2,
+            y: padTop,
+          });
+          band.appendChild(svgNode("title", {}, pointSummary(point)));
+          svg.appendChild(band);
         });
 
-        if (chart) { chart.destroy(); }
-        chart = new Chart(canvas.getContext("2d"), {
-          type: "line",
-          data: { labels: labels, datasets: datasets },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: "index", intersect: false },
-            plugins: {
-              legend: { labels: { color: "#808080", boxWidth: 10, font: { size: 10 } } },
-              tooltip: { callbacks: {
-                label: function (ctx) {
-                  return ctx.dataset.label + ": " +
-                    (ctx.dataset.yAxisID === "tokens" ? ctx.parsed.y : "¥" + ctx.parsed.y.toFixed(4));
-                },
-              } },
-            },
-            scales: {
-              x: { ticks: { color: "#808080", maxTicksLimit: 8 }, grid: { color: "#3C3C3C" } },
-              y: { ticks: { color: "#808080" }, grid: { color: "#3C3C3C" }, beginAtZero: true },
-              tokens: { position: "right", ticks: { color: "#3C3C3C" }, grid: { display: false }, beginAtZero: true },
-            },
-          },
+        host.appendChild(svg);
+      }
+
+      /** 建一个 SVG 命名空间元素；属性值为 null/undefined 时跳过。 */
+      function svgNode(name, attrs, text) {
+        var node = document.createElementNS("http://www.w3.org/2000/svg", name);
+        Object.keys(attrs).forEach(function (key) {
+          if (attrs[key] !== null && attrs[key] !== undefined) {
+            node.setAttribute(key, String(attrs[key]));
+          }
         });
+        if (text !== undefined) { node.textContent = text; }
+        return node;
+      }
+
+      /** SVG 文本：统一字号与锚点，颜色跟随主题 token。 */
+      function svgLabel(x, y, value, color, anchor) {
+        return svgNode("text", {
+          fill: color,
+          "font-size": 10,
+          "text-anchor": anchor,
+          x: x,
+          y: y,
+        }, value);
+      }
+
+      /** 悬停详情：时间点 + 各供应商费用 + token 总量。 */
+      function pointSummary(point) {
+        var parts = [new Date(point.bucketStart).toLocaleString()];
+        Object.keys(point.byProvider || {}).forEach(function (name) {
+          parts.push(name + " ¥" + (point.byProvider[name] || 0).toFixed(4));
+        });
+        parts.push("Token " + (point.tokens || 0));
+        return parts.join(" · ");
       }
 
       function markRangeButtons(current) {
@@ -319,7 +452,7 @@ export function dashboardClientScript(): string {
       function enableButtons() {
         var buttons = document.querySelectorAll("button");
         Array.prototype.forEach.call(buttons, function (btn) {
-          if (btn.id === "kuma-theme") { return; }
+          if (btn.id === "kuma-theme" || btn.id === "kuma-family") { return; }
           btn.disabled = false;
         });
         var all = el("kuma-refresh-all");
@@ -403,18 +536,66 @@ export function dashboardClientScript(): string {
       function wireTheme() {
         var btn = el("kuma-theme");
         if (!btn) { return; }
+        syncThemeButton(btn);
         btn.addEventListener("click", function () {
           var current = document.documentElement.getAttribute("data-theme") || "dark";
-          var next = current === "dark" ? "light" : "dark";
-          document.documentElement.setAttribute("data-theme", next);
-          btn.setAttribute("aria-pressed", String(next === "light"));
-          btn.textContent = next === "dark" ? "亮色" : "暗色";
-          if (chart) {
-            chart.destroy();
-            chart = null;
-          }
-          renderChart(lastTrend);
+          applyTheme(current === "dark" ? "light" : "dark");
+          syncThemeButton(btn);
+          redrawChart();
         });
+      }
+
+      /** 应用明暗模式并持久化；存储不可用时只应用不持久化。 */
+      function applyTheme(mode) {
+        document.documentElement.setAttribute("data-theme", mode);
+        try {
+          localStorage.setItem("${THEME_KEY}", mode);
+        } catch (error) {
+          // 隐私模式下写入失败，本次会话内仍然生效
+        }
+      }
+
+      function syncThemeButton(btn) {
+        var mode = document.documentElement.getAttribute("data-theme") || "dark";
+        btn.setAttribute("aria-pressed", String(mode === "light"));
+        btn.textContent = mode === "dark" ? "亮色" : "暗色";
+      }
+
+      function wireFamily() {
+        var btn = el("kuma-family");
+        if (!btn) { return; }
+        syncFamilyButton(btn);
+        btn.addEventListener("click", function () {
+          var current = document.documentElement.getAttribute("data-family") || "default";
+          applyFamily(current === "${ATLAS_FAMILY}" ? "default" : "${ATLAS_FAMILY}");
+          syncFamilyButton(btn);
+          redrawChart();
+        });
+      }
+
+      /** 应用主题家族并持久化；默认家族移除属性，让 :root 的默认块生效。 */
+      function applyFamily(family) {
+        if (family === "${ATLAS_FAMILY}") {
+          document.documentElement.setAttribute("data-family", "${ATLAS_FAMILY}");
+        } else {
+          document.documentElement.removeAttribute("data-family");
+        }
+        try {
+          localStorage.setItem("${FAMILY_KEY}", family);
+        } catch (error) {
+          // 同上：写入失败不影响本次会话
+        }
+      }
+
+      function syncFamilyButton(btn) {
+        var atlas = document.documentElement.getAttribute("data-family") === "${ATLAS_FAMILY}";
+        btn.setAttribute("aria-pressed", String(atlas));
+        btn.textContent = atlas ? "默认风" : "图鉴风";
+      }
+
+      /** 主题或家族变化后重建图表：颜色取自 CSS 变量，必须重建才能换色。 */
+      function redrawChart() {
+        renderChart(lastTrend);
       }
 
       function wireRefreshAll() {
@@ -433,6 +614,7 @@ export function dashboardClientScript(): string {
 
       wireRanges();
       wireTheme();
+      wireFamily();
       wireRefreshAll();
       document.addEventListener("visibilitychange", onVisibilityChange);
       startPolling();

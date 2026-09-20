@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpi-kuma 供应商账户</title>
+<script>
+(function () {
+  try {
+    if (localStorage.getItem("kuma.theme") === "light") document.documentElement.classList.remove("dark");
+    if (localStorage.getItem("kuma.lang") === "en") document.documentElement.lang = "en";
+  } catch (e) { /* 隐私模式等场景忽略 */ }
+})();
+</script>
+<style>
+    /* ── THEMES.md 全量 token（与主面板同一份，照抄） ── */
+    :root {
+      --background: oklch(0.9818 0.0054 95.0986);
+      --foreground: oklch(0.3438 0.0269 95.7226);
+      --card: oklch(0.9818 0.0054 95.0986);
+      --card-foreground: oklch(0.1908 0.0020 106.5859);
+      --popover: oklch(1.0000 0 0);
+      --popover-foreground: oklch(0.2671 0.0196 98.9390);
+      --primary: oklch(0.6171 0.1375 39.0427);
+      --primary-foreground: oklch(1.0000 0 0);
+      --secondary: oklch(0.9245 0.0138 92.9892);
+      --secondary-foreground: oklch(0.4334 0.0177 98.6048);
+      --muted: oklch(0.9341 0.0153 90.2390);
+      --muted-foreground: oklch(0.6059 0.0075 97.4233);
+      --accent: oklch(0.9245 0.0138 92.9892);
+      --accent-foreground: oklch(0.2671 0.0196 98.9390);
+      --destructive: oklch(0.1908 0.0020 106.5859);
+      --destructive-foreground: oklch(1.0000 0 0);
+      --border: oklch(0.8847 0.0069 97.3627);
+      --input: oklch(0.7621 0.0156 98.3528);
+      --ring: oklch(0.6171 0.1375 39.0427);
+      --chart-1: oklch(0.5583 0.1276 42.9956);
+      --chart-2: oklch(0.6898 0.1581 290.4107);
+      --chart-3: oklch(0.8816 0.0276 93.1280);
+      --chart-4: oklch(0.8822 0.0403 298.1792);
+      --chart-5: oklch(0.5608 0.1348 42.0584);
+      --sidebar: oklch(0.9663 0.0080 98.8792);
+      --sidebar-foreground: oklch(0.3590 0.0051 106.6524);
+      --sidebar-primary: oklch(0.6171 0.1375 39.0427);
+      --sidebar-primary-foreground: oklch(0.9881 0 0);
+      --sidebar-accent: oklch(0.9245 0.0138 92.9892);
+      --sidebar-accent-foreground: oklch(0.3250 0 0);
+      --sidebar-border: oklch(0.9401 0 0);
+      --sidebar-ring: oklch(0.7731 0 0);
+      --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --radius: 0.5rem;
+    }
+    .dark {
+      --background: oklch(0.2679 0.0036 106.6427);
+      --foreground: oklch(0.8074 0.0142 93.0137);
+      --card: oklch(0.2679 0.0036 106.6427);
+      --card-foreground: oklch(0.9818 0.0054 95.0986);
+      --popover: oklch(0.3085 0.0035 106.6039);
+      --popover-foreground: oklch(0.9211 0.0040 106.4781);
+      --primary: oklch(0.6724 0.1308 38.7559);
+      --primary-foreground: oklch(1.0000 0 0);
+      --secondary: oklch(0.9818 0.0054 95.0986);
+      --secondary-foreground: oklch(0.3085 0.0035 106.6039);
+      --muted: oklch(0.2213 0.0038 106.7070);
+      --muted-foreground: oklch(0.7713 0.0169 99.0657);
+      --accent: oklch(0.2130 0.0078 95.4245);
+      --accent-foreground: oklch(0.9663 0.0080 98.8792);
+      --destructive: oklch(0.6368 0.2078 25.3313);
+      --destructive-foreground: oklch(1.0000 0 0);
+      --border: oklch(0.3618 0.0101 106.8928);
+      --input: oklch(0.4336 0.0113 100.2195);
+      --ring: oklch(0.6724 0.1308 38.7559);
+      --chart-1: oklch(0.5583 0.1276 42.9956);
+      --chart-2: oklch(0.6898 0.1581 290.4107);
+      --chart-3: oklch(0.2130 0.0078 95.4245);
+      --chart-4: oklch(0.3074 0.0516 289.3230);
+      --chart-5: oklch(0.5608 0.1348 42.0584);
+      --sidebar: oklch(0.2357 0.0024 67.7077);
+      --sidebar-foreground: oklch(0.8074 0.0142 93.0137);
+      --sidebar-primary: oklch(0.3250 0 0);
+      --sidebar-primary-foreground: oklch(0.9881 0 0);
+      --sidebar-accent: oklch(0.1680 0.0020 106.6177);
+      --sidebar-accent-foreground: oklch(0.8074 0.0142 93.0137);
+      --sidebar-border: oklch(0.9401 0 0);
+      --sidebar-ring: oklch(0.7731 0 0);
+    }
+
+    /* ── 基础排版（与主面板同构） ── */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+    h1 { font-size: 16px; }
+    h2 { font-size: 13px; }
+    a { color: var(--foreground); text-underline-offset: 2px; }
+    code { font-family: var(--font-mono); font-size: 12px; background: var(--muted); border-radius: 3px; padding: 1px 4px; }
+    .mono, .num { font-family: var(--font-mono); }
+    .num { font-variant-numeric: tabular-nums; }
+    /* 次要文字：同主面板，60/40 混入 foreground 以满足 AA 正文 4.5:1 */
+    .dim { color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+    .app { max-width: 1280px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .row { display: flex; align-items: center; gap: 8px; }
+
+    button { font: inherit; color: inherit; background: transparent; border: 0; cursor: pointer; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) - 4px);
+      background: var(--background);
+      transition: background 120ms ease;
+    }
+    .btn:hover { background: var(--accent); }
+    .btn[disabled] { opacity: 0.55; cursor: default; }
+    .btn-sm { height: 24px; padding: 0 8px; font-size: 12px; }
+    .btn-quiet { border-color: transparent; color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .btn-quiet:hover { color: var(--foreground); background: var(--accent); }
+
+    :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: calc(var(--radius) - 4px); }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+    /* ── 账户概览 ── */
+    .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; max-width: 640px; }
+    .metric { background: var(--background); border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); padding: 12px; }
+    .metric-label { font-size: 11px; letter-spacing: 0.04em; color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .metric-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 600; line-height: 1.15; margin-top: 4px; }
+    .metric-sub { font-size: 11px; color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); margin-top: 2px; }
+
+    /* ── 账户列表 ── */
+    .table-wrap { margin-top: 12px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground));
+      background: var(--muted);
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+    td { padding: 8px 10px; border-top: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:hover { background: var(--accent); }
+    tfoot td { border-top: 1px solid var(--border); font-weight: 600; background: var(--muted); }
+    .num-col { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 10px 0; font-size: 11px; color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; }
+
+    /* 数据来源三档：沿用线框的边线编码（实线/虚线/点线） */
+    .src {
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      padding: 0 6px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 11px;
+      color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground));
+      background: var(--background);
+      white-space: nowrap;
+    }
+    .src[data-src="api"] { border-style: solid; }
+    .src[data-src="oauth"] { border-style: dashed; }
+    .src[data-src="manual"] { border-style: dotted; }
+    .src-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+    .stale { color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .unknown { font-style: italic; color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+
+    /* ── 空态说明 ── */
+    .steps { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+    .steps li { background: var(--muted); border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); padding: 10px 12px; }
+    .step-body { font-size: 12px; color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); margin-top: 2px; }
+
+    .spinner { width: 10px; height: 10px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 700ms linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+<style data-badge-system>
+:root {
+  --badge-display: block;
+}
+[data-semantic-badge] {
+  position: relative;
+}
+[data-semantic-badge]::before {
+  content: attr(data-semantic-badge);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1000;
+  display: var(--badge-display);
+  padding: 2px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #4f46e5;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+}
+[data-semantic-badge][data-status="proposed"]::before {
+  background: #f59e0b;
+}
+[data-semantic-badge][data-status="confirmed"]::before {
+  background: #4f46e5;
+}
+[data-semantic-badge][data-status="locked"]::before {
+  background: #4b5563;
+}
+[data-semantic-badge][data-type="panel"]::before {
+  background: #7c3aed;
+}
+.badge-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.badge-toggle-label {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+.badge-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4f46e5;
+  border: none;
+  border-radius: 6px;
+}
+.badge-toggle button.off {
+  background: #4b5563;
+}
+</style>
+</head>
+<body>
+  <div class="app">
+
+    <header class="panel" id="P3-1" data-semantic-badge="P3-1" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <div>
+          <h1 data-i18n="acct.title">供应商账户</h1>
+          <div class="dim" style="font-size:12px" data-i18n="acct.subtitle">余额单位与供应商计费币种一致 · 手动值标注为「手工」</div>
+        </div>
+        <div class="row">
+          <a class="btn btn-quiet btn-sm" id="P3-1-A1" href="../../../dashboard/hifi/current/screens/01-dashboard.html" data-i18n="acct.back" data-semantic-badge="P3-1-A1" data-status="proposed" data-type="link">← 返回主面板</a>
+          <button class="btn btn-sm" type="button" id="P3-1-B1" data-i18n="acct.syncAll" data-semantic-badge="P3-1-B1" data-status="proposed" data-type="button">同步全部余额</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="panel" id="P3-2" data-semantic-badge="P3-2" data-status="proposed" data-type="section">
+      <h2 data-i18n="acct.summary">账户概览</h2>
+      <div class="metrics">
+        <div class="metric" id="P3-2-C1" data-semantic-badge="P3-2-C1" data-status="proposed" data-type="component">
+          <div class="metric-label" data-i18n="acct.topup">累计充值</div>
+          <div class="metric-value">¥550.00</div>
+          <div class="metric-sub" data-i18n="acct.topupSub">来自 4 笔充值记录 · 1 家供应商为手工值</div>
+        </div>
+        <div class="metric" id="P3-2-C2" data-semantic-badge="P3-2-C2" data-status="proposed" data-type="component">
+          <div class="metric-label" data-i18n="acct.balance">当前余额</div>
+          <div class="metric-value">¥175.80</div>
+          <div class="metric-sub" data-i18n="acct.balanceSub">其中 ¥125.00 手工值、¥8.20 为授权过期前的旧值</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="P3-3" data-semantic-badge="P3-3" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="acct.list">供应商账户</h2>
+        <span class="dim" style="font-size:12px" data-i18n="acct.order">按余额升序 · 余额低的排前面</span>
+      </div>
+      <div class="table-wrap">
+        <table id="P3-3-T1" data-semantic-badge="P3-3-T1" data-status="proposed" data-type="table">
+          <thead>
+            <tr>
+              <th scope="col" data-i18n="acct.colVendor">供应商 · 模型</th>
+              <th scope="col" data-i18n="acct.colSource">数据来源</th>
+              <th scope="col" class="num-col" data-i18n="acct.colBalance">余额</th>
+              <th scope="col" class="num-col" data-i18n="acct.colTopup">累计充值</th>
+              <th scope="col" data-i18n="acct.colSynced">最近同步</th>
+              <th scope="col" data-i18n="acct.colAction">动作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>OpenAI · gpt-4o-mini</td>
+              <td><span class="src" data-src="api"><i class="src-dot"></i>&nbsp;<span data-i18n="src.api">API 查询</span></span></td>
+              <td class="num-col">¥42.60</td>
+              <td class="num-col">¥200.00</td>
+              <td class="num num-col stale">今天 15:02</td>
+              <td><button class="btn btn-sm" type="button" data-i18n="acct.refresh">刷新余额</button></td>
+            </tr>
+            <tr>
+              <td>Anthropic · claude-3-5-haiku</td>
+              <td><span class="src" data-src="oauth"><span data-i18n="src.needAuth">需授权</span></span></td>
+              <td class="num-col unknown" data-i18n="acct.unknown">未知</td>
+              <td class="num-col unknown">未知</td>
+              <td class="num-col stale">从未</td>
+              <td><button class="btn btn-sm" type="button" id="P3-3-B1" data-i18n="acct.grant" data-semantic-badge="P3-3-B1" data-status="proposed" data-type="button">授权</button></td>
+            </tr>
+            <tr>
+              <td>9router · gpt-4o-mini</td>
+              <td><span class="src" data-src="oauth"><span data-i18n="src.expired">授权过期</span></span></td>
+              <td class="num-col">¥8.20 <span class="stale" style="font-size:11px" data-i18n="acct.oldValue">旧值</span></td>
+              <td class="num-col">¥50.00</td>
+              <td class="num-col stale">昨天 09:12</td>
+              <td><button class="btn btn-sm" type="button" data-i18n="acct.regrant">重新授权</button></td>
+            </tr>
+            <tr>
+              <td>本地 vLLM 代理</td>
+              <td><span class="src" data-src="manual"><span data-i18n="src.manual">手动填写</span></span></td>
+              <td class="num-col stale">¥125.00</td>
+              <td class="num-col">¥300.00</td>
+              <td class="num-col stale" data-i18n="acct.manualAt">手工 · 3 天前</td>
+              <td><button class="btn btn-sm" type="button" id="P3-3-B2" data-i18n="acct.edit" data-semantic-badge="P3-3-B2" data-status="proposed" data-type="button">编辑</button></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td data-i18n="acct.total">合计（2 家数字不可信）</td>
+              <td></td>
+              <td class="num-col">¥175.80</td>
+              <td class="num-col">¥550.00</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="legend">
+          <span><i class="src" data-src="api" style="height:10px;padding:0 4px"></i><span data-i18n="src.api">API 查询</span></span>
+          <span><i class="src" data-src="oauth" style="height:10px;padding:0 4px"></i><span data-i18n="src.oauth">OAuth 授权</span></span>
+          <span><i class="src" data-src="manual" style="height:10px;padding:0 4px"></i><span data-i18n="src.manual">手动填写</span></span>
+          <span data-i18n="acct.legendNote">实线 = API · 虚线 = OAuth · 点线 = 手动</span>
+        </div>
+      </div>
+      <div class="dim" style="margin-top:8px;font-size:12px" data-i18n="acct.fallback">降级顺序：先试服务商余额接口 → 不行走 OAuth 授权查询 → 再不行才要求手填。取不到值的行必须给出下一步动作，不留白。</div>
+    </section>
+
+    <section class="panel" id="P3-4" data-semantic-badge="P3-4" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="acct.emptyTitle">还没有账户信息时显示什么</h2>
+        <span class="dim" style="font-size:12px" data-i18n="acct.emptyNote">空态 · 与主面板空态同一语汇</span>
+      </div>
+      <ol class="steps" id="P3-4-T1" data-semantic-badge="P3-4-T1" data-status="proposed" data-type="list">
+        <li>
+          <strong data-i18n="acct.e1.title">没有配供应商</strong>
+          <div class="step-body" data-i18n-html="acct.e1.body">本页不显示表格，改为一句指引：先去 <code>.pi/xpi-kuma/config.yaml</code> 配一个供应商。</div>
+        </li>
+        <li>
+          <strong data-i18n="acct.e2.title">有供应商但一个数字都拿不到</strong>
+          <div class="step-body" data-i18n-html="acct.e2.body">概览两项显示「未知」而不是 ¥0.00；表格每行都给「授权」或「填写」动作。</div>
+        </li>
+        <li>
+          <strong data-i18n="acct.e3.title">三档取数顺序</strong>
+          <div class="step-body" data-i18n-html="acct.e3.body">1) 服务商余额接口（是否有口子待实现阶段探测）；2) 没有接口就走 OAuth 授权后查询；3) 两条都不通才降级为手动填写。手动值在界面上必须与自动值可区分。</div>
+        </li>
+      </ol>
+    </section>
+
+  </div>
+
+<script>
+    /* 文案表：与主面板同一套键风格；zh-CN 为准，en 覆盖同键 */
+    window.__i18n = {
+      "zh-CN": {
+        "acct.title": "供应商账户",
+        "acct.subtitle": "余额单位与供应商计费币种一致 · 手动值标注为「手工」",
+        "acct.back": "← 返回主面板",
+        "acct.syncAll": "同步全部余额",
+        "acct.summary": "账户概览",
+        "acct.topup": "累计充值",
+        "acct.topupSub": "来自 4 笔充值记录 · 1 家供应商为手工值",
+        "acct.balance": "当前余额",
+        "acct.balanceSub": "其中 ¥125.00 手工值、¥8.20 为授权过期前的旧值",
+        "acct.list": "供应商账户",
+        "acct.order": "按余额升序 · 余额低的排前面",
+        "acct.colVendor": "供应商 · 模型",
+        "acct.colSource": "数据来源",
+        "acct.colBalance": "余额",
+        "acct.colTopup": "累计充值",
+        "acct.colSynced": "最近同步",
+        "acct.colAction": "动作",
+        "acct.total": "合计（2 家数字不可信）",
+        "acct.unknown": "未知",
+        "acct.oldValue": "旧值",
+        "acct.manualAt": "手工 · 3 天前",
+        "acct.refresh": "刷新余额",
+        "acct.grant": "授权",
+        "acct.regrant": "重新授权",
+        "acct.edit": "编辑",
+        "acct.legendNote": "实线 = API · 虚线 = OAuth · 点线 = 手动",
+        "acct.fallback": "降级顺序：先试服务商余额接口 → 不行走 OAuth 授权查询 → 再不行才要求手填。取不到值的行必须给出下一步动作，不留白。",
+        "acct.emptyTitle": "还没有账户信息时显示什么",
+        "acct.emptyNote": "空态 · 与主面板空态同一语汇",
+        "acct.e1.title": "没有配供应商",
+        "acct.e1.body": "本页不显示表格，改为一句指引：先去 <code>.pi/xpi-kuma/config.yaml</code> 配一个供应商。",
+        "acct.e2.title": "有供应商但一个数字都拿不到",
+        "acct.e2.body": "概览两项显示「未知」而不是 ¥0.00；表格每行都给「授权」或「填写」动作。",
+        "acct.e3.title": "三档取数顺序",
+        "acct.e3.body": "1) 服务商余额接口（是否有口子待实现阶段探测）；2) 没有接口就走 OAuth 授权后查询；3) 两条都不通才降级为手动填写。手动值在界面上必须与自动值可区分。",
+        "src.api": "API 查询",
+        "src.oauth": "OAuth 授权",
+        "src.needAuth": "需授权",
+        "src.expired": "授权过期",
+        "src.manual": "手动填写",
+        "ui.toLight": "亮色",
+        "ui.toDark": "暗色",
+        "ui.lang": "EN",
+        "ui.busy": "同步中…"
+      },
+      "en": {
+        "acct.title": "Vendor accounts",
+        "acct.subtitle": "Amounts follow each vendor's billing currency · manual values are marked",
+        "acct.back": "← Back to dashboard",
+        "acct.syncAll": "Sync all balances",
+        "acct.summary": "Account overview",
+        "acct.topup": "Total topped up",
+        "acct.topupSub": "from 4 top-ups · 1 vendor is a manual value",
+        "acct.balance": "Current balance",
+        "acct.balanceSub": "¥125.00 manual · ¥8.20 is the pre-expiry value",
+        "acct.list": "Vendor accounts",
+        "acct.order": "sorted by balance, lowest first",
+        "acct.colVendor": "Vendor · model",
+        "acct.colSource": "Source",
+        "acct.colBalance": "Balance",
+        "acct.colTopup": "Topped up",
+        "acct.colSynced": "Last sync",
+        "acct.colAction": "Action",
+        "acct.total": "Total (2 figures untrusted)",
+        "acct.unknown": "unknown",
+        "acct.oldValue": "stale",
+        "acct.manualAt": "manual · 3 days ago",
+        "acct.refresh": "Refresh",
+        "acct.grant": "Authorize",
+        "acct.regrant": "Re-authorize",
+        "acct.edit": "Edit",
+        "acct.legendNote": "solid = API · dashed = OAuth · dotted = manual",
+        "acct.fallback": "Fallback order: try the vendor balance API first, then OAuth, and only then ask for a manual value. A row without a number must still offer the next step.",
+        "acct.emptyTitle": "What shows when there is no account info",
+        "acct.emptyNote": "empty state · same wording as the dashboard",
+        "acct.e1.title": "No vendor configured",
+        "acct.e1.body": "No table is shown; a single line points at <code>.pi/xpi-kuma/config.yaml</code> instead.",
+        "acct.e2.title": "Vendors exist but no figure is reachable",
+        "acct.e2.body": "Both overview cards read “unknown” rather than ¥0.00, and every row offers Authorize or Edit.",
+        "acct.e3.title": "The three-step order",
+        "acct.e3.body": "1) vendor balance API (availability still to be probed); 2) OAuth-authorized query; 3) manual entry as the last resort. Manual values must stay distinguishable from fetched ones.",
+        "src.api": "API",
+        "src.oauth": "OAuth",
+        "src.needAuth": "Auth needed",
+        "src.expired": "Auth expired",
+        "src.manual": "Manual",
+        "ui.toLight": "Light",
+        "ui.toDark": "Dark",
+        "ui.lang": "中",
+        "ui.busy": "Syncing…"
+      }
+    };
+</script>
+<script>
+    (function () {
+      "use strict";
+      var state = { lang: "zh-CN", theme: "dark" };
+
+      function t(key) {
+        var table = window.__i18n[state.lang] || window.__i18n["zh-CN"];
+        return table[key] != null ? table[key] : key;
+      }
+
+      function apply() {
+        document.documentElement.lang = state.lang;
+        document.querySelectorAll("[data-i18n]").forEach(function (node) {
+          node.textContent = t(node.getAttribute("data-i18n"));
+        });
+        document.querySelectorAll("[data-i18n-html]").forEach(function (node) {
+          node.innerHTML = t(node.getAttribute("data-i18n-html"));
+        });
+      }
+
+      function withBusy(btn) {
+        var label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "";
+        var dot = document.createElement("span");
+        dot.className = "spinner";
+        dot.setAttribute("aria-hidden", "true");
+        btn.appendChild(dot);
+        btn.appendChild(document.createTextNode(" " + t("ui.busy")));
+        setTimeout(function () {
+          btn.disabled = false;
+          btn.textContent = label;
+        }, 900);
+      }
+
+      /* 主题与语言切换入口只留在主面板（线框如此）。本页只读取已保存的偏好，
+         保证两页观感一致；新增按钮会引入字典里不存在的短码。 */
+      var themeBtn = document.getElementById("P3-1-B1");
+
+      themeBtn.addEventListener("click", function () { withBusy(themeBtn); });
+      document.querySelectorAll("#P3-3-T1 .btn").forEach(function (btn) {
+        btn.addEventListener("click", function () { withBusy(btn); });
+      });
+      try {
+        var th = localStorage.getItem("kuma.theme");
+        if (th === "light" || th === "dark") state.theme = th;
+        var lg = localStorage.getItem("kuma.lang");
+        if (lg === "en" || lg === "zh-CN") state.lang = lg;
+      } catch (e) { /* 忽略 */ }
+      document.documentElement.classList.toggle("dark", state.theme === "dark");
+      apply();
+    })();
+</script>
+<div class="badge-toggle">
+  <span class="badge-toggle-label">🏷️ 语义标注</span>
+  <button type="button" data-badge-system id="badge-toggle-btn">ON</button>
+</div>
+<script data-badge-system>
+(function () {
+  var btn = document.getElementById("badge-toggle-btn");
+  if (!btn) return;
+  var root = document.documentElement;
+  var visible =
+    getComputedStyle(root).getPropertyValue("--badge-display").trim() !== "none";
+  function apply() {
+    root.style.setProperty("--badge-display", visible ? "block" : "none");
+    btn.textContent = visible ? "ON" : "OFF";
+    btn.classList.toggle("off", !visible);
+  }
+  btn.addEventListener("click", function () {
+    visible = !visible;
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

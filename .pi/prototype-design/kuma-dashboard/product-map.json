@@ -1,0 +1,69 @@
+{
+  "product": "kuma-dashboard",
+  "version": 1,
+  "flow": [
+    "dashboard"
+  ],
+  "pages": [
+    {
+      "id": "dashboard",
+      "name": "主面板",
+      "implementation": "prototype",
+      "fidelity": "hifi",
+      "route": "screens/01-dashboard.html",
+      "prototypeEntry": "screens/01-dashboard.html",
+      "links": [
+        {
+          "label": "账户详情",
+          "target": "accounts"
+        },
+        {
+          "label": "配置体检",
+          "target": "settings"
+        }
+      ]
+    },
+    {
+      "id": "dashboard-empty",
+      "name": "零数据引导态",
+      "implementation": "prototype",
+      "fidelity": "hifi",
+      "route": "screens/02-empty.html",
+      "prototypeEntry": "screens/02-empty.html",
+      "links": [
+        {
+          "label": "返回主面板",
+          "target": "dashboard"
+        }
+      ]
+    },
+    {
+      "id": "accounts",
+      "name": "供应商账户",
+      "implementation": "prototype",
+      "fidelity": "hifi",
+      "route": "screens/01-accounts.html",
+      "prototypeEntry": "screens/01-accounts.html",
+      "links": [
+        {
+          "label": "返回主面板",
+          "target": "dashboard"
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "name": "配置体检",
+      "implementation": "prototype",
+      "fidelity": "hifi",
+      "route": "screens/01-settings.html",
+      "prototypeEntry": "screens/01-settings.html",
+      "links": [
+        {
+          "label": "返回主面板",
+          "target": "dashboard"
+        }
+      ]
+    }
+  ]
+}

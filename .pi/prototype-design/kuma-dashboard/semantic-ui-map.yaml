@@ -1,0 +1,730 @@
+# semantic-ui-map — kuma-dashboard
+#
+# 双码分工：短码 P1-2-C1 给人念，全路径 dashboard.overview.cost 给机器认。
+# 本文件跨保真度共享：同一元素在 wireframe 与 hifi 阶段的 id / short 不变，
+# 只有 fidelities 各指一处。字段说明见 docs/semantic-ui-map-schema.md。
+meta:
+  project: kuma-dashboard
+  version: 14
+  type: multi-page
+  updated: 2026-09-16 08:53
+  annotate_default: true
+pages:
+  P1:
+    id: dashboard
+    label: 主面板
+    route: screens/01-dashboard.html
+    status: proposed
+  P2:
+    id: dashboard-empty
+    label: 零数据引导态
+    route: screens/02-empty.html
+    status: proposed
+  P3:
+    id: accounts
+    label: 供应商账户
+    route: screens/01-accounts.html
+    status: proposed
+  P4:
+    id: settings
+    label: 配置体检
+    route: screens/01-settings.html
+    status: proposed
+elements:
+  dashboard.header:
+    short: P1-1
+    label: 面板头部
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-1
+    behavior: 承载标题、周期切换、亮暗与语言切换
+    children:
+      - dashboard.header.title
+      - dashboard.header.period
+      - dashboard.header.theme-toggle
+      - dashboard.header.lang-toggle
+  dashboard.header.title:
+    short: P1-1-T1
+    label: 面板标题
+    type: text
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1-T1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-1-T1
+    parent: dashboard.header
+    i18n_key: dashboard.title
+  dashboard.header.period:
+    short: P1-1-S1
+    label: 周期切换
+    type: select
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1-S1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-1-S1
+    parent: dashboard.header
+    aliases:
+      - 时间范围
+      - 周期按钮
+    behavior: 在 1h / 24h / 7d / 30d 之间切换，驱动概览、归因与趋势同步刷新
+    i18n_key: dashboard.period
+  dashboard.header.theme-toggle:
+    short: P1-1-B1
+    label: 主题切换
+    type: toggle
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1-B1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-1-B1
+    parent: dashboard.header
+    aliases:
+      - 亮暗切换
+      - 明暗
+    i18n_key: dashboard.theme
+  dashboard.header.lang-toggle:
+    short: P1-1-B2
+    label: 语言切换
+    type: toggle
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1-B2
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-1-B2
+    parent: dashboard.header
+    aliases:
+      - 中英文
+    i18n_key: dashboard.lang
+  dashboard.overview:
+    short: P1-2
+    label: 花费概览
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-2
+    behavior: 首屏最上，回答本周期花了多少
+    children:
+      - dashboard.overview.cost
+      - dashboard.overview.tokens
+      - dashboard.overview.requests
+      - dashboard.overview.projects
+  dashboard.overview.cost:
+    short: P1-2-C1
+    label: 本期花费
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2-C1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-2-C1
+    parent: dashboard.overview
+    i18n_key: overview.cost
+  dashboard.overview.tokens:
+    short: P1-2-C2
+    label: Token 总量
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2-C2
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-2-C2
+    parent: dashboard.overview
+    aliases:
+      - token 总数
+      - 用量
+    i18n_key: overview.tokens
+  dashboard.overview.requests:
+    short: P1-2-C3
+    label: 请求数
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2-C3
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-2-C3
+    parent: dashboard.overview
+    i18n_key: overview.requests
+  dashboard.overview.projects:
+    short: P1-2-C4
+    label: 覆盖项目数
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2-C4
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-2-C4
+    parent: dashboard.overview
+    aliases:
+      - 项目数量
+    i18n_key: overview.projects
+  dashboard.attribution:
+    short: P1-3
+    label: 用量归因
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-3
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-3
+    behavior: 本轮新增的主角；把花费摊到项目 / 会话 / 供应商·模型三个维度
+    children:
+      - dashboard.attribution.dimension
+      - dashboard.attribution.table
+  dashboard.attribution.dimension:
+    short: P1-3-S1
+    label: 归因维度切换
+    type: select
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-3-S1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-3-S1
+    parent: dashboard.attribution
+    aliases:
+      - 维度切换
+      - 按项目
+      - 按会话
+    behavior: 在项目(cwd) / 会话 / 供应商·模型三档之间切换明细表
+    i18n_key: attribution.dimension
+  dashboard.attribution.table:
+    short: P1-3-T1
+    label: 归因明细表
+    type: table
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-3-T1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-3-T1
+    parent: dashboard.attribution
+    aliases:
+      - 明细表
+      - 花费明细
+    behavior: 列为 维度 / 花费 / token / 请求数 / 占比，按花费倒序
+    i18n_key: attribution.table
+  dashboard.vendors:
+    short: P1-4
+    label: 供应商健康
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-4
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-4
+    behavior: 由旧版的首屏 P0 降为次级 P1 块；本轮由方块网格改为行列表，状态只由指示灯表达
+    children:
+      - dashboard.vendors.grid
+      - dashboard.vendors.refresh-all
+  dashboard.vendors.grid:
+    short: P1-4-L1
+    label: 供应商卡片网格
+    type: list
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-4-L1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-4-L1
+    parent: dashboard.vendors
+    aliases:
+      - 供应商卡片
+      - 探测卡片
+    i18n_key: vendors.grid
+  dashboard.vendors.refresh-all:
+    short: P1-4-B1
+    label: 全部刷新
+    type: button
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-4-B1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-4-B1
+    parent: dashboard.vendors
+    aliases:
+      - 刷新全部
+    i18n_key: vendors.refreshAll
+  dashboard.trend:
+    short: P1-5
+    label: 费用与 token 趋势
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-5
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-5
+    children:
+      - dashboard.trend.chart
+  dashboard.trend.chart:
+    short: P1-5-C1
+    label: 趋势图
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-5-C1
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-5-C1
+    parent: dashboard.trend
+    aliases:
+      - 折线图
+      - 趋势
+    behavior: 随周期切换重绘；离线时整块隐藏并留一句说明
+    i18n_key: trend.chart
+  dashboard-empty.guide:
+    short: P2-1
+    label: 零数据引导
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/02-empty.html#P2-1
+      hifi: pages/dashboard/hifi/current/screens/02-empty.html#P2-1
+    behavior: 首次运行 / 无记录 / 未配供应商时替代主面板
+    children:
+      - dashboard-empty.guide.steps
+      - dashboard-empty.guide.back
+  dashboard-empty.guide.steps:
+    short: P2-1-L1
+    label: 产生数据的三条路径
+    type: list
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/02-empty.html#P2-1-L1
+      hifi: pages/dashboard/hifi/current/screens/02-empty.html#P2-1-L1
+    parent: dashboard-empty.guide
+    aliases:
+      - 引导步骤
+      - 下一步
+    i18n_key: empty.steps
+  dashboard-empty.guide.back:
+    short: P2-1-A1
+    label: 返回主面板
+    type: link
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/dashboard/wireframe/current/screens/02-empty.html#P2-1-A1
+      hifi: pages/dashboard/hifi/current/screens/02-empty.html#P2-1-A1
+    parent: dashboard-empty.guide
+    i18n_key: empty.back
+  accounts.header:
+    short: P3-1
+    label: 账户页头部
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-1
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-1
+    behavior: 标题、返回主面板、同步全部余额
+    children:
+      - accounts.header.back
+      - accounts.header.sync-all
+  accounts.header.back:
+    short: P3-1-A1
+    label: 回到主面板
+    type: link
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-1-A1
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-1-A1
+    parent: accounts.header
+    aliases:
+      - 返回
+      - 回面板
+    i18n_key: accounts.back
+  accounts.header.sync-all:
+    short: P3-1-B1
+    label: 同步全部余额
+    type: button
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-1-B1
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-1-B1
+    parent: accounts.header
+    aliases:
+      - 刷新余额
+      - 同步余额
+    behavior: 按三档降级顺序对每个供应商取一次余额
+    i18n_key: accounts.syncAll
+  accounts.summary:
+    short: P3-2
+    label: 账户概览
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-2
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-2
+    behavior: 累计充值与当前余额；数字不可信时显示未知而不是 0
+    children:
+      - accounts.summary.topup
+      - accounts.summary.balance
+  accounts.summary.topup:
+    short: P3-2-C1
+    label: 累计充值
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-2-C1
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-2-C1
+    parent: accounts.summary
+    aliases:
+      - 充值总额
+      - 充值
+    i18n_key: accounts.topup
+  accounts.summary.balance:
+    short: P3-2-C2
+    label: 当前余额
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-2-C2
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-2-C2
+    parent: accounts.summary
+    aliases:
+      - 余额
+      - 剩余金额
+    i18n_key: accounts.balance
+  accounts.list:
+    short: P3-3
+    label: 供应商账户列表
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-3
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-3
+    behavior: 列表形式；每行标注余额数字的来源（API / OAuth / 手动）
+    children:
+      - accounts.list.table
+      - accounts.list.grant
+      - accounts.list.manual
+  accounts.list.table:
+    short: P3-3-T1
+    label: 账户明细表
+    type: table
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-3-T1
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-3-T1
+    parent: accounts.list
+    aliases:
+      - 账户表
+      - 余额表
+    behavior: 列为 供应商·模型 / 数据来源 / 余额 / 累计充值 / 最近同步 / 动作，按余额升序
+    i18n_key: accounts.table
+  accounts.list.grant:
+    short: P3-3-B1
+    label: 授权
+    type: button
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-3-B1
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-3-B1
+    parent: accounts.list
+    aliases:
+      - OAuth 授权
+      - 登录授权
+    behavior: 服务商无余额接口时的第二档；也用于授权过期后的重新授权
+    i18n_key: accounts.grant
+  accounts.list.manual:
+    short: P3-3-B2
+    label: 手动填写余额
+    type: button
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-3-B2
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-3-B2
+    parent: accounts.list
+    aliases:
+      - 手填
+      - 编辑余额
+    behavior: 第三档保底降级；写入路径本轮只画入口
+    props:
+      writes-to-disk:
+        type: boolean
+        current: true
+    i18n_key: accounts.manual
+  accounts.empty:
+    short: P3-4
+    label: 账户页空态
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-4
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-4
+    behavior: 无账户信息时的引导与三档取数顺序说明
+    children:
+      - accounts.empty.steps
+  accounts.empty.steps:
+    short: P3-4-T1
+    label: 空态与取数顺序说明
+    type: list
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-4-T1
+      hifi: pages/accounts/hifi/current/screens/01-accounts.html#P3-4-T1
+    parent: accounts.empty
+    aliases:
+      - 取数顺序
+      - 降级说明
+    i18n_key: accounts.emptySteps
+  dashboard-empty.header.theme-toggle:
+    short: P2-1-B1
+    label: 空态主题切换
+    type: toggle
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/dashboard/hifi/current/screens/02-empty.html#P2-1-B1
+    aliases:
+      - 空态亮暗
+    i18n_key: ui.theme
+  dashboard-empty.header.lang-toggle:
+    short: P2-1-B2
+    label: 空态语言切换
+    type: toggle
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/dashboard/hifi/current/screens/02-empty.html#P2-1-B2
+    aliases:
+      - 空态中英
+    i18n_key: ui.lang
+  dashboard.header.family-toggle:
+    short: P1-1-B3
+    label: 主题家族切换
+    type: toggle
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-1-B3
+    parent: dashboard.header
+    aliases:
+      - 图鉴风
+      - 印刷风
+      - 换配色
+      - Atlas
+    behavior: 在 Default-Themes（oklch 圆角）与 Atlas-Themes v2（复古印刷：奶油纸 + 普鲁士蓝 + 柿橙，直角平面）之间切换；写 kuma.family
+    i18n_key: ui.family
+  dashboard-empty.header.family-toggle:
+    short: P2-1-B3
+    label: 空态主题家族切换
+    type: toggle
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/dashboard/hifi/current/screens/02-empty.html#P2-1-B3
+    parent: dashboard-empty.header
+    aliases:
+      - 空态图鉴风
+    behavior: 与主面板同一套 kuma.family 偏好
+    i18n_key: ui.family
+  dashboard.index:
+    short: P1-6
+    label: 分区索引轨
+    type: section
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-6
+    aliases:
+      - 索引轨
+      - 右侧导航
+      - ATLAS INDEX
+    behavior: 印刷家族下才显示；01–04 对应四块，点击滚到目标并把 aria-current 挪过去
+    props:
+      visible-family:
+        type: enum
+        values: [default, atlas]
+        current: atlas
+    i18n_key: rail.index
+  settings.header:
+    short: P4-1
+    label: 体检页头部
+    type: section
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-1
+    behavior: 标题、只读声明、返回主面板、重新读取
+    children:
+      - settings.header.back
+      - settings.header.reload
+  settings.header.back:
+    short: P4-1-A1
+    label: 体检页返回主面板
+    type: link
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-1-A1
+    parent: settings.header
+    aliases:
+      - 从体检页回去
+    i18n_key: cfg.back
+  settings.header.reload:
+    short: P4-1-B1
+    label: 重新读取
+    type: button
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-1-B1
+    parent: settings.header
+    aliases:
+      - 重新扫描
+      - 刷新体检
+    behavior: 本轮原型只做忙碌态，不触碰文件
+    i18n_key: cfg.reload
+  settings.config:
+    short: P4-2
+    label: 配置文件
+    type: section
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-2
+    behavior: 生效路径 / 来源 / 解析结果 / 修改时间
+    children:
+      - settings.config.details
+      - settings.config.path
+  settings.config.details:
+    short: P4-2-T1
+    label: 配置明细
+    type: list
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-2-T1
+    parent: settings.config
+    i18n_key: cfg.file
+  settings.config.path:
+    short: P4-2-T2
+    label: 生效路径
+    type: text
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-2-T2
+    parent: settings.config
+    aliases:
+      - 配置文件位置
+    behavior: resolveConfigPath() 的结果，即 <cwd>/.pi/xpi-kuma/config.yaml
+    i18n_key: cfg.kPath
+  settings.vendors:
+    short: P4-3
+    label: 供应商体检
+    type: section
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-3
+    behavior: 每行一个供应商，六项检查，缺失项配一句下一步动作
+    children:
+      - settings.vendors.table
+  settings.vendors.table:
+    short: P4-3-T1
+    label: 供应商体检表
+    type: table
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-3-T1
+    parent: settings.vendors
+    aliases:
+      - 体检表
+      - 配置检查表
+    behavior: 列为 供应商 / endpoint / model / api_key 环境变量 / 价格 / 探测；密钥只显示变量名
+    i18n_key: cfg.vendors
+  settings.global:
+    short: P4-4
+    label: 全局与存储
+    type: section
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-4
+    behavior: retention、usage.db 存在性与大小、探测默认值、会话 cwd
+    children:
+      - settings.global.list
+  settings.global.list:
+    short: P4-4-L1
+    label: 全局项列表
+    type: list
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-4-L1
+    parent: settings.global
+    i18n_key: cfg.global
+  settings.error:
+    short: P4-5
+    label: 解析失败与只读边界
+    type: section
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-5
+    behavior: 解析失败时的替代卡 + 本轮只读与下一轮写盘策略
+    children:
+      - settings.error.card
+      - settings.error.scope
+  settings.error.card:
+    short: P4-5-T1
+    label: 解析失败卡
+    type: component
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-5-T1
+    parent: settings.error
+    aliases:
+      - 报错卡
+    behavior: 解析失败时替代 P4-3 与 P4-4，只给错误行与文件路径
+    i18n_key: cfg.errTitle
+  settings.error.scope:
+    short: P4-5-L1
+    label: 只读边界说明
+    type: list
+    status: proposed
+    stage_created: hifi
+    fidelities:
+      wireframe: null
+      hifi: pages/settings/hifi/current/screens/01-settings.html#P4-5-L1
+    parent: settings.error
+    aliases:
+      - 写盘策略
+      - 密钥纪律
+    i18n_key: cfg.b1.title

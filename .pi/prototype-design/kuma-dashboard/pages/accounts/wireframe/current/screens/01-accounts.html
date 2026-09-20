@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN" class="dark" data-wireframe="accounts">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpi-kuma 账户页 — 线框</title>
+<style>
+    /* 与 dashboard 页同一套四基础 token（值出自项目根 THEMES.md） */
+    :root,
+    .dark {
+      --background: oklch(0.2679 0.0036 106.6427);
+      --foreground: oklch(0.8074 0.0142 93.0137);
+      --border: oklch(0.3618 0.0101 106.8928);
+      --muted: oklch(0.2213 0.0038 106.7070);
+    }
+    html:not(.dark) {
+      --background: oklch(0.9818 0.0054 95.0986);
+      --foreground: oklch(0.3438 0.0269 95.7226);
+      --border: oklch(0.8847 0.0069 97.3627);
+      --muted: oklch(0.9341 0.0153 90.2390);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .wf-dim { color: color-mix(in oklab, var(--foreground) 60%, transparent); }
+    .wf-mono-cell { font-variant-numeric: tabular-nums; }
+
+    .wf-page {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    [data-wireframe-block] {
+      position: relative;
+      border: 1px dashed var(--border);
+      padding: 16px;
+    }
+    [data-wireframe-block]::after {
+      content: attr(data-wireframe-block) " · " attr(data-priority);
+      position: absolute;
+      top: -1px;
+      right: -1px;
+      padding: 0 4px;
+      background: var(--muted);
+      border-left: 1px dashed var(--border);
+      border-bottom: 1px dashed var(--border);
+      font-size: 10px;
+      color: color-mix(in oklab, var(--foreground) 60%, transparent);
+    }
+
+    .wf-row { display: flex; gap: 8px; align-items: center; }
+    .wf-box { border: 1px solid var(--border); background: var(--muted); padding: 8px; }
+    .wf-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+
+    button {
+      font: inherit;
+      color: var(--foreground);
+      background: var(--background);
+      border: 1px solid var(--border);
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    /* 账户列表：与 dashboard 的供应商列表同一套行式布局 */
+    .wf-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .wf-table th,
+    .wf-table td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+    .wf-table thead th { background: var(--muted); }
+    .wf-table tfoot td { border-top: 1px solid var(--border); border-bottom: 0; font-weight: 700; }
+
+    /* 数据来源标记：靠边线样式区分三档，不引入新颜色 */
+    .wf-src { border: 1px solid var(--border); padding: 0 4px; font-size: 10px; }
+    .wf-src[data-src="api"] { border-style: solid; }
+    .wf-src[data-src="oauth"] { border-style: dashed; }
+    .wf-src[data-src="manual"] { border-style: dotted; }
+
+    .wf-steps { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+    .wf-steps li { border: 1px solid var(--border); background: var(--muted); padding: 8px; }
+</style>
+<style data-badge-system>
+:root {
+  --badge-display: block;
+}
+[data-semantic-badge] {
+  position: relative;
+}
+[data-semantic-badge]::before {
+  content: attr(data-semantic-badge);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1000;
+  display: var(--badge-display);
+  padding: 2px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #4f46e5;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+}
+[data-semantic-badge][data-status="proposed"]::before {
+  background: #f59e0b;
+}
+[data-semantic-badge][data-status="confirmed"]::before {
+  background: #4f46e5;
+}
+[data-semantic-badge][data-status="locked"]::before {
+  background: #4b5563;
+}
+[data-semantic-badge][data-type="panel"]::before {
+  background: #7c3aed;
+}
+.badge-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.badge-toggle-label {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+.badge-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4f46e5;
+  border: none;
+  border-radius: 6px;
+}
+.badge-toggle button.off {
+  background: #4b5563;
+}
+</style>
+</head>
+<body>
+  <div class="wf-page">
+
+    <header id="P3-1" data-wireframe-block="acct-header" data-priority="P0" data-semantic-badge="P3-1" data-status="proposed" data-type="section">
+      <div class="wf-row" style="justify-content:space-between">
+        <div>
+          <h1 style="margin:0;font-size:14px">供应商账户</h1>
+          <div class="wf-dim">余额单位与供应商计费币种一致 · 手动值标注为「手工」</div>
+        </div>
+        <div class="wf-row">
+          <a id="P3-1-A1" href="../../../dashboard/wireframe/current/screens/01-dashboard.html" data-semantic-badge="P3-1-A1" data-status="proposed" data-type="link">← 返回主面板</a>
+          <button type="button" id="P3-1-B1" data-semantic-badge="P3-1-B1" data-status="proposed" data-type="button">同步全部余额</button>
+        </div>
+      </div>
+    </header>
+
+    <section id="P3-2" data-wireframe-block="acct-summary" data-priority="P0" data-semantic-badge="P3-2" data-status="proposed" data-type="section">
+      <h2 style="margin:0;font-size:12px">账户概览</h2>
+      <div class="wf-metrics" style="grid-template-columns:repeat(2, 1fr)">
+        <div class="wf-box" id="P3-2-C1" data-semantic-badge="P3-2-C1" data-status="proposed" data-type="component">
+          <div class="wf-dim">累计充值</div>
+          <div class="wf-mono-cell" style="font-size:20px;font-weight:700">¥550.00</div>
+          <div class="wf-dim">来自 4 笔充值记录 · 1 家供应商为手工值</div>
+        </div>
+        <div class="wf-box" id="P3-2-C2" data-semantic-badge="P3-2-C2" data-status="proposed" data-type="component">
+          <div class="wf-dim">当前余额</div>
+          <div class="wf-mono-cell" style="font-size:20px;font-weight:700">¥175.80</div>
+          <div class="wf-dim">其中 ¥125.00 手工值、¥8.20 为授权过期前的旧值</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="P3-3" data-wireframe-block="acct-list" data-priority="P0" data-semantic-badge="P3-3" data-status="proposed" data-type="section">
+        <div class="wf-row" style="justify-content:space-between">
+          <h2 style="margin:0;font-size:12px">供应商账户</h2>
+          <span class="wf-dim">按余额升序 · 余额低的排前面</span>
+        </div>
+        <table class="wf-table" id="P3-3-T1" data-semantic-badge="P3-3-T1" data-status="proposed" data-type="table">
+          <caption class="wf-dim" style="text-align:left;padding-bottom:8px">数据来源标记：实线=API 查询 / 虚线=OAuth 授权 / 点线=手动填写</caption>
+          <thead>
+            <tr>
+              <th scope="col">供应商 · 模型</th>
+              <th scope="col">数据来源</th>
+              <th scope="col">余额</th>
+              <th scope="col">累计充值</th>
+              <th scope="col">最近同步</th>
+              <th scope="col">动作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>OpenAI · gpt-4o-mini</td>
+              <td><span class="wf-src" data-src="api">API 查询</span></td>
+              <td class="wf-mono-cell">¥42.60</td>
+              <td class="wf-mono-cell">¥200.00</td>
+              <td class="wf-mono-cell">今天 15:02</td>
+              <td><button type="button">刷新余额</button></td>
+            </tr>
+            <tr>
+              <td>Anthropic · claude-3-5-haiku</td>
+              <td><span class="wf-src" data-src="oauth">需授权</span></td>
+              <td class="wf-dim">未知</td>
+              <td class="wf-dim">未知</td>
+              <td class="wf-dim">从未</td>
+              <td><button type="button" id="P3-3-B1" data-semantic-badge="P3-3-B1" data-status="proposed" data-type="button">授权</button></td>
+            </tr>
+            <tr>
+              <td>9router · gpt-4o-mini</td>
+              <td><span class="wf-src" data-src="oauth">授权过期</span></td>
+              <td class="wf-mono-cell">¥8.20 <span class="wf-dim">旧值</span></td>
+              <td class="wf-mono-cell">¥50.00</td>
+              <td class="wf-dim">昨天 09:12</td>
+              <td><button type="button">重新授权</button></td>
+            </tr>
+            <tr>
+              <td>本地 vLLM 代理</td>
+              <td><span class="wf-src" data-src="manual">手动填写</span></td>
+              <td class="wf-mono-cell">¥125.00</td>
+              <td class="wf-mono-cell">¥300.00</td>
+              <td class="wf-dim">手工 · 3 天前</td>
+              <td><button type="button" id="P3-3-B2" data-semantic-badge="P3-3-B2" data-status="proposed" data-type="button">编辑</button></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>合计（2 家数字不可信）</td>
+              <td></td>
+              <td class="wf-mono-cell">¥175.80</td>
+              <td class="wf-mono-cell">¥550.00</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="wf-dim" style="margin-top:8px">降级顺序：先试服务商余额接口 → 不行走 OAuth 授权查询 → 再不行才要求手填。取不到值的行必须给出下一步动作，不留白。</div>
+    </section>
+
+    <section id="P3-4" data-wireframe-block="acct-empty" data-priority="P1" data-semantic-badge="P3-4" data-status="proposed" data-type="section">
+        <div class="wf-row" style="justify-content:space-between">
+          <h2 style="margin:0;font-size:12px">还没有账户信息时显示什么</h2>
+          <span class="wf-dim">空态 · 与主面板空态同一语汇</span>
+        </div>
+        <ol class="wf-steps" id="P3-4-T1" data-semantic-badge="P3-4-T1" data-status="proposed" data-type="list">
+          <li>
+            <strong>没有配供应商</strong>
+            <div class="wf-dim">本页不显示表格，改为一句指引：先去 <code>.pi/xpi-kuma/config.yaml</code> 配一个供应商。</div>
+          </li>
+          <li>
+            <strong>有供应商但一个数字都拿不到</strong>
+            <div class="wf-dim">概览两项显示「未知」而不是 ¥0.00；表格每行都给「授权」或「填写」动作。</div>
+          </li>
+          <li>
+            <strong>三档取数顺序</strong>
+            <div class="wf-dim">1) 服务商余额接口（是否有口子待实现阶段探测）；2) 没有接口就走 OAuth 授权后查询；3) 两条都不通才降级为手动填写。手动值在界面上必须与自动值可区分。</div>
+          </li>
+        </ol>
+    </section>
+
+  </div>
+<script>
+// interactions —— 线框阶段无脚本
+</script>
+<div class="badge-toggle">
+  <span class="badge-toggle-label">🏷️ 语义标注</span>
+  <button type="button" data-badge-system id="badge-toggle-btn">ON</button>
+</div>
+<script data-badge-system>
+(function () {
+  var btn = document.getElementById("badge-toggle-btn");
+  if (!btn) return;
+  var root = document.documentElement;
+  var visible =
+    getComputedStyle(root).getPropertyValue("--badge-display").trim() !== "none";
+  function apply() {
+    root.style.setProperty("--badge-display", visible ? "block" : "none");
+    btn.textContent = visible ? "ON" : "OFF";
+    btn.classList.toggle("off", !visible);
+  }
+  btn.addEventListener("click", function () {
+    visible = !visible;
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

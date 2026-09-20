@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN" class="dark" data-wireframe="dashboard-empty">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpi-kuma 监控面板 — 零数据引导态（线框）</title>
+<style>
+/* 与 01-dashboard.html 同一套 tokens；本文件只追加引导态专用样式 */
+:root, .dark {
+  --background: oklch(0.2679 0.0036 106.6427);
+  --foreground: oklch(0.8074 0.0142 93.0137);
+  --border: oklch(0.3618 0.0101 106.8928);
+  --muted: oklch(0.2213 0.0038 106.7070);
+}
+html:not(.dark) {
+  --background: oklch(0.9818 0.0054 95.0986);
+  --foreground: oklch(0.3438 0.0269 95.7226);
+  --border: oklch(0.8847 0.0069 97.3627);
+  --muted: oklch(0.9341 0.0153 90.2390);
+}
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.wf-page { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.wf-dim { color: color-mix(in oklab, var(--foreground) 60%, transparent); }
+[data-wireframe-block] {
+  position: relative;
+  border: 1px dashed var(--border);
+  padding: 16px;
+}
+[data-wireframe-block]::after {
+  content: attr(data-wireframe-block) " · " attr(data-priority);
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  padding: 0 4px;
+  background: var(--muted);
+  border-left: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border);
+  font-size: 10px;
+  color: color-mix(in oklab, var(--foreground) 60%, transparent);
+}
+.wf-steps { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+.wf-steps li { border: 1px solid var(--border); background: var(--muted); padding: 8px; }
+.wf-steps code { color: inherit; }
+</style>
+<style data-badge-system>
+:root {
+  --badge-display: block;
+}
+[data-semantic-badge] {
+  position: relative;
+}
+[data-semantic-badge]::before {
+  content: attr(data-semantic-badge);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1000;
+  display: var(--badge-display);
+  padding: 2px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #4f46e5;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+}
+[data-semantic-badge][data-status="proposed"]::before {
+  background: #f59e0b;
+}
+[data-semantic-badge][data-status="confirmed"]::before {
+  background: #4f46e5;
+}
+[data-semantic-badge][data-status="locked"]::before {
+  background: #4b5563;
+}
+[data-semantic-badge][data-type="panel"]::before {
+  background: #7c3aed;
+}
+.badge-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.badge-toggle-label {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+.badge-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4f46e5;
+  border: none;
+  border-radius: 6px;
+}
+.badge-toggle button.off {
+  background: #4b5563;
+}
+</style>
+</head>
+<body>
+  <div class="wf-page">
+
+    <header data-wireframe-block="empty-header" data-priority="P0">
+      <h1 style="margin:0;font-size:14px">xpi-kuma 监控面板</h1>
+      <div class="wf-dim">本周期（24小时）没有任何用量记录</div>
+    </header>
+
+    <main>
+      <section id="P2-1" data-wireframe-block="empty-guide" data-priority="P0" data-semantic-badge="P2-1" data-status="proposed" data-type="section">
+        <h2 style="margin:0;font-size:12px">还没有数据 —— 三条路让它出现</h2>
+        <ol class="wf-steps" id="P2-1-L1" data-semantic-badge="P2-1-L1" data-status="proposed" data-type="list">
+          <li>
+            <strong>1. 配置至少一个供应商</strong>
+            <div class="wf-dim">编辑 <code>.pi/xpi-kuma/config.yaml</code> 的 <code>vendors[]</code>，
+              填 <code>endpoint</code> / <code>model</code> / <code>api_key: "${ENV_VAR}"</code>。
+              没有供应商时面板不采集任何用量。</div>
+          </li>
+          <li>
+            <strong>2. 在 Pi 里正常跑一轮会话</strong>
+            <div class="wf-dim">用量由 Pi 的模型调用产生；发一条消息即可写入
+              <code>.pi/xpi-kuma/usage.db</code>。归因维度里的「项目」取自会话的 cwd。</div>
+          </li>
+          <li>
+            <strong>3. 打开探测把供应商状态填上</strong>
+            <div class="wf-dim">给供应商加 <code>probe.enabled: true</code>，或回到主面板点心卡片上的「刷新」做一次即时探测。</div>
+          </li>
+        </ol>
+        <div class="wf-dim" style="margin-top:8px">
+          记录保留 <code>retention.raw_records</code> 天；历史被清理后同样落回本页，不是出错。
+        </div>
+        <div style="margin-top:16px">
+          <a id="P2-1-A1" href="01-dashboard.html" data-semantic-badge="P2-1-A1" data-status="proposed" data-type="link">返回主面板</a>
+          <span class="wf-dim">（数据出现后主面板自动取代本页）</span>
+        </div>
+      </section>
+    </main>
+
+  </div>
+<div class="badge-toggle">
+  <span class="badge-toggle-label">🏷️ 语义标注</span>
+  <button type="button" data-badge-system id="badge-toggle-btn">ON</button>
+</div>
+<script data-badge-system>
+(function () {
+  var btn = document.getElementById("badge-toggle-btn");
+  if (!btn) return;
+  var root = document.documentElement;
+  var visible =
+    getComputedStyle(root).getPropertyValue("--badge-display").trim() !== "none";
+  function apply() {
+    root.style.setProperty("--badge-display", visible ? "block" : "none");
+    btn.textContent = visible ? "ON" : "OFF";
+    btn.classList.toggle("off", !visible);
+  }
+  btn.addEventListener("click", function () {
+    visible = !visible;
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

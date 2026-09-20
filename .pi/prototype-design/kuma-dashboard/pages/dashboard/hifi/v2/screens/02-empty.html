@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpi-kuma 监控面板 — 还没有数据</title>
+<script>
+(function () {
+  try {
+    if (localStorage.getItem("kuma.theme") === "light") document.documentElement.classList.remove("dark");
+    if (localStorage.getItem("kuma.lang") === "en") document.documentElement.lang = "en";
+    if (localStorage.getItem("kuma.family") === "atlas") document.documentElement.setAttribute("data-family", "atlas");
+  } catch (e) { /* 隐私模式等场景忽略 */ }
+})();
+</script>
+<style>
+    /* ── 与主面板同一套 token（THEMES.md 全量，本页只列用到的部分 + 关键字阶） ── */
+    :root {
+      --background: oklch(0.9818 0.0054 95.0986);
+      --foreground: oklch(0.3438 0.0269 95.7226);
+      --card: oklch(0.9818 0.0054 95.0986);
+      --muted: oklch(0.9341 0.0153 90.2390);
+      --muted-foreground: oklch(0.6059 0.0075 97.4233);
+      --accent: oklch(0.9245 0.0138 92.9892);
+      --accent-foreground: oklch(0.2671 0.0196 98.9390);
+      --border: oklch(0.8847 0.0069 97.3627);
+      --ring: oklch(0.6171 0.1375 39.0427);
+      --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --radius: 0.5rem;
+    }
+    .dark {
+      --background: oklch(0.2679 0.0036 106.6427);
+      --foreground: oklch(0.8074 0.0142 93.0137);
+      --card: oklch(0.2679 0.0036 106.6427);
+      --muted: oklch(0.2213 0.0038 106.7070);
+      --muted-foreground: oklch(0.7713 0.0169 99.0657);
+      --accent: oklch(0.2130 0.0078 95.4245);
+      --accent-foreground: oklch(0.9663 0.0080 98.8792);
+      --border: oklch(0.3618 0.0101 106.8928);
+      --ring: oklch(0.6724 0.1308 38.7559);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+    h1 { font-size: 16px; }
+    h2 { font-size: 13px; }
+    a { color: var(--foreground); text-underline-offset: 2px; }
+    code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: var(--muted);
+      border-radius: 3px;
+      padding: 1px 4px;
+    }
+    /* 次要文字：同主面板，60/40 混入 foreground 以满足 AA 正文 4.5:1 */
+    .dim { color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .app {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    button { font: inherit; color: inherit; background: transparent; border: 0; cursor: pointer; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: max(0px, calc(var(--radius) - 4px));
+      background: var(--background);
+      transition: background 120ms ease;
+    }
+    .btn:hover { background: var(--accent-tint, var(--accent)); }
+    .btn-quiet { border-color: transparent; color: var(--muted-foreground); }
+    .btn-quiet:hover { color: var(--foreground); }
+    :focus-visible { outline: 2px solid var(--accent-ink, var(--ring)); outline-offset: 2px; }
+
+    .steps { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+    .steps li {
+      background: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: max(0px, calc(var(--radius) - 4px));
+      padding: 10px 12px;
+    }
+    .steps strong { font-weight: 600; }
+    .step-body { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+
+    /* ── 主题家族覆盖：Atlas（图鉴/印刷风）──
+       来源 docs/references/themes/themes-02.md，色值照抄未改。
+       两套主题家族同名变量值不同（--accent / --radius 等），故用 data-family 隔离。
+       --radius: 0rem 由上面的 max(0px, calc(...)) 兜住负值。 */
+    [data-family="atlas"] {
+      --background: #F7F1E3;
+      --foreground: #082743;
+      --card: #FCF9F0;
+      --card-foreground: #082743;
+      --muted: #EFE9DB;
+      --muted-foreground: #746E5F;
+      --primary: #082743;
+      --primary-foreground: #F7F1E3;
+      --accent: #E96F0A;
+      --accent-foreground: #FCF9F0;
+      --accent-ink: #A9500A;
+      --accent-tint: #F6E7D2;
+      --destructive: #B3261E;
+      --border: #E9E2D8;
+      --border-strong: #082743;
+      --ring: #E96F0A;
+      --chart-1: #E96F0A;
+      --chart-2: #082743;
+      --chart-3: #1B3651;
+      --radius: 0rem;
+      --rule-width: 1.5px;
+      --grid-size: 32px;
+      --grid-line: #EADFCD;
+      --marker-size: 0.625rem;
+    }
+    [data-family="atlas"].dark {
+      --background: #061B2E;
+      --foreground: #F2EADA;
+      --card: #0B2740;
+      --card-foreground: #F7F1E3;
+      --muted: #123253;
+      --muted-foreground: #A79E8C;
+      --primary: #F7F1E3;
+      --primary-foreground: #082743;
+      --accent: #E96F0A;
+      --accent-foreground: #FCF9F0;
+      --accent-ink: #F5A24E;
+      --accent-tint: #3A2408;
+      --destructive: #E5484D;
+      --border: #17395A;
+      --border-strong: #D9C9A8;
+      --ring: #E96F0A;
+      --chart-1: #E96F0A;
+      --chart-2: #F7F1E3;
+      --chart-3: #4C7FA8;
+      --radius: 0rem;
+      --grid-line: #0E2C4A;
+    }
+    /* Atlas 下 --accent 当按压底只有 2.96:1，选中态改用 --primary（两模式 13.5:1） */
+    [data-family="atlas"] .seg button[aria-pressed="true"] {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+</style>
+<style data-badge-system>
+:root {
+  --badge-display: block;
+}
+[data-semantic-badge] {
+  position: relative;
+}
+[data-semantic-badge]::before {
+  content: attr(data-semantic-badge);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1000;
+  display: var(--badge-display);
+  padding: 2px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #4f46e5;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+}
+[data-semantic-badge][data-status="proposed"]::before {
+  background: #f59e0b;
+}
+[data-semantic-badge][data-status="confirmed"]::before {
+  background: #4f46e5;
+}
+[data-semantic-badge][data-status="locked"]::before {
+  background: #4b5563;
+}
+[data-semantic-badge][data-type="panel"]::before {
+  background: #7c3aed;
+}
+.badge-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.badge-toggle-label {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+.badge-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4f46e5;
+  border: none;
+  border-radius: 6px;
+}
+.badge-toggle button.off {
+  background: #4b5563;
+}
+</style>
+</head>
+<body>
+  <div class="app">
+
+    <header class="panel">
+      <div class="panel-head">
+        <div>
+          <h1 data-i18n="empty.title">xpi-kuma 监控面板</h1>
+          <div class="dim" style="font-size:12px" data-i18n="empty.subtitle">本周期（24小时）没有任何用量记录</div>
+        </div>
+        <div class="row">
+          <a class="btn btn-quiet" href="01-dashboard.html" data-i18n="empty.back">← 返回主面板</a>
+          <button class="btn btn-quiet" type="button" id="P2-1-B1" aria-pressed="false" data-semantic-badge="P2-1-B1" data-status="proposed" data-type="toggle">亮色</button>
+          <button class="btn btn-quiet" type="button" id="P2-1-B3" aria-pressed="false" data-semantic-badge="P2-1-B3" data-status="proposed" data-type="toggle">Atlas</button>
+          <button class="btn btn-quiet" type="button" id="P2-1-B2" aria-pressed="false" data-semantic-badge="P2-1-B2" data-status="proposed" data-type="toggle">EN</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="panel" id="P2-1" data-semantic-badge="P2-1" data-status="proposed" data-type="section">
+      <h2 data-i18n="empty.heading">还没有数据 —— 三条路让它出现</h2>
+      <ol class="steps" id="P2-1-L1" data-semantic-badge="P2-1-L1" data-status="proposed" data-type="list">
+        <li>
+          <strong data-i18n="empty.s1.title">1. 配置至少一个供应商</strong>
+          <div class="step-body" data-i18n-html="empty.s1.body">编辑 <code>.pi/xpi-kuma/config.yaml</code> 的 <code>vendors[]</code>，填 <code>endpoint</code> / <code>model</code> / <code>api_key: "${ENV_VAR}"</code>。没有供应商时面板不采集任何用量。</div>
+        </li>
+        <li>
+          <strong data-i18n="empty.s2.title">2. 在 Pi 里正常跑一轮会话</strong>
+          <div class="step-body" data-i18n-html="empty.s2.body">用量由 Pi 的模型调用产生；发一条消息即可写入 <code>.pi/xpi-kuma/usage.db</code>。归因维度里的「项目」取自会话的 cwd。</div>
+        </li>
+        <li>
+          <strong data-i18n="empty.s3.title">3. 打开探测把供应商状态填上</strong>
+          <div class="step-body" data-i18n-html="empty.s3.body">给供应商加 <code>probe.enabled: true</code>，或回到主面板点某一行右侧的「刷新」做一次即时探测。</div>
+        </li>
+      </ol>
+      <div class="dim" style="margin-top:12px;font-size:12px" data-i18n-html="empty.retention">
+        记录保留 <code>retention.raw_records</code> 天；历史被清理后同样落回本页，不是出错。
+      </div>
+      <div class="row" style="margin-top:16px">
+        <a id="P2-1-A1" href="01-dashboard.html" data-i18n="empty.backLink" data-semantic-badge="P2-1-A1" data-status="proposed" data-type="link">返回主面板</a>
+        <span class="dim" style="font-size:12px" data-i18n="empty.backHint">（数据出现后主面板自动取代本页）</span>
+      </div>
+    </section>
+
+  </div>
+
+<script>
+    window.__i18n = {
+      "zh-CN": {
+        "empty.title": "xpi-kuma 监控面板",
+        "empty.subtitle": "本周期（24小时）没有任何用量记录",
+        "empty.back": "← 返回主面板",
+        "empty.heading": "还没有数据 —— 三条路让它出现",
+        "empty.s1.title": "1. 配置至少一个供应商",
+        "empty.s1.body": "编辑 <code>.pi/xpi-kuma/config.yaml</code> 的 <code>vendors[]</code>，填 <code>endpoint</code> / <code>model</code> / <code>api_key: \"${ENV_VAR}\"</code>。没有供应商时面板不采集任何用量。",
+        "empty.s2.title": "2. 在 Pi 里正常跑一轮会话",
+        "empty.s2.body": "用量由 Pi 的模型调用产生；发一条消息即可写入 <code>.pi/xpi-kuma/usage.db</code>。归因维度里的「项目」取自会话的 cwd。",
+        "empty.s3.title": "3. 打开探测把供应商状态填上",
+        "empty.s3.body": "给供应商加 <code>probe.enabled: true</code>，或回到主面板点某一行右侧的「刷新」做一次即时探测。",
+        "empty.retention": "记录保留 <code>retention.raw_records</code> 天；历史被清理后同样落回本页，不是出错。",
+        "empty.backLink": "返回主面板",
+        "empty.backHint": "（数据出现后主面板自动取代本页）",
+        "ui.toLight": "亮色",
+        "ui.toDark": "暗色",
+        "ui.lang": "EN"
+      },
+      "en": {
+        "empty.title": "xpi-kuma dashboard",
+        "empty.subtitle": "No usage recorded in this period (24h)",
+        "empty.back": "← Back to dashboard",
+        "empty.heading": "No data yet — three ways to get some",
+        "empty.s1.title": "1. Configure at least one vendor",
+        "empty.s1.body": "Edit <code>vendors[]</code> in <code>.pi/xpi-kuma/config.yaml</code>: <code>endpoint</code>, <code>model</code>, <code>api_key: \"${ENV_VAR}\"</code>. Without a vendor nothing is collected.",
+        "empty.s2.title": "2. Run one normal Pi session",
+        "empty.s2.body": "Usage comes from Pi model calls; one message is enough to write <code>.pi/xpi-kuma/usage.db</code>. The project dimension is the session cwd.",
+        "empty.s3.title": "3. Turn probing on to fill vendor status",
+        "empty.s3.body": "Set <code>probe.enabled: true</code> for a vendor, or hit “Refresh” on its row in the dashboard.",
+        "empty.retention": "Records are kept for <code>retention.raw_records</code> days; a cleaned-up history lands here too — this is not an error.",
+        "empty.backLink": "Back to dashboard",
+        "empty.backHint": "(the dashboard replaces this page once data arrives)",
+        "ui.toLight": "Light",
+        "ui.toDark": "Dark",
+        "ui.lang": "中"
+      }
+    };
+
+    (function () {
+      "use strict";
+      var state = { lang: "zh-CN", theme: "dark", family: "default" };
+      function t(key) {
+        var table = window.__i18n[state.lang] || window.__i18n["zh-CN"];
+        return table[key] != null ? table[key] : key;
+      }
+      function apply() {
+        document.documentElement.lang = state.lang;
+        document.querySelectorAll("[data-i18n]").forEach(function (node) {
+          node.textContent = t(node.getAttribute("data-i18n"));
+        });
+        document.querySelectorAll("[data-i18n-html]").forEach(function (node) {
+          node.innerHTML = t(node.getAttribute("data-i18n-html"));
+        });
+        document.getElementById("P2-1-B1").textContent = state.theme === "dark" ? t("ui.toLight") : t("ui.toDark");
+        document.getElementById("P2-1-B1").setAttribute("aria-pressed", String(state.theme === "light"));
+        document.getElementById("P2-1-B2").textContent = t("ui.lang");
+        var fb = document.getElementById("P2-1-B3");
+        fb.textContent = state.family === "atlas" ? "Atlas" : "Default";
+        fb.setAttribute("aria-pressed", String(state.family === "atlas"));
+      }
+      document.getElementById("P2-1-B1").addEventListener("click", function () {
+        state.theme = state.theme === "dark" ? "light" : "dark";
+        document.documentElement.classList.toggle("dark", state.theme === "dark");
+        try { localStorage.setItem("kuma.theme", state.theme); } catch (e) { /* 忽略 */ }
+        apply();
+      });
+      document.getElementById("P2-1-B3").addEventListener("click", function () {
+        state.family = state.family === "atlas" ? "default" : "atlas";
+        if (state.family === "atlas") document.documentElement.setAttribute("data-family", "atlas");
+        else document.documentElement.removeAttribute("data-family");
+        try { localStorage.setItem("kuma.family", state.family); } catch (e) { /* 忽略 */ }
+        apply();
+      });
+      document.getElementById("P2-1-B2").addEventListener("click", function () {
+        state.lang = state.lang === "zh-CN" ? "en" : "zh-CN";
+        try { localStorage.setItem("kuma.lang", state.lang); } catch (e) { /* 忽略 */ }
+        apply();
+      });
+      try {
+        var th = localStorage.getItem("kuma.theme");
+        if (th === "light" || th === "dark") state.theme = th;
+        var lg = localStorage.getItem("kuma.lang");
+        if (lg === "en" || lg === "zh-CN") state.lang = lg;
+        var fam = localStorage.getItem("kuma.family");
+        if (fam === "atlas" || fam === "default") state.family = fam;
+      } catch (e) { /* 忽略 */ }
+      apply();
+    })();
+</script>
+<div class="badge-toggle">
+  <span class="badge-toggle-label">🏷️ 语义标注</span>
+  <button type="button" data-badge-system id="badge-toggle-btn">ON</button>
+</div>
+<script data-badge-system>
+(function () {
+  var btn = document.getElementById("badge-toggle-btn");
+  if (!btn) return;
+  var root = document.documentElement;
+  var visible =
+    getComputedStyle(root).getPropertyValue("--badge-display").trim() !== "none";
+  function apply() {
+    root.style.setProperty("--badge-display", visible ? "block" : "none");
+    btn.textContent = visible ? "ON" : "OFF";
+    btn.classList.toggle("off", !visible);
+  }
+  btn.addEventListener("click", function () {
+    visible = !visible;
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

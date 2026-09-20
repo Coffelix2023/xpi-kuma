@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="zh-CN" class="dark" data-wireframe="dashboard">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpi-kuma 监控面板 — 线框</title>
+<style>
+    /* 线框仅取四个基础 token（值出自项目根 THEMES.md，不新增语义色） */
+    :root,
+    .dark {
+      --background: oklch(0.2679 0.0036 106.6427);
+      --foreground: oklch(0.8074 0.0142 93.0137);
+      --border: oklch(0.3618 0.0101 106.8928);
+      --muted: oklch(0.2213 0.0038 106.7070);
+    }
+    html:not(.dark) {
+      --background: oklch(0.9818 0.0054 95.0986);
+      --foreground: oklch(0.3438 0.0269 95.7226);
+      --border: oklch(0.8847 0.0069 97.3627);
+      --muted: oklch(0.9341 0.0153 90.2390);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* 次级文字：用前景色降透明，避免引入第五个 token */
+    .wf-dim { color: color-mix(in oklab, var(--foreground) 60%, transparent); }
+    .wf-mono-cell { font-variant-numeric: tabular-nums; }
+
+    /* 1280 栅格，8pt 间距节奏 */
+    .wf-page {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    main { display: flex; flex-direction: column; gap: 16px; }
+
+    /* 线框块：虚线边界 + 块标签，评审时能看出边界与优先级 */
+    [data-wireframe-block] {
+      position: relative;
+      border: 1px dashed var(--border);
+      padding: 16px;
+    }
+    [data-wireframe-block]::after {
+      content: attr(data-wireframe-block) " · " attr(data-priority);
+      position: absolute;
+      top: -1px;
+      right: -1px;
+      padding: 0 4px;
+      background: var(--muted);
+      border-left: 1px dashed var(--border);
+      border-bottom: 1px dashed var(--border);
+      font-size: 10px;
+      color: color-mix(in oklab, var(--foreground) 60%, transparent);
+    }
+
+    /* 占位符：灰阶色块，标注该处将来放什么 */
+    .wf-box {
+      border: 1px solid var(--border);
+      background: var(--muted);
+      padding: 8px;
+    }
+    .wf-row { display: flex; gap: 8px; align-items: center; }
+    .wf-stack { display: flex; flex-direction: column; gap: 8px; }
+
+    /* 头部控件：分段按钮组 + 普通按钮 */
+    h1 { font-weight: 700; }
+    button {
+      font: inherit;
+      color: var(--foreground);
+      background: var(--background);
+      border: 1px solid var(--border);
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+    button[aria-pressed="true"] { background: var(--muted); font-weight: 700; }
+    .wf-seg { display: flex; gap: 0; }
+    .wf-seg button + button { margin-left: -1px; }
+
+    /* 概览四项指标：等宽四列 */
+    .wf-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    /* 归因明细表 */
+    .wf-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    .wf-table th,
+    .wf-table td {
+      text-align: left;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .wf-table thead th { background: var(--muted); }
+    .wf-table tfoot td {
+      border-top: 1px solid var(--border);
+      border-bottom: 0;
+      font-weight: 700;
+    }
+
+    /* 供应商健康：行列表，替代方块网格（方块太占垂直空间） */
+    .wf-list {
+      margin: 8px 0 0;
+      padding: 0;
+      list-style: none;
+      border-top: 1px solid var(--border);
+    }
+    .wf-list-row {
+      display: grid;
+      grid-template-columns: 16px minmax(180px, 1.4fr) 1fr 1fr 1.6fr auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 32px;
+      padding: 0 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .wf-list-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* 状态指示灯：线框阶段用形状区分三态（实心/空心/虚线），上色留到 hifi */
+    .wf-lamp {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      justify-self: center;
+    }
+    .wf-lamp[data-state="up"] { background: var(--foreground); }
+    .wf-lamp[data-state="down"] { background: var(--background); border: 2px solid var(--foreground); }
+    .wf-lamp[data-state="unknown"] { border: 1px dashed var(--foreground); }
+
+    /* 趋势图占位：斜纹填充表示「将来是图表」 */
+    .wf-chart {
+      height: 200px;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      background: repeating-linear-gradient(
+        45deg,
+        var(--muted) 0 8px,
+        var(--background) 8px 16px
+      );
+    }
+</style>
+<style data-badge-system>
+:root {
+  --badge-display: block;
+}
+[data-semantic-badge] {
+  position: relative;
+}
+[data-semantic-badge]::before {
+  content: attr(data-semantic-badge);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1000;
+  display: var(--badge-display);
+  padding: 2px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #4f46e5;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+}
+[data-semantic-badge][data-status="proposed"]::before {
+  background: #f59e0b;
+}
+[data-semantic-badge][data-status="confirmed"]::before {
+  background: #4f46e5;
+}
+[data-semantic-badge][data-status="locked"]::before {
+  background: #4b5563;
+}
+[data-semantic-badge][data-type="panel"]::before {
+  background: #7c3aed;
+}
+.badge-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.badge-toggle-label {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+.badge-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4f46e5;
+  border: none;
+  border-radius: 6px;
+}
+.badge-toggle button.off {
+  background: #4b5563;
+}
+</style>
+</head>
+<body>
+  <div class="wf-page">
+
+    <header id="P1-1" data-wireframe-block="header" data-priority="P0" data-semantic-badge="P1-1" data-status="proposed" data-type="section">
+      <div class="wf-row" style="justify-content:space-between">
+        <div>
+          <h1 id="P1-1-T1" style="margin:0;font-size:14px" data-semantic-badge="P1-1-T1" data-status="proposed" data-type="text">xpi-kuma 监控面板</h1>
+          <div class="wf-dim">更新于 14:32:07 · 数据源 .pi/xpi-kuma/usage.db</div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-seg" id="P1-1-S1" role="group" aria-label="时间范围" data-semantic-badge="P1-1-S1" data-status="proposed" data-type="select">
+            <button type="button" data-range="1h">1小时</button>
+            <button type="button" data-range="24h" aria-pressed="true">24小时</button>
+            <button type="button" data-range="7d">7天</button>
+            <button type="button" data-range="30d">30天</button>
+          </div>
+          <button type="button" id="P1-1-B1" aria-pressed="false" data-semantic-badge="P1-1-B1" data-status="proposed" data-type="toggle">亮色</button>
+          <button type="button" id="P1-1-B2" aria-pressed="false" data-semantic-badge="P1-1-B2" data-status="proposed" data-type="toggle">EN</button>
+        </div>
+      </div>
+      <div class="wf-dim" style="margin-top:8px">周期切换同时驱动概览、归因与趋势三块重算。</div>
+    </header>
+
+    <main>
+      <section id="P1-2" data-wireframe-block="overview" data-priority="P0" data-semantic-badge="P1-2" data-status="proposed" data-type="section">
+        <div class="wf-row" style="justify-content:space-between">
+          <h2 style="margin:0;font-size:12px">本期花费概览</h2>
+          <span class="wf-dim">周期 24小时 · 覆盖 2 个项目</span>
+        </div>
+        <div class="wf-metrics">
+          <div class="wf-box" id="P1-2-C1" data-semantic-badge="P1-2-C1" data-status="proposed" data-type="component">
+            <div class="wf-dim">本期花费</div>
+            <div class="wf-mono-cell" style="font-size:20px;font-weight:700">¥12.48</div>
+            <div class="wf-dim">较上一周期 +18%</div>
+          </div>
+          <div class="wf-box" id="P1-2-C2" data-semantic-badge="P1-2-C2" data-status="proposed" data-type="component">
+            <div class="wf-dim">Token 总量</div>
+            <div class="wf-mono-cell" style="font-size:20px;font-weight:700">3,482,910</div>
+            <div class="wf-dim">输入 3.3M · 输出 182K</div>
+          </div>
+          <div class="wf-box" id="P1-2-C3" data-semantic-badge="P1-2-C3" data-status="proposed" data-type="component">
+            <div class="wf-dim">请求数</div>
+            <div class="wf-mono-cell" style="font-size:20px;font-weight:700">1,204</div>
+            <div class="wf-dim">缓存命中率 61%</div>
+          </div>
+          <div class="wf-box" id="P1-2-C4" data-semantic-badge="P1-2-C4" data-status="proposed" data-type="component">
+            <div class="wf-dim">覆盖项目</div>
+            <div class="wf-mono-cell" style="font-size:20px;font-weight:700">2</div>
+            <div class="wf-dim">xpi-kuma · app-web</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="P1-3" data-wireframe-block="attribution" data-priority="P0" data-semantic-badge="P1-3" data-status="proposed" data-type="section">
+        <div class="wf-row" style="justify-content:space-between">
+          <h2 style="margin:0;font-size:12px">用量归因 · 钱花在哪了</h2>
+          <div class="wf-seg" id="P1-3-S1" role="group" aria-label="归因维度" data-semantic-badge="P1-3-S1" data-status="proposed" data-type="select">
+            <button type="button" data-dimension="project" aria-pressed="true">按项目</button>
+            <button type="button" data-dimension="session">按会话</button>
+            <button type="button" data-dimension="provider">按供应商·模型</button>
+          </div>
+        </div>
+        <table class="wf-table" id="P1-3-T1" data-semantic-badge="P1-3-T1" data-status="proposed" data-type="table">
+          <caption class="wf-dim" style="text-align:left;padding-bottom:8px">当前维度：项目(cwd) · 按花费倒序</caption>
+          <thead>
+            <tr>
+              <th scope="col">维度</th>
+              <th scope="col">花费</th>
+              <th scope="col">Token</th>
+              <th scope="col">请求数</th>
+              <th scope="col">占比</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>/Users/me/work/app-web</td>
+              <td class="wf-mono-cell">¥8.02</td>
+              <td class="wf-mono-cell">2,104,880</td>
+              <td class="wf-mono-cell">742</td>
+              <td class="wf-mono-cell">64%</td>
+            </tr>
+            <tr>
+              <td>/Users/me/work/xpi-kuma</td>
+              <td class="wf-mono-cell">¥4.46</td>
+              <td class="wf-mono-cell">1,378,030</td>
+              <td class="wf-mono-cell">462</td>
+              <td class="wf-mono-cell">36%</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>合计</td>
+              <td class="wf-mono-cell">¥12.48</td>
+              <td class="wf-mono-cell">3,482,910</td>
+              <td class="wf-mono-cell">1,204</td>
+              <td class="wf-mono-cell">100%</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="wf-dim" style="margin-top:8px">切换维度只换分组键，列与排序规则不变；会话维度额外显示起始时间。</div>
+      </section>
+
+      <section id="P1-4" data-wireframe-block="vendors" data-priority="P1" data-semantic-badge="P1-4" data-status="proposed" data-type="section">
+        <div class="wf-row" style="justify-content:space-between">
+          <h2 style="margin:0;font-size:12px">供应商健康</h2>
+          <div class="wf-row">
+            <a href="../../../accounts/wireframe/current/screens/01-accounts.html">账户详情 →</a>
+            <button type="button" id="P1-4-B1" data-semantic-badge="P1-4-B1" data-status="proposed" data-type="button">全部刷新</button>
+          </div>
+        </div>
+        <ul class="wf-list" id="P1-4-L1" data-semantic-badge="P1-4-L1" data-status="proposed" data-type="list">
+          <li class="wf-list-row">
+            <span class="wf-lamp" data-state="up" role="img" aria-label="状态：正常"></span>
+            <span class="wf-list-name">OpenAI · gpt-4o-mini</span>
+            <span class="wf-dim wf-mono-cell">TTFT 412 ms</span>
+            <span class="wf-dim wf-mono-cell">探测 14:28</span>
+            <span class="wf-dim wf-mono-cell">¥0.15 / ¥0.60 每千tok</span>
+            <button type="button">刷新</button>
+          </li>
+          <li class="wf-list-row">
+            <span class="wf-lamp" data-state="down" role="img" aria-label="状态：异常"></span>
+            <span class="wf-list-name">Anthropic · claude-3-5-haiku</span>
+            <span class="wf-dim wf-mono-cell">TTFT —</span>
+            <span class="wf-dim wf-mono-cell">探测 13:40</span>
+            <span class="wf-dim wf-mono-cell">¥0.80 / ¥4.00 每千tok</span>
+            <button type="button">刷新</button>
+          </li>
+          <li class="wf-list-row">
+            <span class="wf-lamp" data-state="unknown" role="img" aria-label="状态：未知"></span>
+            <span class="wf-list-name">9router · gpt-4o-mini</span>
+            <span class="wf-dim wf-mono-cell">TTFT —</span>
+            <span class="wf-dim wf-mono-cell">探测已关闭</span>
+            <span class="wf-dim wf-mono-cell">¥0.10 / ¥0.40 每千tok</span>
+            <button type="button">刷新</button>
+          </li>
+        </ul>
+        <div class="wf-dim" style="margin-top:8px">状态只由指示灯表达（实心=正常 / 空心=异常 / 虚线=未知），文字留在 aria-label 里给读屏；三行共约 96px，旧版方块网格约 260px。</div>
+      </section>
+
+      <section id="P1-5" data-wireframe-block="trend" data-priority="P1" data-semantic-badge="P1-5" data-status="proposed" data-type="section">
+        <div class="wf-row" style="justify-content:space-between">
+          <h2 style="margin:0;font-size:12px">费用与 token 趋势</h2>
+          <span class="wf-dim">随上方周期切换重绘</span>
+        </div>
+        <div class="wf-chart" id="P1-5-C1" role="img" aria-label="费用与 token 折线图占位" data-semantic-badge="P1-5-C1" data-status="proposed" data-type="component">
+          <span class="wf-dim">折线图区域 · 每供应商一条实线（费用，左轴）+ token 总量虚线（右轴）</span>
+        </div>
+        <div class="wf-dim" style="margin-top:8px">Chart.js 走 CDN；离线或加载失败时本块整块隐藏并留一句「趋势图不可用（离线）」。</div>
+      </section>
+    </main>
+
+  </div>
+<script>
+// interactions —— 由任务 1.3 之后逐步填充
+</script>
+<div class="badge-toggle">
+  <span class="badge-toggle-label">🏷️ 语义标注</span>
+  <button type="button" data-badge-system id="badge-toggle-btn">ON</button>
+</div>
+<script data-badge-system>
+(function () {
+  var btn = document.getElementById("badge-toggle-btn");
+  if (!btn) return;
+  var root = document.documentElement;
+  var visible =
+    getComputedStyle(root).getPropertyValue("--badge-display").trim() !== "none";
+  function apply() {
+    root.style.setProperty("--badge-display", visible ? "block" : "none");
+    btn.textContent = visible ? "ON" : "OFF";
+    btn.classList.toggle("off", !visible);
+  }
+  btn.addEventListener("click", function () {
+    visible = !visible;
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

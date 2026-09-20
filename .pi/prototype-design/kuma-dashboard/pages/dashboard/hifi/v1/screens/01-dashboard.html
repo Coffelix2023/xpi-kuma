@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpi-kuma 监控面板</title>
+<script>
+// 首帧前应用主题与语言，避免闪烁（任务 4.8 逻辑，此处只做初始套用）
+(function () {
+  try {
+    var t = localStorage.getItem("kuma.theme");
+    if (t === "light") document.documentElement.classList.remove("dark");
+    var l = localStorage.getItem("kuma.lang");
+    if (l === "en") document.documentElement.lang = "en";
+  } catch (e) { /* 隐私模式等场景忽略 */ }
+})();
+</script>
+<style>
+    /* ── THEMES.md 全量 token（照抄；本文件不使用 Tailwind） ── */
+    :root {
+      --background: oklch(0.9818 0.0054 95.0986);
+      --foreground: oklch(0.3438 0.0269 95.7226);
+      --card: oklch(0.9818 0.0054 95.0986);
+      --card-foreground: oklch(0.1908 0.0020 106.5859);
+      --popover: oklch(1.0000 0 0);
+      --popover-foreground: oklch(0.2671 0.0196 98.9390);
+      --primary: oklch(0.6171 0.1375 39.0427);
+      --primary-foreground: oklch(1.0000 0 0);
+      --secondary: oklch(0.9245 0.0138 92.9892);
+      --secondary-foreground: oklch(0.4334 0.0177 98.6048);
+      --muted: oklch(0.9341 0.0153 90.2390);
+      --muted-foreground: oklch(0.6059 0.0075 97.4233);
+      --accent: oklch(0.9245 0.0138 92.9892);
+      --accent-foreground: oklch(0.2671 0.0196 98.9390);
+      --destructive: oklch(0.1908 0.0020 106.5859);
+      --destructive-foreground: oklch(1.0000 0 0);
+      --border: oklch(0.8847 0.0069 97.3627);
+      --input: oklch(0.7621 0.0156 98.3528);
+      --ring: oklch(0.6171 0.1375 39.0427);
+      --chart-1: oklch(0.5583 0.1276 42.9956);
+      --chart-2: oklch(0.6898 0.1581 290.4107);
+      --chart-3: oklch(0.8816 0.0276 93.1280);
+      --chart-4: oklch(0.8822 0.0403 298.1792);
+      --chart-5: oklch(0.5608 0.1348 42.0584);
+      --sidebar: oklch(0.9663 0.0080 98.8792);
+      --sidebar-foreground: oklch(0.3590 0.0051 106.6524);
+      --sidebar-primary: oklch(0.6171 0.1375 39.0427);
+      --sidebar-primary-foreground: oklch(0.9881 0 0);
+      --sidebar-accent: oklch(0.9245 0.0138 92.9892);
+      --sidebar-accent-foreground: oklch(0.3250 0 0);
+      --sidebar-border: oklch(0.9401 0 0);
+      --sidebar-ring: oklch(0.7731 0 0);
+      --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+      --font-serif: "Noto Serif", ui-serif, serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --radius: 0.5rem;
+      --spacing: 0.25rem;
+      --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
+      --shadow-md: 0 1px 3px 0 hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);
+      --shadow-xl: 0 1px 3px 0 hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
+    }
+
+    .dark {
+      --background: oklch(0.2679 0.0036 106.6427);
+      --foreground: oklch(0.8074 0.0142 93.0137);
+      --card: oklch(0.2679 0.0036 106.6427);
+      --card-foreground: oklch(0.9818 0.0054 95.0986);
+      --popover: oklch(0.3085 0.0035 106.6039);
+      --popover-foreground: oklch(0.9211 0.0040 106.4781);
+      --primary: oklch(0.6724 0.1308 38.7559);
+      --primary-foreground: oklch(1.0000 0 0);
+      --secondary: oklch(0.9818 0.0054 95.0986);
+      --secondary-foreground: oklch(0.3085 0.0035 106.6039);
+      --muted: oklch(0.2213 0.0038 106.7070);
+      --muted-foreground: oklch(0.7713 0.0169 99.0657);
+      --accent: oklch(0.2130 0.0078 95.4245);
+      --accent-foreground: oklch(0.9663 0.0080 98.8792);
+      --destructive: oklch(0.6368 0.2078 25.3313);
+      --destructive-foreground: oklch(1.0000 0 0);
+      --border: oklch(0.3618 0.0101 106.8928);
+      --input: oklch(0.4336 0.0113 100.2195);
+      --ring: oklch(0.6724 0.1308 38.7559);
+      --chart-1: oklch(0.5583 0.1276 42.9956);
+      --chart-2: oklch(0.6898 0.1581 290.4107);
+      --chart-3: oklch(0.2130 0.0078 95.4245);
+      --chart-4: oklch(0.3074 0.0516 289.3230);
+      --chart-5: oklch(0.5608 0.1348 42.0584);
+      --sidebar: oklch(0.2357 0.0024 67.7077);
+      --sidebar-foreground: oklch(0.8074 0.0142 93.0137);
+      --sidebar-primary: oklch(0.3250 0 0);
+      --sidebar-primary-foreground: oklch(0.9881 0 0);
+      --sidebar-accent: oklch(0.1680 0.0020 106.6177);
+      --sidebar-accent-foreground: oklch(0.8074 0.0142 93.0137);
+      --sidebar-border: oklch(0.9401 0 0);
+      --sidebar-ring: oklch(0.7731 0 0);
+    }
+
+    /* ── 基础排版 ── */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+    h1 { font-size: 16px; }
+    h2 { font-size: 13px; }
+    a { color: var(--foreground); text-underline-offset: 2px; }
+    .mono, .num { font-family: var(--font-mono); }
+    .num { font-variant-numeric: tabular-nums; }
+    /* 次要文字：THEMES.md 的 muted-foreground 在亮色 + muted 底上只有 3.17:1，
+       这里按 60/40 混入 foreground 得到派生值，四种底色组合均 ≥ 4.5:1（token 未改） */
+    .dim { color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    /* ── 布局骨架（1280 栅格 / 8pt 节奏） ── */
+    .app {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .row { display: flex; align-items: center; gap: 8px; }
+
+    /* ── 焦点与动效基线 ── */
+    :focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+      border-radius: calc(var(--radius) - 4px);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+
+    /* ── 控件：按钮与分段控件 ── */
+    button { font: inherit; color: inherit; background: transparent; border: 0; cursor: pointer; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) - 4px);
+      background: var(--background);
+      color: var(--foreground);
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+    .btn:hover { background: var(--accent); }
+    .btn[disabled] { opacity: 0.55; cursor: default; }
+    .btn-sm { height: 24px; padding: 0 8px; font-size: 12px; }
+    .btn-quiet { border-color: transparent; color: var(--muted-foreground); }
+    .btn-quiet:hover { color: var(--foreground); background: var(--accent); }
+
+    .seg {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) - 4px);
+      overflow: hidden;
+    }
+    .seg button {
+      height: 26px;
+      padding: 0 8px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+      transition: background 120ms ease;
+    }
+    .seg button + button { border-left: 1px solid var(--border); }
+    .seg button:hover { background: var(--accent); }
+    .seg button[aria-pressed="true"] {
+      background: var(--accent);
+      color: var(--accent-foreground);
+      font-weight: 600;
+    }
+
+    /* ── 花费概览：全页视觉最强的一层 ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .metric {
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) - 4px);
+      padding: 12px;
+    }
+    .metric-label {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: var(--muted-foreground);
+    }
+    .metric-value {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.15;
+      margin-top: 4px;
+    }
+    .metric-sub {
+      font-size: 11px;
+      color: var(--muted-foreground);
+      margin-top: 2px;
+    }
+
+    /* ── 归因明细表 ── */
+    .table-wrap { margin-top: 12px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    caption {
+      caption-side: top;
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: var(--muted-foreground);
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      color: var(--muted-foreground);
+      background: var(--muted);
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+    td { padding: 7px 10px; border-top: 1px solid var(--border); }
+    tbody tr:hover { background: var(--accent); }
+    tfoot td {
+      border-top: 1px solid var(--border);
+      font-weight: 600;
+      background: var(--muted);
+    }
+    .num-col { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .path { font-family: var(--font-mono); font-size: 12px; }
+    .mark { display: inline-flex; align-items: center; gap: 8px; }
+    .ratio {
+      position: relative;
+      display: inline-block;
+      width: 72px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--muted);
+      vertical-align: middle;
+    }
+    .ratio i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--foreground); }
+
+    /* ── 供应商健康：行列表 + 指示灯 ── */
+    .vlist { margin-top: 12px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); overflow: hidden; }
+    .vrow {
+      display: grid;
+      grid-template-columns: 20px minmax(180px, 1.4fr) 1fr 1fr 1.4fr auto;
+      align-items: center;
+      gap: 12px;
+      min-height: 36px;
+      padding: 4px 10px;
+    }
+    .vrow + .vrow { border-top: 1px solid var(--border); }
+    .vrow:hover { background: var(--accent); }
+    .vname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vmeta { font-size: 12px; color: var(--muted-foreground); }
+
+    /* 状态指示灯：三态用颜色区分，文字留给读屏 */
+    .lamp {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      justify-self: center;
+      background: var(--muted-foreground);
+    }
+    .lamp[data-state="up"] { background: var(--foreground); box-shadow: 0 0 0 3px color-mix(in oklab, var(--foreground) 18%, transparent); }
+    .lamp[data-state="down"] { background: var(--destructive); box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 22%, transparent); }
+    .lamp[data-state="unknown"] { background: transparent; border: 1px solid var(--muted-foreground); }
+
+    /* 忙碌态：按钮转圈，不换行不跳宽 */
+    .spinner {
+      width: 10px;
+      height: 10px;
+      border: 1.5px solid var(--muted-foreground);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 700ms linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── 趋势：内联 SVG，零外部依赖 ── */
+    .chart-wrap { margin-top: 12px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); padding: 8px 8px 4px; background: var(--background); }
+    .chart { display: block; width: 100%; height: auto; }
+    .chart .grid { stroke: var(--border); stroke-width: 1; }
+    .chart .axis-text { fill: var(--muted-foreground); font-family: var(--font-mono); font-size: 10px; }
+    .chart .line-cost { fill: none; stroke: var(--chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .chart .line-alt { fill: none; stroke: var(--chart-2); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .chart .line-tokens { fill: none; stroke: var(--muted-foreground); stroke-width: 1.5; stroke-dasharray: 4 4; }
+    .chart .area-cost { fill: var(--chart-1); opacity: 0.12; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 8px 8px; font-size: 11px; color: var(--muted-foreground); }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .swatch { width: 10px; height: 2px; border-radius: 2px; }
+    .swatch-cost { background: var(--chart-1); }
+    .swatch-alt { background: var(--chart-2); }
+    .swatch-tokens { background: repeating-linear-gradient(90deg, var(--muted-foreground) 0 4px, transparent 4px 8px); }
+</style>
+<style data-badge-system>
+:root {
+  --badge-display: block;
+}
+[data-semantic-badge] {
+  position: relative;
+}
+[data-semantic-badge]::before {
+  content: attr(data-semantic-badge);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1000;
+  display: var(--badge-display);
+  padding: 2px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #4f46e5;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+}
+[data-semantic-badge][data-status="proposed"]::before {
+  background: #f59e0b;
+}
+[data-semantic-badge][data-status="confirmed"]::before {
+  background: #4f46e5;
+}
+[data-semantic-badge][data-status="locked"]::before {
+  background: #4b5563;
+}
+[data-semantic-badge][data-type="panel"]::before {
+  background: #7c3aed;
+}
+.badge-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.badge-toggle-label {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+.badge-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4f46e5;
+  border: none;
+  border-radius: 6px;
+}
+.badge-toggle button.off {
+  background: #4b5563;
+}
+</style>
+</head>
+<body>
+  <div class="app">
+
+    <header class="panel" id="P1-1" data-semantic-badge="P1-1" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <div>
+          <h1 id="P1-1-T1" data-semantic-badge="P1-1-T1" data-status="proposed" data-type="text">xpi-kuma 监控面板</h1>
+          <div class="dim num" style="font-size:12px">更新于 15:04:22 · 数据源 .pi/xpi-kuma/usage.db</div>
+        </div>
+        <div class="row">
+          <div class="seg" id="P1-1-S1" role="group" aria-label="统计周期" data-semantic-badge="P1-1-S1" data-status="proposed" data-type="select">
+            <button type="button" data-range="1h" aria-pressed="false">1小时</button>
+            <button type="button" data-range="24h" aria-pressed="true">24小时</button>
+            <button type="button" data-range="7d" aria-pressed="false">7天</button>
+            <button type="button" data-range="30d" aria-pressed="false">30天</button>
+          </div>
+          <button class="btn btn-quiet" type="button" id="P1-1-B1" aria-pressed="false" data-semantic-badge="P1-1-B1" data-status="proposed" data-type="toggle">亮色</button>
+          <button class="btn btn-quiet" type="button" id="P1-1-B2" aria-pressed="false" data-semantic-badge="P1-1-B2" data-status="proposed" data-type="toggle">EN</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="panel" id="P1-2" data-semantic-badge="P1-2" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="overview.title">本期花费概览</h2>
+        <span class="dim" style="font-size:12px" id="P1-2-note">周期 24小时 · 覆盖 2 个项目</span>
+      </div>
+      <div class="metrics">
+        <div class="metric" id="P1-2-C1" data-semantic-badge="P1-2-C1" data-status="proposed" data-type="component">
+          <div class="metric-label" data-i18n="overview.cost">本期花费</div>
+          <div class="metric-value">¥12.48</div>
+          <div class="metric-sub" id="P1-2-C1-sub" data-i18n="overview.costSub">较上一周期 +18%</div>
+        </div>
+        <div class="metric" id="P1-2-C2" data-semantic-badge="P1-2-C2" data-status="proposed" data-type="component">
+          <div class="metric-label" data-i18n="overview.tokens">Token 总量</div>
+          <div class="metric-value">3,482,910</div>
+          <div class="metric-sub" data-i18n="overview.tokensSub">输入 3.3M · 输出 182K</div>
+        </div>
+        <div class="metric" id="P1-2-C3" data-semantic-badge="P1-2-C3" data-status="proposed" data-type="component">
+          <div class="metric-label" data-i18n="overview.requests">请求数</div>
+          <div class="metric-value">1,204</div>
+          <div class="metric-sub" data-i18n="overview.requestsSub">缓存命中率 61%</div>
+        </div>
+        <div class="metric" id="P1-2-C4" data-semantic-badge="P1-2-C4" data-status="proposed" data-type="component">
+          <div class="metric-label" data-i18n="overview.projects">覆盖项目</div>
+          <div class="metric-value">2</div>
+          <div class="metric-sub mono">xpi-kuma · app-web</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="P1-3" data-semantic-badge="P1-3" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="attribution.title">用量归因 · 钱花在哪了</h2>
+        <div class="seg" id="P1-3-S1" role="group" aria-label="归因维度" data-semantic-badge="P1-3-S1" data-status="proposed" data-type="select">
+          <button type="button" data-dim="project" aria-pressed="true" data-i18n="attribution.byProject">按项目</button>
+          <button type="button" data-dim="session" aria-pressed="false" data-i18n="attribution.bySession">按会话</button>
+          <button type="button" data-dim="provider" aria-pressed="false" data-i18n="attribution.byProvider">按供应商·模型</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="P1-3-T1" data-semantic-badge="P1-3-T1" data-status="proposed" data-type="table">
+          <caption id="P1-3-cap">当前维度：项目(cwd) · 按花费倒序</caption>
+          <thead>
+            <tr>
+              <th scope="col" data-i18n="attribution.colKey">维度</th>
+              <th scope="col" class="num-col" data-i18n="attribution.colCost">花费</th>
+              <th scope="col" class="num-col" data-i18n="attribution.colTokens">Token</th>
+              <th scope="col" class="num-col" data-i18n="attribution.colRequests">请求数</th>
+              <th scope="col" data-i18n="attribution.colShare">占比</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="path">/Users/me/work/app-web</td>
+              <td class="num-col">¥8.02</td>
+              <td class="num-col">2,104,880</td>
+              <td class="num-col">742</td>
+              <td><span class="mark"><span class="ratio"><i style="width:64%"></i></span><span class="num">64%</span></span></td>
+            </tr>
+            <tr>
+              <td class="path">/Users/me/work/xpi-kuma</td>
+              <td class="num-col">¥4.46</td>
+              <td class="num-col">1,378,030</td>
+              <td class="num-col">462</td>
+              <td><span class="mark"><span class="ratio"><i style="width:36%"></i></span><span class="num">36%</span></span></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td data-i18n="attribution.total">合计</td>
+              <td class="num-col">¥12.48</td>
+              <td class="num-col">3,482,910</td>
+              <td class="num-col">1,204</td>
+              <td class="num">100%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="P1-4" data-semantic-badge="P1-4" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="vendors.title">供应商健康</h2>
+        <div class="row">
+          <a class="btn btn-quiet btn-sm" href="../../../accounts/hifi/current/screens/01-accounts.html" data-i18n="vendors.accounts">账户详情 →</a>
+          <button class="btn btn-sm" type="button" id="P1-4-B1" data-i18n="vendors.refreshAll" data-semantic-badge="P1-4-B1" data-status="proposed" data-type="button">全部刷新</button>
+        </div>
+      </div>
+      <ul class="vlist" id="P1-4-L1" style="list-style:none;padding:0;margin:12px 0 0" data-semantic-badge="P1-4-L1" data-status="proposed" data-type="list">
+        <li class="vrow">
+          <span class="lamp" data-state="up" role="img" aria-label="状态：正常"></span>
+          <span class="vname">OpenAI · gpt-4o-mini</span>
+          <span class="vmeta num">TTFT 412 ms</span>
+          <span class="vmeta num">探测 14:28</span>
+          <span class="vmeta num">¥0.15 / ¥0.60 每千tok</span>
+          <button class="btn btn-sm" type="button">刷新</button>
+        </li>
+        <li class="vrow">
+          <span class="lamp" data-state="down" role="img" aria-label="状态：异常"></span>
+          <span class="vname">Anthropic · claude-3-5-haiku</span>
+          <span class="vmeta num">TTFT —</span>
+          <span class="vmeta num">探测 13:40</span>
+          <span class="vmeta num">¥0.80 / ¥4.00 每千tok</span>
+          <button class="btn btn-sm" type="button">刷新</button>
+        </li>
+        <li class="vrow">
+          <span class="lamp" data-state="unknown" role="img" aria-label="状态：未知"></span>
+          <span class="vname">9router · gpt-4o-mini</span>
+          <span class="vmeta num">TTFT —</span>
+          <span class="vmeta num">探测已关闭</span>
+          <span class="vmeta num">¥0.10 / ¥0.40 每千tok</span>
+          <button class="btn btn-sm" type="button">刷新</button>
+        </li>
+      </ul>
+    </section>
+
+    <section class="panel" id="P1-5" data-semantic-badge="P1-5" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="trend.title">费用与 token 趋势</h2>
+        <span class="dim" style="font-size:12px" data-i18n="trend.note">随上方周期切换重绘</span>
+      </div>
+      <div class="chart-wrap" id="P1-5-C1" data-semantic-badge="P1-5-C1" data-status="proposed" data-type="component">
+        <svg class="chart" viewBox="0 0 1100 210" role="img" aria-labelledby="P1-5-chart-title P1-5-chart-desc">
+          <title id="P1-5-chart-title">费用与 token 趋势（24小时，按 4 小时分桶）</title>
+          <desc id="P1-5-chart-desc">OpenAI 费用峰值出现在 12:00，约 ¥2.14；Anthropic 同步走高但量级更低；token 总量虚线在 12:00 达到 72 万。</desc>
+
+          <!-- 网格与坐标 -->
+          <line class="grid" x1="48" y1="20" x2="1056" y2="20"></line>
+          <line class="grid" x1="48" y1="105" x2="1056" y2="105"></line>
+          <line class="grid" x1="48" y1="190" x2="1056" y2="190"></line>
+          <text class="axis-text" x="42" y="23" text-anchor="end">2.40</text>
+          <text class="axis-text" x="42" y="108" text-anchor="end">1.20</text>
+          <text class="axis-text" x="42" y="193" text-anchor="end">0</text>
+          <text class="axis-text" x="1062" y="23">800k</text>
+          <text class="axis-text" x="1062" y="108">400k</text>
+          <text class="axis-text" x="1062" y="193">0</text>
+
+          <!-- 费用面积与折线（左轴，¥） -->
+          <polygon class="area-cost" points="48,190 48,160.3 249.6,177.3 451.2,124.1 652.8,38.4 854.4,58.3 1056,96.5 1056,190"></polygon>
+          <polyline class="line-cost" points="48,160.3 249.6,177.3 451.2,124.1 652.8,38.4 854.4,58.3 1056,96.5"></polyline>
+          <polyline class="line-alt" points="48,181.5 249.6,185.8 451.2,165.9 652.8,127.7 854.4,117.7 1056,146.8"></polyline>
+
+          <!-- token 总量（右轴，虚线） -->
+          <polyline class="line-tokens" points="48,164.5 249.6,179.8 451.2,124.1 652.8,37 854.4,60.4 1056,100.8"></polyline>
+
+          <!-- 时间轴 -->
+          <text class="axis-text" x="48" y="206" text-anchor="middle">00:00</text>
+          <text class="axis-text" x="249.6" y="206" text-anchor="middle">04:00</text>
+          <text class="axis-text" x="451.2" y="206" text-anchor="middle">08:00</text>
+          <text class="axis-text" x="652.8" y="206" text-anchor="middle">12:00</text>
+          <text class="axis-text" x="854.4" y="206" text-anchor="middle">16:00</text>
+          <text class="axis-text" x="1056" y="206" text-anchor="middle">20:00</text>
+        </svg>
+        <div class="legend">
+          <span><i class="swatch swatch-cost"></i><span data-i18n="trend.openai">OpenAI 费用（左轴 ¥）</span></span>
+          <span><i class="swatch swatch-alt"></i><span data-i18n="trend.anthropic">Anthropic 费用（左轴 ¥）</span></span>
+          <span><i class="swatch swatch-tokens"></i><span data-i18n="trend.tokens">Token 总量（右轴）</span></span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+<script>
+    /* 文案表：zh-CN 为准，en 覆盖同键；data-i18n 指向这里 */
+    window.__i18n = {
+      "zh-CN": {
+        "overview.title": "本期花费概览",
+        "overview.cost": "本期花费",
+        "overview.costSub": "较上一周期 +18%",
+        "overview.tokens": "Token 总量",
+        "overview.tokensSub": "输入 3.3M · 输出 182K",
+        "overview.requests": "请求数",
+        "overview.requestsSub": "缓存命中率 61%",
+        "overview.projects": "覆盖项目",
+        "overview.note": "周期 {p} · 覆盖 2 个项目",
+        "attribution.title": "用量归因 · 钱花在哪了",
+        "attribution.byProject": "按项目",
+        "attribution.bySession": "按会话",
+        "attribution.byProvider": "按供应商·模型",
+        "attribution.colKey": "维度",
+        "attribution.colCost": "花费",
+        "attribution.colTokens": "Token",
+        "attribution.colRequests": "请求数",
+        "attribution.colShare": "占比",
+        "attribution.total": "合计",
+        "attribution.cap": "当前维度：{d} · 按花费倒序",
+        "dim.project": "项目(cwd)",
+        "dim.session": "会话",
+        "dim.provider": "供应商·模型",
+        "vendors.title": "供应商健康",
+        "vendors.accounts": "账户详情 →",
+        "vendors.refreshAll": "全部刷新",
+        "vendors.refresh": "刷新",
+        "trend.title": "费用与 token 趋势",
+        "trend.note": "随上方周期切换重绘",
+        "trend.openai": "OpenAI 费用（左轴 ¥）",
+        "trend.anthropic": "Anthropic 费用（左轴 ¥）",
+        "trend.tokens": "Token 总量（右轴）",
+        "ui.toLight": "亮色",
+        "ui.toDark": "暗色",
+        "ui.lang": "EN",
+        "ui.busy": "探测中…"
+      },
+      "en": {
+        "overview.title": "Spend this period",
+        "overview.cost": "Spend",
+        "overview.costSub": "+18% vs previous period",
+        "overview.tokens": "Total tokens",
+        "overview.tokensSub": "3.3M in · 182K out",
+        "overview.requests": "Requests",
+        "overview.requestsSub": "61% cache hit rate",
+        "overview.projects": "Projects",
+        "overview.note": "period {p} · 2 projects",
+        "attribution.title": "Where the money went",
+        "attribution.byProject": "By project",
+        "attribution.bySession": "By session",
+        "attribution.byProvider": "By provider·model",
+        "attribution.colKey": "Key",
+        "attribution.colCost": "Cost",
+        "attribution.colTokens": "Tokens",
+        "attribution.colRequests": "Requests",
+        "attribution.colShare": "Share",
+        "attribution.total": "Total",
+        "attribution.cap": "Dimension: {d} · sorted by cost",
+        "dim.project": "project (cwd)",
+        "dim.session": "session",
+        "dim.provider": "provider·model",
+        "vendors.title": "Vendor health",
+        "vendors.accounts": "Accounts →",
+        "vendors.refreshAll": "Refresh all",
+        "vendors.refresh": "Refresh",
+        "trend.title": "Cost and token trend",
+        "trend.note": "redrawn with the period above",
+        "trend.openai": "OpenAI cost (left axis ¥)",
+        "trend.anthropic": "Anthropic cost (left axis ¥)",
+        "trend.tokens": "Total tokens (right axis)",
+        "ui.toLight": "Light",
+        "ui.toDark": "Dark",
+        "ui.lang": "中",
+        "ui.busy": "Probing…"
+      }
+    };
+</script>
+<script>
+    (function () {
+      "use strict";
+      var RANGE_LABEL = { "1h": "1小时", "24h": "24小时", "7d": "7天", "30d": "30天" };
+      var RANGE_LABEL_EN = { "1h": "1h", "24h": "24h", "7d": "7d", "30d": "30d" };
+      var DIM_KEY = { project: "dim.project", session: "dim.session", provider: "dim.provider" };
+      var state = { period: "24h", dim: "project", lang: "zh-CN", theme: "dark" };
+
+      function t(key, vars) {
+        var table = window.__i18n[state.lang] || window.__i18n["zh-CN"];
+        var text = table[key] != null ? table[key] : key;
+        if (vars) {
+          Object.keys(vars).forEach(function (k) {
+            text = text.replace("{" + k + "}", vars[k]);
+          });
+        }
+        return text;
+      }
+
+      function $(id) { return document.getElementById(id); }
+
+      function applyLang() {
+        document.documentElement.lang = state.lang;
+        document.querySelectorAll("[data-i18n]").forEach(function (node) {
+          node.textContent = t(node.getAttribute("data-i18n"));
+        });
+        document.querySelectorAll("[data-i18n-aria]").forEach(function (node) {
+          node.setAttribute("aria-label", t(node.getAttribute("data-i18n-aria")));
+        });
+        var langBtn = $("P1-1-B2");
+        if (langBtn) langBtn.textContent = t("ui.lang");
+        var themeBtn = $("P1-1-B1");
+        if (themeBtn) {
+          themeBtn.textContent = state.theme === "dark" ? t("ui.toLight") : t("ui.toDark");
+          themeBtn.setAttribute("aria-pressed", String(state.theme === "light"));
+        }
+        document.querySelectorAll("[data-range]").forEach(function (btn) {
+          btn.textContent = (state.lang === "en" ? RANGE_LABEL_EN : RANGE_LABEL)[btn.getAttribute("data-range")];
+        });
+        document.querySelectorAll(".vrow .btn").forEach(function (btn) {
+          btn.textContent = t("vendors.refresh");
+        });
+        var note = $("P1-2-note");
+        if (note) note.textContent = t("overview.note", { p: (state.lang === "en" ? RANGE_LABEL_EN : RANGE_LABEL)[state.period] });
+        var cap = $("P1-3-cap");
+        if (cap) cap.textContent = t("attribution.cap", { d: t(DIM_KEY[state.dim]) });
+      }
+
+      function persist(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) { /* 忽略 */ }
+      }
+
+      function setTheme(next) {
+        state.theme = next;
+        document.documentElement.classList.toggle("dark", next === "dark");
+        persist("kuma.theme", next);
+        applyLang();
+      }
+
+      function setLang(next) {
+        state.lang = next;
+        persist("kuma.lang", next);
+        applyLang();
+      }
+
+      function markSegment(container, attr, value) {
+        if (!container) return;
+        container.querySelectorAll("button").forEach(function (btn) {
+          btn.setAttribute("aria-pressed", String(btn.getAttribute(attr) === String(value)));
+        });
+      }
+
+      /* 忙碌态：按钮原地换成转圈，结束后原文案复位 */
+      function withBusy(btn, run) {
+        if (!btn) { run(); return; }
+        var label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "";
+        var dot = document.createElement("span");
+        dot.className = "spinner";
+        dot.setAttribute("aria-hidden", "true");
+        btn.appendChild(dot);
+        btn.appendChild(document.createTextNode(" " + t("ui.busy")));
+        setTimeout(function () {
+          btn.disabled = false;
+          btn.textContent = label;
+          run();
+        }, 900);
+      }
+
+      function wire() {
+        var range = $("P1-1-S1");
+        if (range) {
+          range.addEventListener("click", function (event) {
+            var btn = event.target.closest("button[data-range]");
+            if (!btn) return;
+            state.period = btn.getAttribute("data-range");
+            markSegment(range, "data-range", state.period);
+            applyLang();
+          });
+        }
+        var dim = $("P1-3-S1");
+        if (dim) {
+          dim.addEventListener("click", function (event) {
+            var btn = event.target.closest("button[data-dim]");
+            if (!btn) return;
+            state.dim = btn.getAttribute("data-dim");
+            markSegment(dim, "data-dim", state.dim);
+            applyLang();
+          });
+        }
+        $("P1-1-B1").addEventListener("click", function () {
+          setTheme(state.theme === "dark" ? "light" : "dark");
+        });
+        $("P1-1-B2").addEventListener("click", function () {
+          setLang(state.lang === "zh-CN" ? "en" : "zh-CN");
+        });
+        $("P1-4-B1").addEventListener("click", function (event) {
+          withBusy(event.currentTarget, function () {});
+        });
+        document.querySelectorAll(".vrow .btn").forEach(function (btn) {
+          btn.addEventListener("click", function () { withBusy(btn, function () {}); });
+        });
+      }
+
+      /* 读回首帧脚本写入的偏好，保证与文档初始态一致 */
+      try {
+        var th = localStorage.getItem("kuma.theme");
+        if (th === "light" || th === "dark") state.theme = th;
+        var lg = localStorage.getItem("kuma.lang");
+        if (lg === "en" || lg === "zh-CN") state.lang = lg;
+      } catch (e) { /* 忽略 */ }
+
+      wire();
+      applyLang();
+    })();
+</script>
+<div class="badge-toggle">
+  <span class="badge-toggle-label">🏷️ 语义标注</span>
+  <button type="button" data-badge-system id="badge-toggle-btn">ON</button>
+</div>
+<script data-badge-system>
+(function () {
+  var btn = document.getElementById("badge-toggle-btn");
+  if (!btn) return;
+  var root = document.documentElement;
+  var visible =
+    getComputedStyle(root).getPropertyValue("--badge-display").trim() !== "none";
+  function apply() {
+    root.style.setProperty("--badge-display", visible ? "block" : "none");
+    btn.textContent = visible ? "ON" : "OFF";
+    btn.classList.toggle("off", !visible);
+  }
+  btn.addEventListener("click", function () {
+    visible = !visible;
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

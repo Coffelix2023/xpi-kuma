@@ -1,0 +1,1038 @@
+<!doctype html>
+<html lang="zh-CN" class="dark" data-family="default">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpi-kuma 配置体检</title>
+<script>
+// 首帧前应用主题与语言，避免闪烁
+(function () {
+  try {
+    if (localStorage.getItem("kuma.theme") === "light") document.documentElement.classList.remove("dark");
+    if (localStorage.getItem("kuma.lang") === "en") document.documentElement.lang = "en";
+    if (localStorage.getItem("kuma.family") === "atlas") document.documentElement.setAttribute("data-family", "atlas");
+  } catch (e) { /* 隐私模式等场景忽略 */ }
+})();
+</script>
+<style>
+    /* ── THEMES.md 全量 token（照抄；本文件不使用 Tailwind） ── */
+    :root {
+      --background: oklch(0.9818 0.0054 95.0986);
+      --foreground: oklch(0.3438 0.0269 95.7226);
+      --card: oklch(0.9818 0.0054 95.0986);
+      --card-foreground: oklch(0.1908 0.0020 106.5859);
+      --popover: oklch(1.0000 0 0);
+      --popover-foreground: oklch(0.2671 0.0196 98.9390);
+      --primary: oklch(0.6171 0.1375 39.0427);
+      --primary-foreground: oklch(1.0000 0 0);
+      --secondary: oklch(0.9245 0.0138 92.9892);
+      --secondary-foreground: oklch(0.4334 0.0177 98.6048);
+      --muted: oklch(0.9341 0.0153 90.2390);
+      --muted-foreground: oklch(0.6059 0.0075 97.4233);
+      --accent: oklch(0.9245 0.0138 92.9892);
+      --accent-foreground: oklch(0.2671 0.0196 98.9390);
+      --destructive: oklch(0.1908 0.0020 106.5859);
+      --destructive-foreground: oklch(1.0000 0 0);
+      --border: oklch(0.8847 0.0069 97.3627);
+      --input: oklch(0.7621 0.0156 98.3528);
+      --ring: oklch(0.6171 0.1375 39.0427);
+      --chart-1: oklch(0.5583 0.1276 42.9956);
+      --chart-2: oklch(0.6898 0.1581 290.4107);
+      --chart-3: oklch(0.8816 0.0276 93.1280);
+      --chart-4: oklch(0.8822 0.0403 298.1792);
+      --chart-5: oklch(0.5608 0.1348 42.0584);
+      --sidebar: oklch(0.9663 0.0080 98.8792);
+      --sidebar-foreground: oklch(0.3590 0.0051 106.6524);
+      --sidebar-primary: oklch(0.6171 0.1375 39.0427);
+      --sidebar-primary-foreground: oklch(0.9881 0 0);
+      --sidebar-accent: oklch(0.9245 0.0138 92.9892);
+      --sidebar-accent-foreground: oklch(0.3250 0 0);
+      --sidebar-border: oklch(0.9401 0 0);
+      --sidebar-ring: oklch(0.7731 0 0);
+      --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+      --font-serif: "Noto Serif", ui-serif, serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --radius: 0.5rem;
+      --spacing: 0.25rem;
+      --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
+      --shadow-md: 0 1px 3px 0 hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);
+      --shadow-xl: 0 1px 3px 0 hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
+    }
+
+    .dark {
+      --background: oklch(0.2679 0.0036 106.6427);
+      --foreground: oklch(0.8074 0.0142 93.0137);
+      --card: oklch(0.2679 0.0036 106.6427);
+      --card-foreground: oklch(0.9818 0.0054 95.0986);
+      --popover: oklch(0.3085 0.0035 106.6039);
+      --popover-foreground: oklch(0.9211 0.0040 106.4781);
+      --primary: oklch(0.6724 0.1308 38.7559);
+      --primary-foreground: oklch(1.0000 0 0);
+      --secondary: oklch(0.9818 0.0054 95.0986);
+      --secondary-foreground: oklch(0.3085 0.0035 106.6039);
+      --muted: oklch(0.2213 0.0038 106.7070);
+      --muted-foreground: oklch(0.7713 0.0169 99.0657);
+      --accent: oklch(0.2130 0.0078 95.4245);
+      --accent-foreground: oklch(0.9663 0.0080 98.8792);
+      --destructive: oklch(0.6368 0.2078 25.3313);
+      --destructive-foreground: oklch(1.0000 0 0);
+      --border: oklch(0.3618 0.0101 106.8928);
+      --input: oklch(0.4336 0.0113 100.2195);
+      --ring: oklch(0.6724 0.1308 38.7559);
+      --chart-1: oklch(0.5583 0.1276 42.9956);
+      --chart-2: oklch(0.6898 0.1581 290.4107);
+      --chart-3: oklch(0.2130 0.0078 95.4245);
+      --chart-4: oklch(0.3074 0.0516 289.3230);
+      --chart-5: oklch(0.5608 0.1348 42.0584);
+      --sidebar: oklch(0.2357 0.0024 67.7077);
+      --sidebar-foreground: oklch(0.8074 0.0142 93.0137);
+      --sidebar-primary: oklch(0.3250 0 0);
+      --sidebar-primary-foreground: oklch(0.9881 0 0);
+      --sidebar-accent: oklch(0.1680 0.0020 106.6177);
+      --sidebar-accent-foreground: oklch(0.8074 0.0142 93.0137);
+      --sidebar-border: oklch(0.9401 0 0);
+      --sidebar-ring: oklch(0.7731 0 0);
+    }
+
+    /* ── 基础排版 ── */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+    h1 { font-size: 16px; }
+    h2 { font-size: 13px; }
+    a { color: var(--foreground); text-underline-offset: 2px; }
+    .mono, .num { font-family: var(--font-mono); }
+    .num { font-variant-numeric: tabular-nums; }
+    /* 次要文字：THEMES.md 的 muted-foreground 在亮色 + muted 底上只有 3.17:1，
+       这里按 60/40 混入 foreground 得到派生值，四种底色组合均 ≥ 4.5:1（token 未改） */
+    .dim { color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    /* ── 布局骨架（1280 栅格 / 8pt 节奏） ── */
+    .app {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .row { display: flex; align-items: center; gap: 8px; }
+
+    /* ── 焦点与动效基线 ── */
+    :focus-visible {
+      outline: 2px solid var(--focus-ring, var(--ring));
+      outline-offset: 2px;
+      border-radius: max(0px, calc(var(--radius) - 4px));
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+
+    /* ── 控件：按钮与分段控件 ── */
+    button { font: inherit; color: inherit; background: transparent; border: 0; cursor: pointer; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: max(0px, calc(var(--radius) - 4px));
+      background: var(--background);
+      color: var(--foreground);
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+    .btn:hover { background: var(--hover-bg, var(--accent)); }
+    .btn[disabled] { opacity: 0.55; cursor: default; }
+    .btn-sm { height: 24px; padding: 0 8px; font-size: 12px; }
+    .btn-quiet { border-color: transparent; color: var(--muted-foreground); }
+    .btn-quiet:hover { color: var(--foreground); background: var(--hover-bg, var(--accent)); }
+
+    .seg {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: max(0px, calc(var(--radius) - 4px));
+      overflow: hidden;
+    }
+    .seg button {
+      height: 26px;
+      padding: 0 8px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+      transition: background 120ms ease;
+    }
+    .seg button + button { border-left: 1px solid var(--border); }
+    .seg button:hover { background: var(--hover-bg, var(--accent)); }
+    .seg button[aria-pressed="true"] {
+      background: var(--hover-bg, var(--accent));
+      color: var(--accent-foreground);
+      font-weight: 600;
+    }
+
+    /* ── 花费概览：全页视觉最强的一层 ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .metric {
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: max(0px, calc(var(--radius) - 4px));
+      padding: 12px;
+    }
+    .metric-label {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: var(--muted-foreground);
+    }
+    .metric-value {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.15;
+      margin-top: 4px;
+    }
+    .metric-sub {
+      font-size: 11px;
+      color: var(--muted-foreground);
+      margin-top: 2px;
+    }
+
+    /* ── 归因明细表 ── */
+    .table-wrap { margin-top: 12px; border: 1px solid var(--border); border-radius: max(0px, calc(var(--radius) - 4px)); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    caption {
+      caption-side: top;
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: var(--muted-foreground);
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      color: var(--muted-foreground);
+      background: var(--muted);
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+    td { padding: 7px 10px; border-top: 1px solid var(--border); }
+    tbody tr:hover { background: var(--hover-bg, var(--accent)); }
+    tfoot td {
+      border-top: 1px solid var(--border);
+      font-weight: 600;
+      background: var(--muted);
+    }
+    .num-col { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .path { font-family: var(--font-mono); font-size: 12px; }
+    .mark { display: inline-flex; align-items: center; gap: 8px; }
+    .ratio {
+      position: relative;
+      display: inline-block;
+      width: 72px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--muted);
+      vertical-align: middle;
+    }
+    .ratio i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--foreground); }
+
+    /* ── 供应商健康：行列表 + 指示灯 ── */
+    .vlist { margin-top: 12px; border: 1px solid var(--border); border-radius: max(0px, calc(var(--radius) - 4px)); overflow: hidden; }
+    .vrow {
+      display: grid;
+      grid-template-columns: 20px minmax(180px, 1.4fr) 1fr 1fr 1.4fr auto;
+      align-items: center;
+      gap: 12px;
+      min-height: 36px;
+      padding: 4px 10px;
+    }
+    .vrow + .vrow { border-top: 1px solid var(--border); }
+    .vrow:hover { background: var(--hover-bg, var(--accent)); }
+    .vname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vmeta { font-size: 12px; color: var(--muted-foreground); }
+
+    /* 状态指示灯：三态用颜色区分，文字留给读屏 */
+    .lamp {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      justify-self: center;
+      background: var(--muted-foreground);
+    }
+    .lamp[data-state="up"] { background: var(--foreground); box-shadow: 0 0 0 3px color-mix(in oklab, var(--foreground) 18%, transparent); }
+    .lamp[data-state="down"] { background: var(--destructive); box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 22%, transparent); }
+    .lamp[data-state="unknown"] { background: transparent; border: 1px solid var(--muted-foreground); }
+
+    /* 忙碌态：按钮转圈，不换行不跳宽 */
+    .spinner {
+      width: 10px;
+      height: 10px;
+      border: 1.5px solid var(--muted-foreground);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 700ms linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── 趋势：内联 SVG，零外部依赖 ── */
+    .chart-wrap { margin-top: 12px; border: 1px solid var(--border); border-radius: max(0px, calc(var(--radius) - 4px)); padding: 8px 8px 4px; background: var(--background); }
+    .chart { display: block; width: 100%; height: auto; }
+    .chart .grid { stroke: var(--border); stroke-width: 1; }
+    .chart .axis-text { fill: var(--muted-foreground); font-family: var(--font-mono); font-size: 10px; }
+    .chart .line-cost { fill: none; stroke: var(--chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .chart .line-alt { fill: none; stroke: var(--chart-2); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .chart .line-tokens { fill: none; stroke: var(--muted-foreground); stroke-width: 1.5; stroke-dasharray: 4 4; }
+    .chart .area-cost { fill: var(--chart-1); opacity: 0.12; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 8px 8px; font-size: 11px; color: var(--muted-foreground); }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .swatch { width: 10px; height: 2px; border-radius: 2px; }
+    .swatch-cost { background: var(--chart-1); }
+    .swatch-alt { background: var(--chart-2); }
+    .swatch-tokens { background: repeating-linear-gradient(90deg, var(--muted-foreground) 0 4px, transparent 4px 8px); }
+
+    /* ── 主题家族覆盖：Atlas（图鉴/印刷风）──
+       来源 docs/references/themes/themes-02.md，色值照抄未改。
+       两套主题家族同名变量值不同（--accent / --radius 等），故用 data-family 隔离。
+       --radius: 0rem 由上面的 max(0px, calc(...)) 兜住负值。 */
+    [data-family="atlas"] {
+      --background: #F2ECDF;
+      --foreground: #1A3A58;
+      --card: #F7F2E6;
+      --card-foreground: #1A3A58;
+      --muted: #EBE4D2;
+      --muted-foreground: #6E6A5E;
+      --primary: #12314E;
+      --primary-foreground: #F6F1E4;
+      --secondary: #E6DECA;
+      --secondary-foreground: #1A3A58;
+      --accent: #DD7A1C;
+      --accent-foreground: #FFF8EA;
+      --destructive: #AF3A2C;
+      --destructive-foreground: #FFF8EA;
+      --border: #24425E;
+      --input: #4A6478;
+      --ring: #DD7A1C;
+      --chart-1: #12314E;
+      --chart-2: #DD7A1C;
+      --chart-3: #7A93AC;
+      --chart-4: #C9B98F;
+      --chart-5: #AF3A2C;
+      --sidebar: #12314E;
+      --sidebar-foreground: #F2ECDF;
+      --sidebar-primary: #DD7A1C;
+      --sidebar-primary-foreground: #FFF8EA;
+      --sidebar-accent: #1E3E5E;
+      --sidebar-accent-foreground: #F2ECDF;
+      --sidebar-border: #2A4A66;
+      --sidebar-ring: #DD7A1C;
+      --radius: 0rem;
+      --grid-size: 32px;
+      --grid-line: #E1D9C5;
+      --track: #D9D4C8;
+    }
+    [data-family="atlas"].dark {
+      --background: #0F2438;
+      --foreground: #E8E1CE;
+      --card: #142C44;
+      --card-foreground: #EDE7D5;
+      --muted: #1A3350;
+      --muted-foreground: #B0AA99;
+      --primary: #E08A3C;
+      --primary-foreground: #14283E;
+      --secondary: #1E3A57;
+      --secondary-foreground: #E8E1CE;
+      --accent: #C8781F;
+      --accent-foreground: #14283E;
+      --destructive: #D9705F;
+      --destructive-foreground: #21100C;
+      --border: #2C4A68;
+      --input: #3A5876;
+      --ring: #E08A3C;
+      --chart-1: #8FB4D6;
+      --chart-2: #E08A3C;
+      --chart-3: #6E88A1;
+      --chart-4: #C9B98F;
+      --chart-5: #D9705F;
+      --sidebar: #0C1F33;
+      --sidebar-foreground: #E8E1CE;
+      --sidebar-primary: #E08A3C;
+      --sidebar-primary-foreground: #14283E;
+      --sidebar-accent: #1E3A57;
+      --sidebar-accent-foreground: #E8E1CE;
+      --sidebar-border: #24466B;
+      --sidebar-ring: #E08A3C;
+      --grid-line: #1B3550;
+      --track: #223E5C;
+    }
+    /* Atlas 下 --accent 当按压底只有 2.96:1，选中态改用 --primary（两模式 13.5:1） */
+    [data-family="atlas"] .seg button[aria-pressed="true"] {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+
+    /* ══ 复古印刷家族（Atlas v2）增量样式 ══
+       配色来自 THEMES.md 的 Atlas-Themes（themes-01）；下列 --hover-bg / --focus-ring
+       / --accent-ink 是本文件级别的派生值，因为 themes-01 没有对应语义色：
+         --accent 直接作正文只有 2.59:1 → --accent-ink 取 accent 60% + foreground 40%（4.57）
+         --ring 橙色作焦点环只有 2.59:1 → --focus-ring 改用 --primary（11.33 亮 / 5.92 暗）
+         hover 用 --accent 在暗色只有 2.60:1 → --hover-bg 改用 --secondary（8.75 / 8.95） */
+    [data-family="atlas"] {
+      --hover-bg: var(--secondary);
+      --focus-ring: var(--primary);
+      --accent-ink: color-mix(in oklab, var(--accent) 60%, var(--foreground));
+    }
+    [data-family="atlas"].dark {
+      --hover-bg: var(--secondary);
+      --focus-ring: var(--primary);
+      --accent-ink: var(--accent);
+    }
+    /* 方格纸底纹 */
+    [data-family="atlas"] body {
+      background-image:
+        repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px var(--grid-size, 32px)),
+        repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px var(--grid-size, 32px));
+    }
+    /* 双线框：外层 1px 描边 + 3px 间隙 + 内层 1px */
+    [data-family="atlas"] .app {
+      outline: 1px solid var(--border);
+      outline-offset: 3px;
+      border: 1px solid var(--border);
+      padding: 24px;
+      margin: 16px auto;
+      max-width: 1240px;
+    }
+    /* 区块标题带：藏青实底 + 米黄字 + 橙色方块标记 */
+    [data-family="atlas"] .panel { border-radius: 0; }
+    [data-family="atlas"] .panel-head {
+      background: var(--sidebar);
+      color: var(--sidebar-foreground);
+      margin: -16px -16px 12px;
+      padding: 7px 12px 7px 26px;
+      position: relative;
+    }
+    [data-family="atlas"] .panel-head h2 { color: inherit; font-weight: 600; }
+    [data-family="atlas"] .panel-head::before {
+      content: "";
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      width: 9px;
+      height: 9px;
+      margin-top: -5px;
+      background: var(--accent);
+    }
+    /* 标题带里的控件要跟着带子反色 */
+    [data-family="atlas"] .panel-head .btn {
+      background: transparent;
+      border-color: color-mix(in oklab, var(--sidebar-foreground) 40%, transparent);
+      color: var(--sidebar-foreground);
+    }
+    [data-family="atlas"] .panel-head .btn:hover {
+      background: color-mix(in oklab, var(--sidebar-foreground) 16%, transparent);
+      color: var(--sidebar-foreground);
+    }
+    [data-family="atlas"] .panel-head .seg { border-color: color-mix(in oklab, var(--sidebar-foreground) 40%, transparent); }
+    [data-family="atlas"] .panel-head .seg button { color: color-mix(in oklab, var(--sidebar-foreground) 78%, transparent); }
+    [data-family="atlas"] .panel-head .seg button + button { border-left-color: color-mix(in oklab, var(--sidebar-foreground) 30%, transparent); }
+    [data-family="atlas"] .panel-head .seg button:hover { background: color-mix(in oklab, var(--sidebar-foreground) 14%, transparent); }
+    [data-family="atlas"] .panel-head .seg button[aria-pressed="true"] { background: var(--accent); color: var(--sidebar); }
+    [data-family="atlas"] .panel-head .dim { color: color-mix(in oklab, var(--sidebar-foreground) 72%, transparent); }
+    /* 卡片：顶部 2px 强调线 */
+    [data-family="atlas"] .metric,
+    [data-family="atlas"] .chart-wrap,
+    [data-family="atlas"] .table-wrap,
+    [data-family="atlas"] .vlist { border-radius: 0; }
+    [data-family="atlas"] .metric { border-top: 2px solid var(--accent); }
+    [data-family="atlas"] .panel { border-top: 2px solid var(--border); }
+    /* 表格：藏青表头 + 发丝分隔线 */
+    [data-family="atlas"] th {
+      background: var(--muted);
+      color: var(--foreground);
+      border-bottom: 1px solid var(--border);
+    }
+    [data-family="atlas"] .metric-value,
+    [data-family="atlas"] .num-col { color: var(--accent-ink, inherit); }
+    [data-family="atlas"] .num-col:last-child { color: inherit; }
+    [data-family="atlas"] tfoot td { background: color-mix(in oklab, var(--muted) 70%, transparent); }
+    [data-family="atlas"] .ratio { background: var(--track, var(--muted)); }
+    [data-family="atlas"] .ratio i { background: var(--accent); }
+    [data-family="atlas"] .lamp[data-state="up"] { background: var(--primary); box-shadow: none; }
+    [data-family="atlas"] .lamp[data-state="down"] { background: var(--destructive); box-shadow: none; }
+    [data-family="atlas"] .lamp[data-state="unknown"] { border-color: var(--muted-foreground); }
+
+    /* ── 右侧索引轨（仅主面板）── */
+    .rail { display: none; }
+    [data-family="atlas"] .rail {
+      display: flex;
+      position: fixed;
+      top: 0;
+      right: 0;
+      z-index: 5;
+      width: 56px;
+      height: 100vh;
+      flex-direction: column;
+      align-items: stretch;
+      background: var(--sidebar);
+      border-left: 1px solid var(--sidebar-border);
+    }
+    [data-family="atlas"] .rail-title {
+      padding: 12px 0;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      line-height: 1.3;
+      color: var(--sidebar-foreground);
+      border-bottom: 1px solid var(--sidebar-border);
+    }
+    [data-family="atlas"] .rail-item {
+      position: relative;
+      height: 56px;
+      font-family: var(--font-mono);
+      font-size: 15px;
+      color: var(--sidebar-foreground);
+      border-bottom: 1px solid var(--sidebar-border);
+    }
+    [data-family="atlas"] .rail-item:hover { background: var(--sidebar-accent); }
+    [data-family="atlas"] .rail-item[aria-current="true"] {
+      background: var(--accent);
+      color: var(--sidebar);
+    }
+    /* 左指缺角 */
+    [data-family="atlas"] .rail-item[aria-current="true"]::before {
+      content: "";
+      position: absolute;
+      left: -8px;
+      top: 50%;
+      margin-top: -8px;
+      border: 8px solid transparent;
+      border-left: 0;
+      border-right-color: var(--accent);
+    }
+    [data-family="atlas"] .rail-foot {
+      margin-top: auto;
+      padding: 12px 0;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      color: color-mix(in oklab, var(--sidebar-foreground) 70%, transparent);
+      border-top: 1px solid var(--sidebar-border);
+    }
+    [data-family="atlas"] body:has(.rail) .app { margin-right: 72px; }
+
+    /* ══ 配置体检页增量样式 ══ 
+       基座样式与 token 逐字复用主面板（含 Default / Atlas 两家族与标题带），
+       这里只加体检表专用规则。 */
+    .kv-grid {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 0 12px;
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: max(0px, calc(var(--radius) - 4px));
+      overflow: hidden;
+    }
+    .kv-grid dt {
+      padding: 8px 12px;
+      background: var(--muted);
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground));
+    }
+    .kv-grid dd {
+      margin: 0;
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .kv-grid dt:first-of-type,
+    .kv-grid dd:first-of-type { border-top: 0; }
+
+    /* 检查结果：符号 + 文字，颜色只作辅助（不靠颜色单独传意） */
+    .chk { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+    .chk-glyph { font-family: var(--font-mono); font-weight: 700; }
+    .chk[data-ok="yes"] .chk-glyph { color: var(--foreground); }
+    .chk[data-ok="no"] .chk-glyph { color: var(--destructive); }
+    .chk[data-ok="na"] .chk-glyph { color: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground)); }
+    .chk-detail { font-family: var(--font-mono); font-size: 12px; }
+    .fix {
+      display: block;
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--accent-ink, inherit);
+    }
+    [data-family="default"] .fix,
+    html:not([data-family="atlas"]) .fix { color: var(--foreground); }
+
+    /* 体检结论条：一行摘要，放在表格上方 */
+    .verdict {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .verdict-chip {
+      border: 1px solid var(--border);
+      border-radius: max(0px, calc(var(--radius) - 4px));
+      padding: 4px 8px;
+      font-size: 12px;
+      background: var(--background);
+    }
+    .verdict-chip strong { font-family: var(--font-mono); }
+</style>
+<style data-badge-system>
+:root {
+  --badge-display: block;
+}
+[data-semantic-badge] {
+  position: relative;
+}
+[data-semantic-badge]::before {
+  content: attr(data-semantic-badge);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1000;
+  display: var(--badge-display);
+  padding: 2px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #4f46e5;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+}
+[data-semantic-badge][data-status="proposed"]::before {
+  background: #f59e0b;
+}
+[data-semantic-badge][data-status="confirmed"]::before {
+  background: #4f46e5;
+}
+[data-semantic-badge][data-status="locked"]::before {
+  background: #4b5563;
+}
+[data-semantic-badge][data-type="panel"]::before {
+  background: #7c3aed;
+}
+.badge-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.badge-toggle-label {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+.badge-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4f46e5;
+  border: none;
+  border-radius: 6px;
+}
+.badge-toggle button.off {
+  background: #4b5563;
+}
+</style>
+</head>
+<body>
+  <div class="app">
+
+    <header class="panel" id="P4-1" data-semantic-badge="P4-1" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <div>
+          <h1 data-i18n="cfg.title">配置体检</h1>
+          <div class="dim" style="font-size:12px" data-i18n="cfg.subtitle">只读检查：不改动任何文件，只把 config.yaml 的真实解析结果摊开</div>
+        </div>
+        <div class="row">
+          <a class="btn btn-quiet btn-sm" id="P4-1-A1" href="../../../dashboard/hifi/current/screens/01-dashboard.html" data-i18n="cfg.back" data-semantic-badge="P4-1-A1" data-status="proposed" data-type="link">← 返回主面板</a>
+          <button class="btn btn-sm" type="button" id="P4-1-B1" data-i18n="cfg.reload" data-semantic-badge="P4-1-B1" data-status="proposed" data-type="button">重新读取</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="panel" id="P4-2" data-semantic-badge="P4-2" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="cfg.file">配置文件</h2>
+        <span class="dim" style="font-size:12px" data-i18n="cfg.readAt">读取于 15:04:22 · 项目级配置优先于全局</span>
+      </div>
+      <dl class="kv-grid" id="P4-2-T1" data-semantic-badge="P4-2-T1" data-status="proposed" data-type="list">
+        <dt data-i18n="cfg.kPath">生效路径</dt>
+        <dd id="P4-2-T2" data-semantic-badge="P4-2-T2" data-status="proposed" data-type="text">/Users/me/work/app-web/.pi/xpi-kuma/config.yaml</dd>
+        <dt data-i18n="cfg.kOrigin">来源</dt>
+        <dd data-i18n="cfg.vOrigin">首次运行时由模板自动生成（src/config.example.yaml），之后一直是你编辑的这份</dd>
+        <dt data-i18n="cfg.kParse">YAML 解析</dt>
+        <dd><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span data-i18n="cfg.vParseOk">通过 · 无语法错误</span></span></dd>
+        <dt data-i18n="cfg.kMtime">修改时间</dt>
+        <dd>2026-09-16 14:58 <span class="dim">（2 小时前）</span></dd>
+      </dl>
+    </section>
+
+    <section class="panel" id="P4-3" data-semantic-badge="P4-3" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="cfg.vendors">供应商体检</h2>
+        <span class="dim" style="font-size:12px" data-i18n="cfg.vendorsNote">4 个供应商 · 3 项待处理</span>
+      </div>
+      <div class="verdict">
+        <span class="verdict-chip"><span data-i18n="cfg.chipFill">必填字段缺</span> <strong>1</strong></span>
+        <span class="verdict-chip"><span data-i18n="cfg.chipEnv">环境变量未设置</span> <strong>1</strong></span>
+        <span class="verdict-chip"><span data-i18n="cfg.chipKey">未配密钥</span> <strong>1</strong></span>
+        <span class="verdict-chip"><span data-i18n="cfg.chipPrice">价格不完整</span> <strong>2</strong></span>
+      </div>
+      <div class="table-wrap">
+        <table id="P4-3-T1" data-semantic-badge="P4-3-T1" data-status="proposed" data-type="table">
+          <thead>
+            <tr>
+              <th scope="col" data-i18n="cfg.cVendor">供应商</th>
+              <th scope="col" data-i18n="cfg.cEndpoint">endpoint</th>
+              <th scope="col" data-i18n="cfg.cModel">model</th>
+              <th scope="col" data-i18n="cfg.cKey">api_key 环境变量</th>
+              <th scope="col" data-i18n="cfg.cPrice">价格 / 千tok</th>
+              <th scope="col" data-i18n="cfg.cProbe">探测</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>OpenAI · gpt-4o-mini</td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">api.openai.com/v1</span></span></td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">gpt-4o-mini</span></span></td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">$OPENAI_API_KEY</span></span><span class="dim" style="font-size:11px" data-i18n="cfg.set">已设置</span></td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">¥0.15 / ¥0.60</span></span></td>
+              <td class="chk-detail" data-i18n="cfg.probeOn">开 · 5m</td>
+            </tr>
+            <tr>
+              <td>Anthropic · claude-3-5-haiku</td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">api.anthropic.com/v1</span></span></td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">claude-3-5-haiku</span></span></td>
+              <td><span class="chk" data-ok="no"><span class="chk-glyph">✗</span><span class="chk-detail">$ANTHROPIC_API_KEY</span></span><span class="dim" style="font-size:11px" data-i18n="cfg.unset">未设置</span><span class="fix" data-i18n="cfg.fixEnv">导出该环境变量，或把 api_key 改成已存在的变量名</span></td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">¥0.80 / ¥4.00</span></span></td>
+              <td class="chk-detail" data-i18n="cfg.probeOff">关 · 用默认 5m</td>
+            </tr>
+            <tr>
+              <td>9router · gpt-4o-mini</td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">api.9router.example/v1</span></span></td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">gpt-4o-mini</span></span></td>
+              <td><span class="chk" data-ok="no"><span class="chk-glyph">✗</span><span data-i18n="cfg.keyMissing">未配置</span></span><span class="fix" data-i18n="cfg.fixKey">补 api_key: "${NINE_ROUTER_API_KEY}"；不带密钥的请求会被服务商拒绝</span></td>
+              <td><span class="chk" data-ok="no"><span class="chk-glyph">✗</span><span data-i18n="cfg.priceIncomplete">缺 price.output</span></span><span class="fix" data-i18n="cfg.fixPrice">price 需要 input 与 output 同为数字，缺一个整体视为未配置，该供应商费用按 ¥0 计</span></td>
+              <td class="chk-detail" data-i18n="cfg.probeOff">关 · 用默认 5m</td>
+            </tr>
+            <tr>
+              <td>本地 vLLM 代理</td>
+              <td><span class="chk" data-ok="no"><span class="chk-glyph">✗</span><span data-i18n="cfg.endpointMissing">缺 endpoint</span></span><span class="fix" data-i18n="cfg.fixEndpoint">endpoint 是必填项，缺失会让整个配置加载失败</span></td>
+              <td><span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span class="chk-detail">qwen2.5-7b-instruct</span></span></td>
+              <td><span class="chk" data-ok="na"><span class="chk-glyph">—</span><span data-i18n="cfg.localNoKey">本地服务，无需密钥</span></span></td>
+              <td><span class="chk" data-ok="no"><span class="chk-glyph">✗</span><span data-i18n="cfg.priceMissing">未配置</span></span><span class="fix" data-i18n="cfg.fixPriceMissing">自建服务可填 0 / 0 表示不计费</span></td>
+              <td class="chk-detail" data-i18n="cfg.probeOff">关 · 用默认 5m</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dim" style="margin-top:8px;font-size:12px" data-i18n="cfg.rules">判定口径照 src/config.ts：name / endpoint / model 必填；api_key 可选；price 需 input 与 output 同为数字；probe 默认关闭、interval 默认 5m、timeout 默认 30000ms。</div>
+    </section>
+
+    <section class="panel" id="P4-4" data-semantic-badge="P4-4" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="cfg.global">全局与存储</h2>
+      </div>
+      <dl class="kv-grid" id="P4-4-L1" data-semantic-badge="P4-4-L1" data-status="proposed" data-type="list">
+        <dt data-i18n="cfg.gRetention">记录保留</dt>
+        <dd>7 <span data-i18n="cfg.days">天</span> <span class="dim" data-i18n="cfg.gRetentionNote">（retention.raw_records 未写，用默认值；超期记录在会话启动时清理）</span></dd>
+        <dt data-i18n="cfg.gDb">用量库</dt>
+        <dd>~/.pi/agent/data/xpi-kuma/usage.db <span class="dim">·</span> <span class="chk" data-ok="yes"><span class="chk-glyph">✓</span><span data-i18n="cfg.gDbOk">存在 · 1.2 MB</span></span></dd>
+        <dt data-i18n="cfg.gProbe">探测默认</dt>
+        <dd data-i18n="cfg.gProbeNote">默认关闭 · interval 5m · timeout 30000ms</dd>
+        <dt data-i18n="cfg.gCwd">会话 cwd</dt>
+        <dd class="mono">/Users/me/work/app-web <span class="dim" data-i18n="cfg.gCwdNote">（项目级配置取这里，不是全局目录）</span></dd>
+      </dl>
+    </section>
+
+    <section class="panel" id="P4-5" data-semantic-badge="P4-5" data-status="proposed" data-type="section">
+      <div class="panel-head">
+        <h2 data-i18n="cfg.errTitle">解析失败时显示什么</h2>
+        <span class="dim" style="font-size:12px" data-i18n="cfg.errNote">fail-closed：不写盘、不用默认值顶替</span>
+      </div>
+      <div id="P4-5-T1" style="border:1px solid var(--border);padding:12px;margin-top:12px" data-semantic-badge="P4-5-T1" data-status="proposed" data-type="component">
+        <div><span class="chk" data-ok="no"><span class="chk-glyph">✗</span><span data-i18n="cfg.errHead">配置文件 YAML 语法错误，已停止加载</span></span></div>
+        <div class="mono" style="margin-top:4px;font-size:12px">vendors[3]: expected a mapping, got a sequence <span class="dim">·</span> <span data-i18n="cfg.errLine">第 24 行</span></div>
+        <div class="dim mono" style="font-size:12px">/Users/me/work/app-web/.pi/xpi-kuma/config.yaml</div>
+        <div class="fix" data-i18n="cfg.errFix">改完那一行再重开面板。在改好之前：不显示供应商表与全局项（避免半截数据误导），也不会替你「修好再写」。</div>
+      </div>
+      <ul class="steps" id="P4-5-L1" data-semantic-badge="P4-5-L1" data-status="proposed" data-type="list">
+        <li>
+          <strong data-i18n="cfg.b1.title">本轮只读</strong>
+          <div class="step-body" data-i18n-html="cfg.b1.body">本页只读取与校验，不产生任何写盘操作。增删改供应商、改价格、改探测开关都在下一轮。</div>
+        </li>
+        <li>
+          <strong data-i18n="cfg.b2.title">下一轮的写盘策略</strong>
+          <div class="step-body" data-i18n-html="cfg.b2.body">用 yaml 的 Document API 定点改（<strong>保留注释与未知字段</strong>）→ 写前生成 <code>config.yaml.bak-&lt;时间戳&gt;</code> → 临时文件 + rename 原子替换 → 删除类操作二次确认。</div>
+        </li>
+        <li>
+          <strong data-i18n="cfg.b3.title">密钥纪律</strong>
+          <div class="step-body" data-i18n-html="cfg.b3.body"><code>api_key</code> 只接受 <code>${ENV_VAR}</code> 形式；已配置的值不回显、不进日志，只显示它指向的环境变量名与是否存在。</div>
+        </li>
+      </ul>
+    </section>
+
+  </div>
+
+<script>
+    /* 文案表：与既有三页同一套键风格；zh-CN 为准，en 覆盖同键 */
+    window.__i18n = {
+      "zh-CN": {
+        "cfg.title": "配置体检",
+        "cfg.subtitle": "只读检查：不改动任何文件，只把 config.yaml 的真实解析结果摊开",
+        "cfg.back": "← 返回主面板",
+        "cfg.reload": "重新读取",
+        "cfg.file": "配置文件",
+        "cfg.readAt": "读取于 15:04:22 · 项目级配置优先于全局",
+        "cfg.kPath": "生效路径",
+        "cfg.kOrigin": "来源",
+        "cfg.vOrigin": "首次运行时由模板自动生成（src/config.example.yaml），之后一直是你编辑的这份",
+        "cfg.kParse": "YAML 解析",
+        "cfg.vParseOk": "通过 · 无语法错误",
+        "cfg.kMtime": "修改时间",
+        "cfg.vendors": "供应商体检",
+        "cfg.vendorsNote": "4 个供应商 · 3 项待处理",
+        "cfg.chipFill": "必填字段缺",
+        "cfg.chipEnv": "环境变量未设置",
+        "cfg.chipKey": "未配密钥",
+        "cfg.chipPrice": "价格不完整",
+        "cfg.cVendor": "供应商",
+        "cfg.cEndpoint": "endpoint",
+        "cfg.cModel": "model",
+        "cfg.cKey": "api_key 环境变量",
+        "cfg.cPrice": "价格 / 千tok",
+        "cfg.cProbe": "探测",
+        "cfg.set": "已设置",
+        "cfg.unset": "未设置",
+        "cfg.fixEnv": "导出该环境变量，或把 api_key 改成已存在的变量名",
+        "cfg.keyMissing": "未配置",
+        "cfg.fixKey": "补 api_key: \"${NINE_ROUTER_API_KEY}\"；不带密钥的请求会被服务商拒绝",
+        "cfg.priceIncomplete": "缺 price.output",
+        "cfg.fixPrice": "price 需要 input 与 output 同为数字，缺一个整体视为未配置，该供应商费用按 ¥0 计",
+        "cfg.endpointMissing": "缺 endpoint",
+        "cfg.fixEndpoint": "endpoint 是必填项，缺失会让整个配置加载失败",
+        "cfg.localNoKey": "本地服务，无需密钥",
+        "cfg.priceMissing": "未配置",
+        "cfg.fixPriceMissing": "自建服务可填 0 / 0 表示不计费",
+        "cfg.probeOn": "开 · 5m",
+        "cfg.probeOff": "关 · 用默认 5m",
+        "cfg.rules": "判定口径照 src/config.ts：name / endpoint / model 必填；api_key 可选；price 需 input 与 output 同为数字；probe 默认关闭、interval 默认 5m、timeout 默认 30000ms。",
+        "cfg.global": "全局与存储",
+        "cfg.gRetention": "记录保留",
+        "cfg.days": "天",
+        "cfg.gRetentionNote": "（retention.raw_records 未写，用默认值；超期记录在会话启动时清理）",
+        "cfg.gDb": "用量库",
+        "cfg.gDbOk": "存在 · 1.2 MB",
+        "cfg.gProbe": "探测默认",
+        "cfg.gProbeNote": "默认关闭 · interval 5m · timeout 30000ms",
+        "cfg.gCwd": "会话 cwd",
+        "cfg.gCwdNote": "（项目级配置取这里，不是全局目录）",
+        "cfg.errTitle": "解析失败时显示什么",
+        "cfg.errNote": "fail-closed：不写盘、不用默认值顶替",
+        "cfg.errHead": "配置文件 YAML 语法错误，已停止加载",
+        "cfg.errLine": "第 24 行",
+        "cfg.errFix": "改完那一行再重开面板。在改好之前：不显示供应商表与全局项（避免半截数据误导），也不会替你「修好再写」。",
+        "cfg.b1.title": "本轮只读",
+        "cfg.b1.body": "本页只读取与校验，不产生任何写盘操作。增删改供应商、改价格、改探测开关都在下一轮。",
+        "cfg.b2.title": "下一轮的写盘策略",
+        "cfg.b2.body": "用 yaml 的 Document API 定点改（<strong>保留注释与未知字段</strong>）→ 写前生成 <code>config.yaml.bak-&lt;时间戳&gt;</code> → 临时文件 + rename 原子替换 → 删除类操作二次确认。",
+        "cfg.b3.title": "密钥纪律",
+        "cfg.b3.body": "<code>api_key</code> 只接受 <code>${ENV_VAR}</code> 形式；已配置的值不回显、不进日志，只显示它指向的环境变量名与是否存在。",
+        "ui.busy": "读取中…"
+      },
+      "en": {
+        "cfg.title": "Config checkup",
+        "cfg.subtitle": "Read-only: nothing is written; it just lays out how config.yaml actually parses",
+        "cfg.back": "← Back to dashboard",
+        "cfg.reload": "Re-read",
+        "cfg.file": "Config file",
+        "cfg.readAt": "read at 15:04:22 · project config wins over global",
+        "cfg.kPath": "Effective path",
+        "cfg.kOrigin": "Origin",
+        "cfg.vOrigin": "generated from the template on first run (src/config.example.yaml); this is the copy you edit",
+        "cfg.kParse": "YAML parse",
+        "cfg.vParseOk": "ok · no syntax errors",
+        "cfg.kMtime": "Modified",
+        "cfg.vendors": "Vendor checkup",
+        "cfg.vendorsNote": "4 vendors · 3 items to fix",
+        "cfg.chipFill": "Missing required",
+        "cfg.chipEnv": "Env var unset",
+        "cfg.chipKey": "No api_key",
+        "cfg.chipPrice": "Price incomplete",
+        "cfg.cVendor": "Vendor",
+        "cfg.cEndpoint": "endpoint",
+        "cfg.cModel": "model",
+        "cfg.cKey": "api_key env var",
+        "cfg.cPrice": "Price / 1k tok",
+        "cfg.cProbe": "Probe",
+        "cfg.set": "set",
+        "cfg.unset": "unset",
+        "cfg.fixEnv": "export that variable, or point api_key at one that exists",
+        "cfg.keyMissing": "missing",
+        "cfg.fixKey": "add api_key: \"${NINE_ROUTER_API_KEY}\"; the provider rejects keyless requests",
+        "cfg.priceIncomplete": "price.output missing",
+        "cfg.fixPrice": "price needs both input and output as numbers; with one missing the whole price is unset and this vendor counts as ¥0",
+        "cfg.endpointMissing": "endpoint missing",
+        "cfg.fixEndpoint": "endpoint is required; missing it fails the whole config load",
+        "cfg.localNoKey": "local service, no key needed",
+        "cfg.priceMissing": "missing",
+        "cfg.fixPriceMissing": "a self-hosted service can use 0 / 0 to mean unbilled",
+        "cfg.probeOn": "on · 5m",
+        "cfg.probeOff": "off · default 5m",
+        "cfg.rules": "Rules follow src/config.ts: name / endpoint / model required; api_key optional; price needs numeric input and output; probe defaults to off, interval 5m, timeout 30000ms.",
+        "cfg.global": "Global and storage",
+        "cfg.gRetention": "Retention",
+        "cfg.days": "days",
+        "cfg.gRetentionNote": "(retention.raw_records unset, using the default; expired rows are pruned at session start)",
+        "cfg.gDb": "Usage DB",
+        "cfg.gDbOk": "present · 1.2 MB",
+        "cfg.gProbe": "Probe defaults",
+        "cfg.gProbeNote": "off by default · interval 5m · timeout 30000ms",
+        "cfg.gCwd": "Session cwd",
+        "cfg.gCwdNote": "(project config is resolved from here, not from the global dir)",
+        "cfg.errTitle": "What shows when parsing fails",
+        "cfg.errNote": "fail-closed: no write, no default substitution",
+        "cfg.errHead": "Config YAML has a syntax error; loading stopped",
+        "cfg.errLine": "line 24",
+        "cfg.errFix": "Fix that line and reopen the panel. Until then: the vendor table and global block are not rendered (no half-truths), and nothing is \"repaired on your behalf\".",
+        "cfg.b1.title": "Read-only this round",
+        "cfg.b1.body": "This page only reads and validates; it performs no writes. Adding, editing and removing vendors, prices and probe switches all land next round.",
+        "cfg.b2.title": "Write strategy for next round",
+        "cfg.b2.body": "Point edits through the yaml Document API (<strong>comments and unknown keys preserved</strong>) → write <code>config.yaml.bak-&lt;timestamp&gt;</code> first → temp file + atomic rename → confirm before deletions.",
+        "cfg.b3.title": "Secret discipline",
+        "cfg.b3.body": "<code>api_key</code> only accepts <code>${ENV_VAR}</code>; stored values are never echoed or logged — only the variable name and whether it exists.",
+        "ui.busy": "Reading…"
+      }
+    };
+</script>
+<script>
+    (function () {
+      "use strict";
+      var state = { lang: "zh-CN", theme: "dark", family: "default" };
+
+      function t(key) {
+        var table = window.__i18n[state.lang] || window.__i18n["zh-CN"];
+        return table[key] != null ? table[key] : key;
+      }
+
+      function apply() {
+        document.documentElement.lang = state.lang;
+        document.querySelectorAll("[data-i18n]").forEach(function (node) {
+          node.textContent = t(node.getAttribute("data-i18n"));
+        });
+        document.querySelectorAll("[data-i18n-html]").forEach(function (node) {
+          node.innerHTML = t(node.getAttribute("data-i18n-html"));
+        });
+        var btn = document.getElementById("P4-1-B1");
+        if (btn && !btn.disabled) btn.textContent = t("cfg.reload");
+      }
+
+      /* 重新读取：本轮原型是静态数据，按钮只做忙碌态，不触碰文件 */
+      document.getElementById("P4-1-B1").addEventListener("click", function () {
+        var btn = this;
+        btn.disabled = true;
+        btn.textContent = "";
+        var dot = document.createElement("span");
+        dot.className = "spinner";
+        dot.setAttribute("aria-hidden", "true");
+        btn.appendChild(dot);
+        btn.appendChild(document.createTextNode(" " + t("ui.busy")));
+        setTimeout(function () {
+          btn.disabled = false;
+          btn.textContent = t("cfg.reload");
+        }, 900);
+      });
+
+      try {
+        var th = localStorage.getItem("kuma.theme");
+        if (th === "light" || th === "dark") state.theme = th;
+        var lg = localStorage.getItem("kuma.lang");
+        if (lg === "en" || lg === "zh-CN") state.lang = lg;
+        var fam = localStorage.getItem("kuma.family");
+        if (fam === "atlas") state.family = fam;
+      } catch (e) { /* 忽略 */ }
+      if (state.family === "atlas") document.documentElement.setAttribute("data-family", "atlas");
+      document.documentElement.classList.toggle("dark", state.theme === "dark");
+      apply();
+    })();
+</script>
+<div class="badge-toggle">
+  <span class="badge-toggle-label">🏷️ 语义标注</span>
+  <button type="button" data-badge-system id="badge-toggle-btn">ON</button>
+</div>
+<script data-badge-system>
+(function () {
+  var btn = document.getElementById("badge-toggle-btn");
+  if (!btn) return;
+  var root = document.documentElement;
+  var visible =
+    getComputedStyle(root).getPropertyValue("--badge-display").trim() !== "none";
+  function apply() {
+    root.style.setProperty("--badge-display", visible ? "block" : "none");
+    btn.textContent = visible ? "ON" : "OFF";
+    btn.classList.toggle("off", !visible);
+  }
+  btn.addEventListener("click", function () {
+    visible = !visible;
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

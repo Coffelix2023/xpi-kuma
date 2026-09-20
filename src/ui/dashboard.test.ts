@@ -234,6 +234,79 @@ describe("服务启动与路由", () => {
     expect(res.status).toBe(404);
   });
 
+  it("归因接口按维度返回聚合结果", async () => {
+    const { collector, server } = await start();
+    collector.record({
+      costCacheRead: 0,
+      costCacheWrite: 0,
+      costInput: 0.01,
+      costOutput: 0.02,
+      costTotal: 0.03,
+      cwd: "/work/app",
+      model: "gpt-4o-mini",
+      provider: "openai",
+      sessionId: "s1",
+      source: "real_usage",
+      timestamp: Date.now(),
+      tokensCacheRead: 0,
+      tokensCacheWrite: 0,
+      tokensInput: 10,
+      tokensOutput: 5,
+    });
+
+    const res = await call(
+      server.port,
+      "/api/attribution?period=24h&dimension=project",
+      {
+        headers: {
+          authorization: `Bearer ${server.token}`,
+        },
+      },
+    );
+
+    expect(res.status).toBe(200);
+    const data = JSON.parse(res.body);
+    expect(data.dimension).toBe("project");
+    expect(data.rows).toEqual([
+      {
+        costTotal: 0.03,
+        key: "/work/app",
+        requestCount: 1,
+        tokens: 15,
+      },
+    ]);
+  });
+
+  it("归因维度默认按项目，非法参数返回 400", async () => {
+    const { server } = await start();
+    const headers = {
+      authorization: `Bearer ${server.token}`,
+    };
+
+    const byDefault = await call(server.port, "/api/attribution", {
+      headers,
+    });
+    expect(byDefault.status).toBe(200);
+    expect(JSON.parse(byDefault.body).dimension).toBe("project");
+
+    const badPeriod = await call(server.port, "/api/attribution?period=99y", {
+      headers,
+    });
+    expect(badPeriod.status).toBe(400);
+
+    const badDimension = await call(server.port, "/api/attribution?dimension=nope", {
+      headers,
+    });
+    expect(badDimension.status).toBe(400);
+  });
+
+  it("归因接口无凭据时返回 401", async () => {
+    const { server } = await start();
+    const res = await call(server.port, "/api/attribution");
+
+    expect(res.status).toBe(401);
+  });
+
   it("单供应商探测路由只探测该家", async () => {
     const { monitor, server } = await start();
     const single = vi.spyOn(monitor, "triggerProbe").mockResolvedValue(null);

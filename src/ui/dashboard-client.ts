@@ -2,27 +2,16 @@ import { apiFragment } from "./client/api.ts";
 import { bootstrapFragment, preferenceBootstrapScript } from "./client/bootstrap.ts";
 import { chartFragment } from "./client/chart.ts";
 import {
-  ATLAS_FAMILY,
   DEFAULT_PERIOD,
-  FAMILY_KEY,
   NO_VENDOR_NOTICE,
   POLL_INTERVAL_MS,
-  THEME_KEY,
 } from "./client/constants.ts";
 import { navFragment } from "./client/nav.ts";
 import { dashboardPageFragment } from "./client/pages/dashboard.ts";
 import { pollFragment } from "./client/poll.ts";
 import { renderFragment } from "./client/render.ts";
 
-export {
-  ATLAS_FAMILY,
-  DEFAULT_PERIOD,
-  FAMILY_KEY,
-  NO_VENDOR_NOTICE,
-  POLL_INTERVAL_MS,
-  preferenceBootstrapScript,
-  THEME_KEY,
-};
+export { NO_VENDOR_NOTICE, POLL_INTERVAL_MS, preferenceBootstrapScript };
 
 /**
  * 主面板页内脚本装配。

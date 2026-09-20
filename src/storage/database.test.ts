@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Sqlite from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ProbeResult, UsageRecord } from "../types.ts";
 import { Database } from "./database.ts";
@@ -14,8 +15,10 @@ function usageRecord(overrides: Partial<UsageRecord> = {}): UsageRecord {
     costInput: 0.001,
     costOutput: 0.002,
     costTotal: 0.003,
+    cwd: "",
     model: "gpt-4",
     provider: "openai",
+    sessionId: "",
     source: "real_usage",
     timestamp: Date.now(),
     tokensCacheRead: 0,
@@ -44,6 +47,11 @@ function probeResult(overrides: Partial<ProbeResult> = {}): ProbeResult {
 /** 跨时间范围统计全部记录，用于断言清理前后的行数。 */
 function totalRequests(db: Database): number {
   return db.getUsageStats("30d").reduce((sum, stats) => sum + stats.requestCount, 0);
+}
+
+/** 对任意行集按取值函数求和，用于断言各维度的总量一致。 */
+function sumOf<T>(rows: T[], pick: (row: T) => number): number {
+  return rows.reduce((sum, row) => sum + pick(row), 0);
 }
 
 const cleanups: (() => void)[] = [];
@@ -302,5 +310,235 @@ describe("cleanOldRecords", () => {
 
     expect(db.cleanOldRecords(30, now)).toBe(1);
     expect(totalRequests(db)).toBe(1);
+  });
+});
+
+describe("schema 迁移", () => {
+  it("旧库自动补齐 cwd / session_id 列，既有记录保留且幂等", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-migrate-"));
+    const dbPath = join(dir, "usage.db");
+    cleanups.push(() =>
+      rmSync(dir, {
+        force: true,
+        recursive: true,
+      }),
+    );
+
+    // 造一个「旧版本」数据库：usage_records 没有 cwd / session_id
+    const legacy = new Sqlite(dbPath);
+    legacy.exec(`
+      CREATE TABLE usage_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        tokens_input INTEGER NOT NULL DEFAULT 0,
+        tokens_output INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_write INTEGER NOT NULL DEFAULT 0,
+        cost_input REAL NOT NULL DEFAULT 0,
+        cost_output REAL NOT NULL DEFAULT 0,
+        cost_cache_read REAL NOT NULL DEFAULT 0,
+        cost_cache_write REAL NOT NULL DEFAULT 0,
+        cost_total REAL NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'real_usage'
+      );
+    `);
+    legacy
+      .prepare(
+        `INSERT INTO usage_records (timestamp, provider, model, cost_total)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(Date.now(), "openai", "gpt-4", 0.5);
+    legacy.close();
+
+    const db = new Database({
+      dbPath,
+    });
+    cleanups.push(() => db.close());
+
+    // 既有记录保留
+    expect(totalRequests(db)).toBe(1);
+    expect(db.getUsageStats("30d")[0]?.costTotal).toBeCloseTo(0.5, 6);
+
+    // 存量记录的新列为空：归因里是「未知」分组，而不是被丢弃
+    expect(db.getAttribution("30d", "project").map((row) => row.key)).toEqual([
+      "",
+    ]);
+
+    // 迁移后的新写入带上项目，与存量记录可区分
+    db.insertUsageRecord(
+      usageRecord({
+        cwd: "/work/app",
+      }),
+    );
+    // 排序按花费倒序，因此不假设两行的先后；只断言两个分组都在且「未知」没被吞掉
+    expect(
+      db
+        .getAttribution("30d", "project")
+        .map((row) => row.key)
+        .sort(),
+    ).toEqual([
+      "",
+      "/work/app",
+    ]);
+    db.close();
+
+    // 幂等：再打开一次不报错，数据不变
+    const again = new Database({
+      dbPath,
+    });
+    cleanups.push(() => again.close());
+    expect(totalRequests(again)).toBe(2);
+  });
+});
+
+describe("getAttribution", () => {
+  it("三个维度的花费、token、请求数总和彼此相等且等于统计总量", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    const parts = [
+      {
+        cwd: "/a",
+        model: "gpt-4",
+        provider: "openai",
+        sessionId: "s1",
+      },
+      {
+        cwd: "/a",
+        model: "gpt-4",
+        provider: "openai",
+        sessionId: "s2",
+      },
+      {
+        cwd: "/b",
+        model: "claude",
+        provider: "anthropic",
+        sessionId: "s1",
+      },
+      {
+        cwd: "",
+        model: "gpt-4",
+        provider: "openai",
+        sessionId: "",
+      },
+    ];
+    for (const part of parts) {
+      db.insertUsageRecord(
+        usageRecord({
+          ...part,
+          costTotal: 0.1,
+          timestamp: now,
+          tokensInput: 10,
+        }),
+      );
+    }
+
+    const stats = db.getUsageStats("24h");
+    const expectedCost = sumOf(stats, (row) => row.costTotal);
+    const expectedTokens = sumOf(stats, (row) => row.totalTokens);
+    const expectedRequests = sumOf(stats, (row) => row.requestCount);
+
+    for (const dimension of [
+      "project",
+      "session",
+      "vendorModel",
+    ] as const) {
+      const rows = db.getAttribution("24h", dimension);
+      expect(
+        sumOf(rows, (row) => row.costTotal),
+        dimension,
+      ).toBeCloseTo(expectedCost, 6);
+      expect(
+        sumOf(rows, (row) => row.tokens),
+        dimension,
+      ).toBe(expectedTokens);
+      expect(
+        sumOf(rows, (row) => row.requestCount),
+        dimension,
+      ).toBe(expectedRequests);
+    }
+  });
+
+  it("按花费倒序排列", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    db.insertUsageRecord(
+      usageRecord({
+        costTotal: 0.1,
+        cwd: "/small",
+        timestamp: now,
+      }),
+    );
+    db.insertUsageRecord(
+      usageRecord({
+        costTotal: 0.9,
+        cwd: "/big",
+        timestamp: now,
+      }),
+    );
+    db.insertUsageRecord(
+      usageRecord({
+        costTotal: 0.5,
+        cwd: "/mid",
+        timestamp: now,
+      }),
+    );
+
+    expect(db.getAttribution("24h", "project").map((row) => row.key)).toEqual([
+      "/big",
+      "/mid",
+      "/small",
+    ]);
+  });
+
+  it("缺少项目与会话信息的记录归入未知分组而不是被丢弃", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    db.insertUsageRecord(
+      usageRecord({
+        cwd: "",
+        sessionId: "",
+        timestamp: now,
+      }),
+    );
+    db.insertUsageRecord(
+      usageRecord({
+        cwd: "",
+        sessionId: "",
+        timestamp: now,
+      }),
+    );
+
+    const project = db.getAttribution("24h", "project");
+    expect(project).toHaveLength(1);
+    expect(project[0]?.key).toBe("");
+    expect(project[0]?.requestCount).toBe(2);
+  });
+
+  it("供应商·模型维度的键是 provider · model", () => {
+    const db = openTempDatabase();
+    db.insertUsageRecord(
+      usageRecord({
+        model: "gpt-4o-mini",
+        provider: "openai",
+      }),
+    );
+
+    expect(db.getAttribution("24h", "vendorModel").map((row) => row.key)).toEqual([
+      "openai · gpt-4o-mini",
+    ]);
+  });
+
+  it("范围外记录不计入", () => {
+    const db = openTempDatabase();
+    db.insertUsageRecord(
+      usageRecord({
+        cwd: "/old",
+        timestamp: Date.now() - 2 * DAY,
+      }),
+    );
+
+    expect(db.getAttribution("24h", "project")).toEqual([]);
   });
 });

@@ -4,6 +4,8 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import Sqlite from "better-sqlite3";
 import type {
   AggregatedStats,
+  AttributionDimension,
+  AttributionRow,
   ProbeResult,
   StatsPeriod,
   UsageRecord,
@@ -38,6 +40,14 @@ function defaultBucketMs(period: StatsPeriod): number {
 }
 
 /** 聚合查询返回的原始行（SQLite 列名为 snake_case）。 */
+/** 归因查询返回的原始行（SQLite 列名为 snake_case）。 */
+interface AttributionDbRow {
+  bucket_key: string | null;
+  cost_total: number;
+  request_count: number;
+  tokens: number;
+}
+
 interface StatsRow {
   cost_cache_read: number;
   cost_cache_write: number;
@@ -90,6 +100,25 @@ export interface DatabaseOptions {
 }
 
 /**
+ * 探测历史查询的两条字面量 SQL。
+ *
+ * 带不带状态过滤的占位符个数不同，SQLite 只能靠两套语句表达；写成字面量而不是
+ * 拼接字符串，既避免注入面，也让两条语句各自可读。
+ */
+const HISTORY_SQL = `SELECT id, timestamp, vendor, model, status, ttft, total_time,
+                tokens_input, tokens_output, error
+         FROM probe_records
+         WHERE vendor = ?
+         ORDER BY timestamp DESC
+         LIMIT ?`;
+
+const HISTORY_SQL_BY_STATUS = `SELECT id, timestamp, vendor, model, status, ttft, total_time,
+                tokens_input, tokens_output, error
+         FROM probe_records
+         WHERE vendor = ? AND status = ?
+         ORDER BY timestamp DESC
+         LIMIT ?`;
+/**
  * SQLite 封装：负责建表、写入与聚合查询。
  *
  * 连接为同步 API，实例在扩展生命周期内长期持有，`close()` 在 shutdown 时调用。
@@ -112,6 +141,7 @@ export class Database {
       this.db.pragma("journal_mode = WAL");
     }
     this.initSchema();
+    this.migrateSchema();
   }
 
   /** 创建两张表及其索引；幂等，可重复调用。 */
@@ -131,7 +161,9 @@ export class Database {
         cost_cache_read REAL NOT NULL DEFAULT 0,
         cost_cache_write REAL NOT NULL DEFAULT 0,
         cost_total REAL NOT NULL DEFAULT 0,
-        source TEXT NOT NULL DEFAULT 'real_usage'
+        source TEXT NOT NULL DEFAULT 'real_usage',
+        cwd TEXT NOT NULL DEFAULT '',
+        session_id TEXT NOT NULL DEFAULT ''
       );
 
       CREATE INDEX IF NOT EXISTS idx_provider_model ON usage_records (provider, model);
@@ -155,6 +187,37 @@ export class Database {
     `);
   }
 
+  /**
+   * 补齐既有数据库缺失的列与索引。
+   *
+   * `CREATE TABLE IF NOT EXISTS` 不会改动已存在的表，老库因此缺少归因所需的
+   * `cwd` / `session_id`。这里按 `PRAGMA table_info` 判断后逐列 `ALTER TABLE ADD
+   * COLUMN`：SQLite 的加列是常数时间、不重写数据，既有记录全部保留，新列取默认空值。
+   *
+   * 幂等，可重复调用。
+   */
+  private migrateSchema(): void {
+    const rows = this.db.prepare("PRAGMA table_info(usage_records)").all() as {
+      name: string;
+    }[];
+    const columns = new Set(rows.map((row) => row.name));
+    // 加列语句写成字面量：SQLite 的 DDL 不支持参数占位符，而这些列名与类型
+    // 都是本文件里写死的，不来自任何外部输入
+    if (!columns.has("cwd")) {
+      this.db.exec("ALTER TABLE usage_records ADD COLUMN cwd TEXT NOT NULL DEFAULT ''");
+    }
+    if (!columns.has("session_id")) {
+      this.db.exec(
+        "ALTER TABLE usage_records ADD COLUMN session_id TEXT NOT NULL DEFAULT ''",
+      );
+    }
+    // 索引必须在列存在之后建：老库上先建索引会因缺列直接报错
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_cwd_timestamp ON usage_records (cwd, timestamp);
+      CREATE INDEX IF NOT EXISTS idx_session_timestamp ON usage_records (session_id, timestamp);
+    `);
+  }
+
   /** 写入一条真实使用量记录，返回自增主键。 */
   insertUsageRecord(record: UsageRecord): number {
     const result = this.db
@@ -162,8 +225,9 @@ export class Database {
         `INSERT INTO usage_records (
           timestamp, provider, model,
           tokens_input, tokens_output, tokens_cache_read, tokens_cache_write,
-          cost_input, cost_output, cost_cache_read, cost_cache_write, cost_total, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          cost_input, cost_output, cost_cache_read, cost_cache_write, cost_total, source,
+          cwd, session_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.timestamp,
@@ -179,6 +243,8 @@ export class Database {
         record.costCacheWrite,
         record.costTotal,
         record.source,
+        record.cwd,
+        record.sessionId,
       );
     return Number(result.lastInsertRowid);
   }
@@ -257,30 +323,57 @@ export class Database {
     }));
   }
 
+  /**
+   * 按维度聚合指定时间范围内的花费与用量，供面板归因表使用。
+   *
+   * 三个维度共用一条字面量查询：分组键用 `CASE` 按**绑定参数**选择，而不是把列名
+   * 拼进 SQL —— 既避免注入面，也不用为每个维度复制一份查询。
+   *
+   * 分组键为空串时原样返回：存量记录没有项目与会话信息，既不丢弃也不并入其他分组，
+   * 由界面显示「未知」。
+   *
+   * 按花费倒序；花费相同时依次用请求数与键名兜底，保证顺序稳定可测。
+   */
+  getAttribution(
+    period: StatsPeriod,
+    dimension: AttributionDimension,
+    now: number = Date.now(),
+  ): AttributionRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT
+           CASE ?
+             WHEN 'project' THEN cwd
+             WHEN 'session' THEN session_id
+             ELSE provider || ' · ' || model
+           END AS bucket_key,
+           SUM(cost_total) AS cost_total,
+           SUM(tokens_input + tokens_output + tokens_cache_read + tokens_cache_write) AS tokens,
+           COUNT(*) AS request_count
+         FROM usage_records
+         WHERE timestamp >= ?
+         GROUP BY bucket_key
+         ORDER BY cost_total DESC, request_count DESC, bucket_key ASC`,
+      )
+      .all(dimension, now - PERIOD_MS[period]) as AttributionDbRow[];
+
+    return rows.map((row) => ({
+      costTotal: row.cost_total,
+      key: row.bucket_key ?? "",
+      requestCount: row.request_count,
+      tokens: row.tokens,
+    }));
+  }
   /** 查询指定供应商最近 N 条探测记录，按时间倒序；可按状态过滤。 */
   getProbeHistory(vendor: string, limit: number, status?: string): ProbeHistoryRow[] {
-    const statusClause = status === undefined ? "" : "AND status = ?";
-    const params: (string | number)[] =
-      status === undefined
-        ? [
-            vendor,
-            limit,
-          ]
-        : [
-            vendor,
-            status,
-            limit,
-          ];
+    // 两条查询各写成字面量：带不带状态过滤的占位符个数不同，SQLite 的可选子句
+    // 无法用绑定参数表达，因此不做字符串拼接 —— 探测状态来自调用方，不该进 SQL 文本
+    if (status === undefined) {
+      return this.db.prepare(HISTORY_SQL).all(vendor, limit) as ProbeHistoryRow[];
+    }
     return this.db
-      .prepare(
-        `SELECT id, timestamp, vendor, model, status, ttft, total_time,
-                tokens_input, tokens_output, error
-         FROM probe_records
-         WHERE vendor = ? ${statusClause}
-         ORDER BY timestamp DESC
-         LIMIT ?`,
-      )
-      .all(...params) as ProbeHistoryRow[];
+      .prepare(HISTORY_SQL_BY_STATUS)
+      .all(vendor, status, limit) as ProbeHistoryRow[];
   }
 
   /**

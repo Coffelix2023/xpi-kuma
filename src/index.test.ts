@@ -12,6 +12,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readConfigTemplate, resolveConfigPath } from "./config.ts";
+import { Database, defaultDatabasePath } from "./storage/database.ts";
+import type { AttributionDimension } from "./types.ts";
 
 /**
  * 记录浏览器打开请求。
@@ -143,6 +145,22 @@ function messageEnd(
   );
 }
 
+/**
+ * 直接读扩展写出的那个 usage.db，按维度取出分组键。
+ *
+ * 归因数据只落库、不经过 footer，因此断言必须查库；测试之间的记录会累积，
+ * 所以一律用 `toContain` 而不是全等。
+ */
+function readAttributionKeys(dimension: AttributionDimension): string[] {
+  const db = new Database({
+    dbPath: defaultDatabasePath(),
+  });
+  try {
+    return db.getAttribution("24h", dimension).map((row) => row.key);
+  } finally {
+    db.close();
+  }
+}
 /** 事件内容对被测逻辑无关，只需要触发 footer 刷新。 */
 function turnEndEvent(): TurnEndEvent {
   return {
@@ -285,6 +303,72 @@ describe("会话生命周期", () => {
     handlers.get("turn_end")?.(turnEndEvent(), turnCtx);
     expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 0");
     await sessionShutdown(handlers, ctx);
+  });
+
+  it("message_end 记录项目路径与会话标识", async () => {
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const cwd = setupCwd();
+    const { ctx } = fakeCtx(cwd);
+    await sessionStart(handlers, ctx);
+
+    const withSession = {
+      cwd,
+      ui: ctx.ui,
+      sessionManager: {
+        getSessionId: () => "sess-1",
+      },
+    } as unknown as ExtensionContext;
+    messageEnd(
+      handlers,
+      {
+        input: 10,
+        output: 5,
+        cost: {
+          total: 0.5,
+        },
+      },
+      withSession,
+    );
+    await sessionShutdown(handlers, ctx);
+
+    expect(readAttributionKeys("project")).toContain(cwd);
+    expect(readAttributionKeys("session")).toContain("sess-1");
+  });
+
+  it("归因元数据取值抛错时仍写入记录，只是归入未知", async () => {
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    const broken = {
+      ui: ctx.ui,
+      get cwd() {
+        throw new Error("no cwd");
+      },
+      sessionManager: {
+        getSessionId: () => {
+          throw new Error("no session");
+        },
+      },
+    } as unknown as ExtensionContext;
+    messageEnd(
+      handlers,
+      {
+        input: 1,
+        output: 1,
+        cost: {
+          total: 0.25,
+        },
+      },
+      broken,
+    );
+    await sessionShutdown(handlers, ctx);
+
+    // 记录仍然写入，只是两个维度都落进「未知」分组
+    expect(readAttributionKeys("project")).toContain("");
+    expect(readAttributionKeys("session")).toContain("");
   });
 
   it("session_shutdown 清除 footer 状态", async () => {

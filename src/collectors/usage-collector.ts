@@ -1,6 +1,8 @@
 import type { Database, TrendSeries } from "../storage/database.ts";
 import type {
   AggregatedStats,
+  AttributionDimension,
+  AttributionRow,
   SessionTotals,
   StatsPeriod,
   UsageRecord,
@@ -50,6 +52,14 @@ export class UsageCollector {
   /** 趋势数据，供面板折线图使用。 */
   getTrend(period: StatsPeriod): TrendSeries[] {
     return this.database.getTrend(period);
+  }
+
+  /** 按项目 / 会话 / 供应商·模型聚合的归因数据。 */
+  getAttribution(
+    period: StatsPeriod,
+    dimension: AttributionDimension,
+  ): AttributionRow[] {
+    return this.database.getAttribution(period, dimension);
   }
 
   /** 当前会话的内存累加值；初始为 0。 */

@@ -38,8 +38,8 @@ const logger = new FileLogger(join(getAgentDir(), "data", "xpi-kuma", "xpi-kuma.
 export default function xpiKuma(pi: ExtensionAPI): void {
   pi.on("session_start", (event, ctx) => startSession(event, ctx));
 
-  pi.on("message_end", (event) => {
-    handleMessageEnd(event);
+  pi.on("message_end", (event, ctx) => {
+    handleMessageEnd(event, ctx);
   });
 
   pi.on("turn_end", (event, ctx) => {
@@ -185,7 +185,7 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
  *
  * 非 assistant 消息或缺少 usage 时不写入任何记录。
  *
- * ## 归因元数据策略（add-kuma-dashboard-pages 任务 1.3 定下，5.1 落地）
+ * ## 归因元数据
  *
  * 使用量记录还要带上项目路径与会话标识，供归因按项目 / 会话分组。取值与回落规则：
  *
@@ -199,12 +199,12 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
  * - 任一取值失败都降级为空字符串而不是抛错：拿不到元数据时照常写入使用量记录，
  *   归因查询把空值归入「未知」分组。丢一条使用量记录比丢一个维度严重得多。
  *
- * 因此 `message_end` 的 handler 需要接第二个参数 `ctx` —— `ExtensionHandler<E, R>` 的签名是
+ * `message_end` 的 handler 因此接第二个参数 `ctx` —— `ExtensionHandler<E, R>` 的签名是
  * `(event, ctx) => ...`，`message_end` 同样能拿到上下文。
  *
  * 类型核对与探测结论见 `docs/probe-balance-and-oauth.md`。
  */
-function handleMessageEnd(event: MessageEndEvent): void {
+function handleMessageEnd(event: MessageEndEvent, ctx: ExtensionContext): void {
   if (!runtime || event.message.role !== "assistant") {
     return;
   }
@@ -212,14 +212,17 @@ function handleMessageEnd(event: MessageEndEvent): void {
   if (!usage) {
     return;
   }
+  const origin = resolveUsageOrigin(ctx);
   const record: UsageRecord = {
     costCacheRead: usage.cost?.cacheRead ?? 0,
     costCacheWrite: usage.cost?.cacheWrite ?? 0,
     costInput: usage.cost?.input ?? 0,
     costOutput: usage.cost?.output ?? 0,
     costTotal: usage.cost?.total ?? 0,
+    cwd: origin.cwd,
     model,
     provider,
+    sessionId: origin.sessionId,
     source: "real_usage",
     timestamp: Date.now(),
     tokensCacheRead: usage.cacheRead ?? 0,
@@ -232,6 +235,32 @@ function handleMessageEnd(event: MessageEndEvent): void {
     runtime.usageCollector.record(record);
   } catch (error) {
     logger.error("写入使用量记录失败", error);
+  }
+}
+
+/**
+ * 解析本次调用的归因元数据。
+ *
+ * 取不到就退化成空串而不是抛错：丢一条使用量记录比丢一个归因维度严重得多，
+ * 空值在归因查询里会归入「未知」分组。
+ */
+function resolveUsageOrigin(ctx: ExtensionContext): {
+  cwd: string;
+  sessionId: string;
+} {
+  return {
+    cwd: readContextValue(() => ctx.cwd),
+    sessionId: readContextValue(() => ctx.sessionManager?.getSessionId()),
+  };
+}
+
+/** 读取宿主提供的字符串；缺失、类型不符或抛错都退化为空串。 */
+function readContextValue(read: () => unknown): string {
+  try {
+    const value = read();
+    return typeof value === "string" ? value : "";
+  } catch {
+    return "";
   }
 }
 

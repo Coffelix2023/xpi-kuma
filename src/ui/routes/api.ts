@@ -3,7 +3,12 @@ import type { UsageCollector } from "../../collectors/usage-collector.ts";
 import type { FileLogger } from "../../lib/log.ts";
 import type { VendorMonitor } from "../../monitors/vendor-monitor.ts";
 import type { TrendSeries } from "../../storage/database.ts";
-import type { AggregatedStats, StatsPeriod, VendorStatus } from "../../types.ts";
+import type {
+  AggregatedStats,
+  AttributionDimension,
+  StatsPeriod,
+  VendorStatus,
+} from "../../types.ts";
 import { DEFAULT_PERIOD } from "../dashboard-html.ts";
 import { respond } from "./http.ts";
 
@@ -152,8 +157,53 @@ function handleProbeOne(
   );
 }
 
+const VALID_DIMENSIONS: AttributionDimension[] = [
+  "project",
+  "session",
+  "vendorModel",
+];
+
+function isDimension(value: unknown): value is AttributionDimension {
+  return typeof value === "string" && (VALID_DIMENSIONS as string[]).includes(value);
+}
+
+/** GET /api/attribution?period=&dimension= */
+function handleAttribution(
+  url: URL,
+  _req: IncomingMessage,
+  res: ServerResponse,
+  ctx: ApiContext,
+): void {
+  const period = url.searchParams.get("period") ?? DEFAULT_PERIOD;
+  if (!isPeriod(period)) {
+    respond(res, 400, "text/plain; charset=utf-8", "非法的时间范围", null);
+    return;
+  }
+  const dimension = url.searchParams.get("dimension") ?? "project";
+  if (!isDimension(dimension)) {
+    respond(res, 400, "text/plain; charset=utf-8", "非法的归因维度", null);
+    return;
+  }
+  respond(
+    res,
+    200,
+    "application/json; charset=utf-8",
+    JSON.stringify({
+      dimension,
+      generatedAt: Date.now(),
+      period,
+      rows: ctx.usageCollector.getAttribution(period, dimension),
+    }),
+    null,
+  );
+}
+
 /** API 路由表：按声明顺序匹配，命中即处理。 */
 export const API_ROUTES: readonly ApiRoute[] = [
+  {
+    handle: handleAttribution,
+    match: (method, url) => method === "GET" && url.pathname === "/api/attribution",
+  },
   {
     handle: handleDashboard,
     match: (method, url) => method === "GET" && url.pathname === "/api/dashboard",

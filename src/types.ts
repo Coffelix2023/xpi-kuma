@@ -15,8 +15,12 @@ export interface UsageRecord {
   costInput: number;
   costOutput: number;
   costTotal: number;
+  /** 调用所属项目路径；宿主未提供时为空串，归因查询把它归入「未知」 */
+  cwd: string;
   model: string;
   provider: string;
+  /** 调用所属会话标识；宿主未提供时为空串，归因查询把它归入「未知」 */
+  sessionId: string;
   source: UsageSource;
   /** 毫秒时间戳 */
   timestamp: number;
@@ -66,6 +70,28 @@ export interface AggregatedStats {
   tokensOutput: number;
   /** 四类 token 之和 */
   totalTokens: number;
+}
+
+/**
+ * 归因维度：按项目（cwd）/ 会话 / 供应商·模型聚合花费与用量。
+ *
+ * 对应的分组键分别是 `cwd`、`session_id`、`provider · model`。
+ */
+export type AttributionDimension = "project" | "session" | "vendorModel";
+
+/** 归因结果的一行：某个维度取值在指定时间范围内的聚合。 */
+export interface AttributionRow {
+  /** 花费合计 */
+  costTotal: number;
+  /**
+   * 维度取值。空串表示宿主未提供该维度的信息（存量记录没有项目与会话），
+   * 界面据此显示「未知」，不丢弃也不并入其他分组。
+   */
+  key: string;
+  /** 请求次数 */
+  requestCount: number;
+  /** 四类 token 之和 */
+  tokens: number;
 }
 
 /** 供应商价格，单位与费用统计一致，标注基准为每千 tokens。 */

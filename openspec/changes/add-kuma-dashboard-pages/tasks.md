@@ -26,11 +26,11 @@
 
 ## 5. 归因数据层
 
-- [ ] 5.1 在 `message_end` 处理函数中接入 `ctx`，记录 `ctx.cwd` 与 `ctx.sessionManager.getSessionId()`，取值包在 try/catch 内、取不到写空值；验证方式是指令测试覆盖「有 ctx 时写入」与「取值抛错时仍写入记录」两条路径。
-- [ ] 5.2 在 `Database` 中新增 `migrateSchema()`：按 `PRAGMA table_info` 判断缺列后 `ALTER TABLE ADD COLUMN` 补 `cwd` / `session_id`，并补 `(cwd, timestamp)`、`(session_id, timestamp)` 索引；验证方式是迁移测试断言旧库打开后列存在、既有记录保留、连续打开两次不报错。
-- [ ] 5.3 实现 `getAttribution(period, dimension)`，支持项目 / 会话 / 供应商·模型三档分组，返回花费、token 总量、请求次数并按花费倒序；验证方式是聚合测试断言三档的花费、token、请求次数总和彼此相等且等于 `getStats` 总量。
-- [ ] 5.4 让缺少项目或会话信息的存量记录归入「未知」分组而不是被丢弃；验证方式是在迁移后的库里插入空 cwd 记录并断言其落入「未知」行。
-- [ ] 5.5 新增 `GET /api/attribution`，参数为时间范围与维度，非法参数返回 400；验证方式是服务测试覆盖合法、非法时间范围、非法维度三种请求。
+- [x] 5.1 在 `message_end` 处理函数中接入 `ctx`，记录 `ctx.cwd` 与 `ctx.sessionManager.getSessionId()`，取值包在 try/catch 内、取不到写空值；验证方式是指令测试覆盖「有 ctx 时写入」与「取值抛错时仍写入记录」两条路径。
+- [x] 5.2 在 `Database` 中新增 `migrateSchema()`：按 `PRAGMA table_info` 判断缺列后 `ALTER TABLE ADD COLUMN` 补 `cwd` / `session_id`，并补 `(cwd, timestamp)`、`(session_id, timestamp)` 索引；验证方式是迁移测试断言旧库打开后列存在、既有记录保留、连续打开两次不报错。
+- [x] 5.3 实现 `getAttribution(period, dimension)`，支持项目 / 会话 / 供应商·模型三档分组，返回花费、token 总量、请求次数并按花费倒序；验证方式是聚合测试断言三档的花费、token、请求次数总和彼此相等且等于 `getStats` 总量。
+- [x] 5.4 让缺少项目或会话信息的存量记录归入「未知」分组而不是被丢弃；验证方式是在迁移后的库里插入空 cwd 记录并断言其落入「未知」行。
+- [x] 5.5 新增 `GET /api/attribution`，参数为时间范围与维度，非法参数返回 400；验证方式是服务测试覆盖合法、非法时间范围、非法维度三种请求。
 
 ## 6. 主面板新区块
 

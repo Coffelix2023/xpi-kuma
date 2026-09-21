@@ -66,7 +66,7 @@
 #### Scenario: 未配置任何供应商
 
 - **WHEN** 配置文件中没有任何供应商
-- **THEN** 页面不显示明细表，改为提示先编辑 `.pi/xpi-kuma/config.yaml` 添加供应商
+- **THEN** 页面不显示明细表，改为提示先编辑全局配置 `~/.pi/agent/data/xpi-kuma/config.yaml` 添加供应商
 
 ### Requirement: 同步全部余额
 

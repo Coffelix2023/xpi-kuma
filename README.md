@@ -68,14 +68,32 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 
 | Command | Description |
 | --- | --- |
-| `/xpi-kuma` | Start the local dashboard service and open it in your browser — run it again to reopen a page you closed (vendor status, usage stats, cost/token trend) |
+| `/xpi-kuma` / `/xpi-kuma on` | Start (or restart) the local dashboard service and open it in your browser — run it again to reopen a page you closed (vendor status, usage stats, cost/token trend) |
+| `/xpi-kuma off` | Shut the service down and release its port; probing and usage collection stop until the next `on` |
 
 ### Configuration
 
-The extension reads `<project>/.pi/xpi-kuma/config.yaml`. The file is created from the
-shipped template on first session start; edit it to list the vendors you want to monitor.
+The extension reads the global `~/.pi/agent/data/xpi-kuma/config.yaml` (next to `usage.db`). The file
+is created from the shipped template on first session start; edit it to list the vendors you want to
+monitor. Configuration is global by design — it is not per-project.
+
+The extension never creates a `.pi/xpi-kuma/` directory inside your projects — the only config it
+writes lives under `~/.pi/agent/data/xpi-kuma/`.
+
+`dashboard.port` sets the listening port (default `5180`). When that port is busy the service falls
+back to a random one and tells you which port it actually used.
+
+A legacy config at `<project root>/.pi/xpi-kuma/config.yaml` is only reported once at startup and
+never moved. Migrate it yourself from the project root:
+
+```bash
+cp ./.pi/xpi-kuma/config.yaml ~/.pi/agent/data/xpi-kuma/config.yaml
+```
 
 ```yaml
+dashboard:
+  port: 5180                      # falls back to a random port when busy
+
 vendors:
   - name: "OpenAI"
     endpoint: "https://api.openai.com/v1"
@@ -108,21 +126,24 @@ The footer shows the current session totals as `💰 ¥0.05 | 📊 1.2K`, refres
 
 ### Monitoring dashboard
 
-`/xpi-kuma` starts a session-scoped web service bound to `127.0.0.1` on a random port,
-then opens the dashboard in your default browser. The same command reuses the running service
-instead of starting a second one.
+`/xpi-kuma` starts a web service bound to `127.0.0.1` on port `5180` (see `dashboard.port`), then
+opens the dashboard in your default browser. The service lives for the whole Pi process, not for one
+session; the same command reuses the running service instead of starting a second one.
 
 - **Local only.** The service never listens on a non-loopback interface, so nothing on your LAN
-  can reach it. Access is protected by a 256-bit credential generated for that one launch.
+  can reach it. Access is protected by a 256-bit credential that is persisted for reuse.
 - **The credential lives in the URL fragment** (`http://127.0.0.1:<port>/#<token>`). Fragments are
   never sent in HTTP requests, written to access logs, or leaked through the `Referer` header of
   third-party resources. The page clears it from the address bar as soon as it loads.
+- **The credential is persisted** in `~/.pi/agent/data/xpi-kuma/dashboard.json` with `0600` permissions,
+  so bookmarks and a pinned page keep working after a restart. Delete that file to rotate it.
 - **Browser did not open?** The service stays up and Pi shows a notification with the same URL, ready to copy.
 - **Auto refresh.** A visible page polls every 5 seconds; a hidden tab pauses polling and refreshes
   immediately when you come back. Requests never overlap, and a failed refresh keeps the last rendered data.
-- **Closed the page by mistake?** The service keeps running for the whole session, so run `/xpi-kuma` again to reopen the same dashboard with the same credential. No second service is started.
-- **Session-scoped.** Pi shuts the service down on quit, reload, new, resume, or fork. The old page stops
-  working and the old credential is rejected — run `/xpi-kuma` again in the new session.
+- **Closed the page by mistake?** The service stays up for the whole Pi process, so run `/xpi-kuma` again to reopen the same dashboard with the same credential. No second service is started.
+- **Process-scoped, not session-scoped.** Quitting, reloading, starting, resuming, or forking a session
+  leaves the service running; only `/xpi-kuma off` (or exiting Pi) shuts it down. `/xpi-kuma on` starts
+  it again on the same port with the same credential.
 
 ### Dashboard pages
 
@@ -162,7 +183,7 @@ it never aborts the row.
    `~/.pi/agent/data/xpi-kuma/oauth.json` with `0600` permissions and never include a client secret.
    Expired tokens (with a 30-second margin) are excluded from queries and the row is marked
    "authorization expired".
-3. **Manual entry** — written from the accounts page into `<project>/.pi/xpi-kuma/config.yaml` in place,
+3. **Manual entry** — written from the accounts page into `~/.pi/agent/data/xpi-kuma/config.yaml` in place,
    after saving a `config.yaml.bak-<timestamp>` backup. Comments and unknown fields survive the rewrite.
 
 When all three tiers fail, the page shows "unknown" rather than `0`. A previously fetched value is kept
@@ -181,13 +202,12 @@ Vendors without a usable balance endpoint are the expected case, not a bug: none
 
 `/xpi-kuma` is the only command this extension registers. It:
 
-- **Reads** `<project>/.pi/xpi-kuma/config.yaml` and the `usage_records` / `probe_records` tables.
-- **Starts** a loopback HTTP service owned by the current Pi session, then opens it in your default browser.
-- **Writes** only when you trigger a probe: one minimal request per vendor, costing a few tokens.
+- **Reads** the global `~/.pi/agent/data/xpi-kuma/config.yaml` and the `usage_records` / `probe_records` tables.
+- **Starts** a loopback HTTP service owned by the Pi process (`on` / `off`, default `on`), then opens it in your default browser.
 - **Writes** only when you ask it to: a probe sends one minimal request per vendor, costing a few tokens;
-  a balance sync queries the vendor; manual entry rewrites the project config after taking a backup.
+  a balance sync queries the vendor; manual entry rewrites the global config after taking a backup.
 - **Refuses** to listen on a non-loopback interface, to hand vendor API keys to the browser, to edit the
-  config file outside the balance fields, or to keep serving after the Pi session ends.
+  config file outside the balance fields, or to keep serving after `/xpi-kuma off`.
 
 ## Development
 
@@ -226,7 +246,7 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # live loop: /reload inside Pi
 ├── docs/                      # Git workflow, repository guardrails, reference material
 └── src/
     ├── index.ts               # Extension entrypoint (register function)
-    ├── config.ts              # config.yaml loading and ${ENV_VAR} expansion
+    ├── config.ts              # global config.yaml loading and ${ENV_VAR} expansion
     ├── types.ts               # Shared domain types
     ├── collectors/            # In-memory session usage accumulation
     ├── monitors/              # Scheduled vendor probes

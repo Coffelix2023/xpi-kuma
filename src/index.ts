@@ -19,7 +19,7 @@ import { Database } from "./storage/database.ts";
 import type { KumaConfig, UsageRecord } from "./types.ts";
 import { type DashboardServer, startDashboardServer } from "./ui/dashboard.ts";
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const STATUS_KEY = "xpi-kuma";
 
 /**

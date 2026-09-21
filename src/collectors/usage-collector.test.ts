@@ -20,6 +20,7 @@ function usageRecord(overrides: Partial<UsageRecord> = {}): UsageRecord {
     tokensCacheWrite: 5,
     tokensInput: 100,
     tokensOutput: 50,
+    toolCalls: 0,
     ...overrides,
   };
 }

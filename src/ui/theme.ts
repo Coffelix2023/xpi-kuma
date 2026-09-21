@@ -30,8 +30,13 @@ import { THEME_FAMILIES } from "./theme-tokens.ts";
 export { THEME_FAMILIES };
 
 /** 默认家族；`data-family` 缺省或为 `default` 时生效。 */
+/**
+ * CSS 的兜底家族：`data-family` 缺省或为 `default` 时生效。
+ *
+ * 注意这不是首帧默认外观 —— 无偏好时的默认由 `shell.ts` 的 `html` 属性给出
+ * （图鉴家族 · 亮色），偏好脚本会用已保存的偏好覆盖它。
+ */
 export const DEFAULT_FAMILY: ThemeFamily = "default";
-
 /**
  * 面板间距刻度，8px 基准网格。
  *
@@ -51,15 +56,16 @@ export const SPACING_TOKENS = {
  * 与 `SPACING_TOKENS` 一样是本仓库自定刻度（不来自 THEMES.md）。实际字号由
  * `dashboard-css.ts` 乘上用户档位 `--kuma-font-scale` 得出，所以这里只登记基准值，
  * 间距与圆角不参与缩放。
+ * 基准值整体上调 2px 以提高默认可读性（xs 10 → 12 … xxl 18 → 20），档位机制不变。
  */
 export const FONT_TOKENS = {
   // 键名按 lint 的字母序要求排列（useSortedKeys），字号大小以数值为准
-  "kuma-font-lg": "13px",
-  "kuma-font-md": "12px",
-  "kuma-font-sm": "11px",
-  "kuma-font-xl": "14px",
-  "kuma-font-xs": "10px",
-  "kuma-font-xxl": "18px",
+  "kuma-font-lg": "15px",
+  "kuma-font-md": "14px",
+  "kuma-font-sm": "13px",
+  "kuma-font-xl": "16px",
+  "kuma-font-xs": "12px",
+  "kuma-font-xxl": "20px",
 } as const satisfies ThemeTokenSet;
 
 /**
@@ -84,7 +90,7 @@ export function radius(offsetPx = 0): string {
  *
  * | 选择器 | 特异性 | 命中场景 |
  * | :--- | :--- | :--- |
- * | `:root` | 0,1,0 | 默认暗色（与既有 `data-theme="dark"` 一致） |
+ * | `:root` | 0,1,0 | 兜底：默认家族暗色（首帧默认外观由 `html` 的 data-family / data-theme 给出） |
  * | `:root[data-theme="light"]` | 0,2,0 | 默认家族亮色 |
  * | `:root[data-family="atlas"]` | 0,2,0 | 图鉴家族暗色 |
  * | `:root[data-family="atlas"][data-theme="light"]` | 0,3,0 | 图鉴家族亮色 |

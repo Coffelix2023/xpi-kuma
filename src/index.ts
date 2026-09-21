@@ -218,6 +218,7 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
  *
  * 类型核对与探测结论见 `docs/probe-balance-and-oauth.md`。
  */
+
 function handleMessageEnd(event: MessageEndEvent, ctx: ExtensionContext): void {
   if (!runtime || event.message.role !== "assistant") {
     return;
@@ -243,6 +244,8 @@ function handleMessageEnd(event: MessageEndEvent, ctx: ExtensionContext): void {
     tokensCacheWrite: usage.cacheWrite ?? 0,
     tokensInput: usage.input ?? 0,
     tokensOutput: usage.output ?? 0,
+    toolCalls: event.message.content.filter((block) => block.type === "toolCall")
+      .length,
   };
 
   try {

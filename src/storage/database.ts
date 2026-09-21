@@ -62,6 +62,7 @@ interface StatsRow {
   tokens_cache_write: number;
   tokens_input: number;
   tokens_output: number;
+  tool_calls: number;
 }
 
 /** SQLite 中存储的探测记录行。 */
@@ -182,6 +183,7 @@ export class Database {
         tokens_output INTEGER NOT NULL DEFAULT 0,
         tokens_cache_read INTEGER NOT NULL DEFAULT 0,
         tokens_cache_write INTEGER NOT NULL DEFAULT 0,
+        tool_calls INTEGER NOT NULL DEFAULT 0,
         cost_input REAL NOT NULL DEFAULT 0,
         cost_output REAL NOT NULL DEFAULT 0,
         cost_cache_read REAL NOT NULL DEFAULT 0,
@@ -232,8 +234,9 @@ export class Database {
    * 补齐既有数据库缺失的列与索引。
    *
    * `CREATE TABLE IF NOT EXISTS` 不会改动已存在的表，老库因此缺少归因所需的
-   * `cwd` / `session_id`。这里按 `PRAGMA table_info` 判断后逐列 `ALTER TABLE ADD
-   * COLUMN`：SQLite 的加列是常数时间、不重写数据，既有记录全部保留，新列取默认空值。
+   * `cwd` / `session_id`，以及后加的 `tool_calls`。这里按 `PRAGMA table_info` 判断后
+   * 逐列 `ALTER TABLE ADD COLUMN`：SQLite 的加列是常数时间、不重写数据，既有记录
+   * 全部保留，新列取默认空值。
    *
    * 幂等，可重复调用。
    */
@@ -252,6 +255,11 @@ export class Database {
         "ALTER TABLE usage_records ADD COLUMN session_id TEXT NOT NULL DEFAULT ''",
       );
     }
+    if (!columns.has("tool_calls")) {
+      this.db.exec(
+        "ALTER TABLE usage_records ADD COLUMN tool_calls INTEGER NOT NULL DEFAULT 0",
+      );
+    }
     // 索引必须在列存在之后建：老库上先建索引会因缺列直接报错
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_cwd_timestamp ON usage_records (cwd, timestamp);
@@ -267,8 +275,8 @@ export class Database {
           timestamp, provider, model,
           tokens_input, tokens_output, tokens_cache_read, tokens_cache_write,
           cost_input, cost_output, cost_cache_read, cost_cache_write, cost_total, source,
-          cwd, session_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          cwd, session_id, tool_calls
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.timestamp,
@@ -286,6 +294,7 @@ export class Database {
         record.source,
         record.cwd,
         record.sessionId,
+        record.toolCalls,
       );
     return Number(result.lastInsertRowid);
   }
@@ -386,6 +395,7 @@ export class Database {
           SUM(cost_cache_read) AS cost_cache_read,
           SUM(cost_cache_write) AS cost_cache_write,
           SUM(cost_total) AS cost_total,
+          SUM(tool_calls) AS tool_calls,
           COUNT(*) AS request_count
         FROM usage_records
         WHERE timestamp >= ?
@@ -408,6 +418,7 @@ export class Database {
       tokensCacheWrite: row.tokens_cache_write,
       tokensInput: row.tokens_input,
       tokensOutput: row.tokens_output,
+      toolCalls: row.tool_calls,
       totalTokens:
         row.tokens_input +
         row.tokens_output +

@@ -137,11 +137,13 @@ function messageEnd(
   handlers: ReturnType<typeof fakePi>["handlers"],
   usage: unknown,
   ctx: ExtensionContext,
+  content: unknown[] = [],
 ) {
   handlers.get("message_end")?.(
     {
       type: "message_end",
       message: {
+        content,
         model: "gpt-4o-mini",
         provider: "openai",
         role: "assistant",
@@ -168,6 +170,19 @@ function readAttributionKeys(dimension: AttributionDimension): string[] {
     db.close();
   }
 }
+
+/** 读回 usage.db 里工具调用次数的合计；测试间的记录会累积，断言只看增量。 */
+function readToolCalls(): number {
+  const db = new Database({
+    dbPath: defaultDatabasePath(),
+  });
+  try {
+    return db.getUsageStats("24h").reduce((sum, row) => sum + row.toolCalls, 0);
+  } finally {
+    db.close();
+  }
+}
+
 /** 事件内容对被测逻辑无关，只需要触发 footer 刷新。 */
 function turnEndEvent(): TurnEndEvent {
   return {
@@ -271,6 +286,49 @@ describe("会话生命周期", () => {
     await sessionStart(handlers, ctx);
 
     expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 0");
+    await sessionShutdown(handlers, ctx);
+  });
+
+  it("message_end 按 content 里的 toolCall 条数记录工具调用次数", async () => {
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    const usage = {
+      cacheRead: 10,
+      cacheWrite: 5,
+      input: 100,
+      output: 50,
+      cost: {
+        cacheRead: 0,
+        cacheWrite: 0,
+        input: 0.001,
+        output: 0.002,
+        total: 0.003,
+      },
+    };
+    const before = readToolCalls();
+
+    messageEnd(handlers, usage, ctx, [
+      {
+        type: "toolCall",
+      },
+      {
+        type: "toolCall",
+      },
+    ]);
+    expect(readToolCalls()).toBe(before + 2);
+
+    // 纯文本消息不增加工具调用次数
+    messageEnd(handlers, usage, ctx, [
+      {
+        text: "hi",
+        type: "text",
+      },
+    ]);
+    expect(readToolCalls()).toBe(before + 2);
+
     await sessionShutdown(handlers, ctx);
   });
 

@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { bootstrapFragment, preferenceBootstrapScript } from "./bootstrap.ts";
 
 /** 最简根元素：首帧脚本只碰 documentElement 的 data-theme / data-family。 */
-function makeRoot() {
-  const attrs = new Map<string, string>();
+function makeRoot(initial: Record<string, string> = {}) {
+  const attrs = new Map<string, string>(Object.entries(initial));
   return {
     getAttribute: (key: string) => attrs.get(key) ?? null,
+    removeAttribute: (key: string) => {
+      attrs.delete(key);
+    },
     setAttribute: (key: string, value: string) => {
       attrs.set(key, value);
     },
@@ -19,8 +22,9 @@ function runPreference(
     | {
         getItem: (key: string) => string | null;
       },
+  initial: Record<string, string> = {},
 ) {
-  const root = makeRoot();
+  const root = makeRoot(initial);
   // 与装配层一致：Map 只是测试里的便捷写法，脚本看到的是带 getItem 的存储
   const localStorageStub =
     storage instanceof Map
@@ -74,10 +78,31 @@ describe("preferenceBootstrapScript", () => {
     expect(root.getAttribute("data-family")).toBe("atlas");
   });
 
-  it("无偏好时保持 HTML 上的默认值", () => {
-    const root = runPreference(new Map());
-    expect(root.getAttribute("data-theme")).toBeNull();
+  it("无偏好时保持 HTML 上的默认值（图鉴 · 亮色）", () => {
+    const root = runPreference(new Map(), {
+      "data-family": "atlas",
+      "data-theme": "light",
+    });
+    expect(root.getAttribute("data-theme")).toBe("light");
+    expect(root.getAttribute("data-family")).toBe("atlas");
+  });
+
+  it("偏好为 default 家族时移除静态默认的 atlas", () => {
+    const root = runPreference(
+      new Map([
+        [
+          "kuma.family",
+          "default",
+        ],
+      ]),
+      {
+        "data-family": "atlas",
+        "data-theme": "light",
+      },
+    );
     expect(root.getAttribute("data-family")).toBeNull();
+    // 主题没有 default 这一档，未设偏好时保持静态默认的亮色
+    expect(root.getAttribute("data-theme")).toBe("light");
   });
 
   it("非法偏好值被忽略，不写入属性", () => {

@@ -25,6 +25,7 @@ function usageRecord(overrides: Partial<UsageRecord> = {}): UsageRecord {
     tokensCacheWrite: 0,
     tokensInput: 100,
     tokensOutput: 50,
+    toolCalls: 0,
     ...overrides,
   };
 }
@@ -47,6 +48,18 @@ function probeResult(overrides: Partial<ProbeResult> = {}): ProbeResult {
 /** 跨时间范围统计全部记录，用于断言清理前后的行数。 */
 function totalRequests(db: Database): number {
   return db.getUsageStats("30d").reduce((sum, stats) => sum + stats.requestCount, 0);
+}
+
+/** 读回 usage_records 的列名，用于断言建表与迁移后的 schema。 */
+function usageColumns(dbPath: string): string[] {
+  const probe = new Sqlite(dbPath, {
+    readonly: true,
+  });
+  const rows = probe.prepare("PRAGMA table_info(usage_records)").all() as {
+    name: string;
+  }[];
+  probe.close();
+  return rows.map((row) => row.name);
 }
 
 /** 对任意行集按取值函数求和，用于断言各维度的总量一致。 */
@@ -165,6 +178,7 @@ describe("getUsageStats", () => {
         timestamp: now - 1000,
         tokensInput: 100,
         tokensOutput: 50,
+        toolCalls: 1,
       }),
     );
     db.insertUsageRecord(
@@ -173,6 +187,7 @@ describe("getUsageStats", () => {
         timestamp: now - 2000,
         tokensInput: 200,
         tokensOutput: 100,
+        toolCalls: 2,
       }),
     );
     db.insertUsageRecord(
@@ -181,6 +196,7 @@ describe("getUsageStats", () => {
         timestamp: now - 3000,
         tokensInput: 150,
         tokensOutput: 75,
+        toolCalls: 3,
       }),
     );
 
@@ -191,6 +207,7 @@ describe("getUsageStats", () => {
       period: "24h",
       provider: "openai",
       requestCount: 3,
+      toolCalls: 6,
       totalTokens: 675,
     });
     expect(stats[0].costTotal).toBeCloseTo(0.006, 10);
@@ -357,6 +374,8 @@ describe("schema 迁移", () => {
     });
     cleanups.push(() => db.close());
 
+    // 后加的 tool_calls 列同样被补齐；既有记录取建列时的默认 0
+    expect(usageColumns(dbPath)).toContain("tool_calls");
     // 既有记录保留
     expect(totalRequests(db)).toBe(1);
     expect(db.getUsageStats("30d")[0]?.costTotal).toBeCloseTo(0.5, 6);
@@ -390,6 +409,23 @@ describe("schema 迁移", () => {
     });
     cleanups.push(() => again.close());
     expect(totalRequests(again)).toBe(2);
+  });
+
+  it("新库直接建出 tool_calls 列", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-toolcalls-"));
+    cleanups.push(() =>
+      rmSync(dir, {
+        force: true,
+        recursive: true,
+      }),
+    );
+    const dbPath = join(dir, "usage.db");
+    const db = new Database({
+      dbPath,
+    });
+    cleanups.push(() => db.close());
+
+    expect(usageColumns(dbPath)).toContain("tool_calls");
   });
 });
 

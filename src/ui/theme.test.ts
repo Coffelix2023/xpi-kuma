@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { dashboardCss } from "./dashboard-css.ts";
 import {
   DEFAULT_FAMILY,
+  FONT_TOKENS,
   radius,
   SPACING_TOKENS,
   THEME_FAMILIES,
   themeFamilyCss,
   tokensFor,
 } from "./theme.ts";
+
+/** 消费层的颜色声明；用来确保取值都来自主题 token 而不是裸色值。 */
+const COLOR_DECLARATION = /^\s*(?:color|background):\s*([^;]+);/gm;
 
 describe("主题家族 token", () => {
   it("两套家族的同名变量取值不同", () => {
@@ -235,6 +240,26 @@ describe("面板常量", () => {
   it("间距刻度落在 8px 基准网格上", () => {
     for (const value of Object.values(SPACING_TOKENS)) {
       expect(Number.parseInt(value, 10) % 8).toBe(0);
+    }
+  });
+
+  it("字号刻度整体上调 2px：最小 12px、最大 20px", () => {
+    const sizes = Object.values(FONT_TOKENS).map((value) => Number.parseInt(value, 10));
+    expect(Math.min(...sizes)).toBe(12);
+    expect(Math.max(...sizes)).toBe(20);
+  });
+});
+
+describe("dashboardCss()", () => {
+  it("消费层的颜色声明都走主题 token，不写裸色值", () => {
+    const css = dashboardCss();
+    for (const [, value] of css.matchAll(COLOR_DECLARATION)) {
+      const literal = (value ?? "").trim();
+      const allowed =
+        literal === "transparent" ||
+        literal === "currentColor" ||
+        literal.startsWith("var(");
+      expect(allowed, `${literal} 不是主题 token`).toBe(true);
     }
   });
 });

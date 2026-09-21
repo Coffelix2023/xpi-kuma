@@ -61,6 +61,14 @@ export function renderFragment(): string {
         return "¥" + group(n, 2);
       }
 
+      /**
+       * 占比：分母为 0 时给 0.0% 而不是破折号 —— 0 是已知值，破折号留给未知。
+       */
+      function share(value, total) {
+        if (!total) { return "0.0%"; }
+        return ((value / total) * 100).toFixed(1) + "%";
+      }
+
       function ms(n) {
         if (typeof n !== "number" || !isFinite(n)) { return "—"; }
         return group(Math.round(n), 0) + " ms";
@@ -149,13 +157,25 @@ export function renderFragment(): string {
         notice.hidden = false;
       }
 
-      /** 统计表列：表头词条键 + 取值函数。 */
+      /**
+       * 统计表列：表头词条键 + 取值函数。
+       *
+       * 每个 token 类目拆成两列（tokens 与对应费用），与既有的「数量 + 费用」扫读习惯
+       * 一致；列序即需求给定的顺序，占比两列由 renderStats 追加（要先有全表合计）。
+       */
       var COLUMNS = [
-        ["stats.vendorModel", function (r) { return [r.provider + " · " + r.model]; }],
-        ["stats.tokensInput", function (r) { return [count(r.tokensInput), money(r.costInput)]; }],
-        ["stats.tokensOutput", function (r) { return [count(r.tokensOutput), money(r.costOutput)]; }],
-        ["stats.cacheRead", function (r) { return [count(r.tokensCacheRead), money(r.costCacheRead)]; }],
-        ["stats.cacheWrite", function (r) { return [count(r.tokensCacheWrite), money(r.costCacheWrite)]; }]
+        ["stats.provider", function (r) { return r.provider; }],
+        ["stats.model", function (r) { return r.model; }],
+        ["stats.requests", function (r) { return count(r.requestCount); }],
+        ["stats.tokensInput", function (r) { return count(r.tokensInput); }],
+        ["stats.costInput", function (r) { return money(r.costInput); }],
+        ["stats.tokensOutput", function (r) { return count(r.tokensOutput); }],
+        ["stats.costOutput", function (r) { return money(r.costOutput); }],
+        ["stats.cacheRead", function (r) { return count(r.tokensCacheRead); }],
+        ["stats.costCacheRead", function (r) { return money(r.costCacheRead); }],
+        ["stats.cacheWrite", function (r) { return count(r.tokensCacheWrite); }],
+        ["stats.costCacheWrite", function (r) { return money(r.costCacheWrite); }],
+        ["stats.toolCalls", function (r) { return count(r.toolCalls); }]
       ];
 
       function renderStats(rows, currentPeriod) {
@@ -172,7 +192,14 @@ export function renderFragment(): string {
         COLUMNS.forEach(function (col) {
           headRow.appendChild(text("th", "", t(col[0])));
         });
-        [t("stats.totalCost"), t("stats.requests")].forEach(function (name) {
+        // 占比按本期全表合计算：接口只返回分组结果，不为展示再做一次聚合
+        var totalTokens = 0;
+        var totalCost = 0;
+        rows.forEach(function (r) {
+          totalTokens += r.totalTokens || 0;
+          totalCost += r.costTotal || 0;
+        });
+        [t("stats.shareTokens"), t("stats.shareCost")].forEach(function (name) {
           headRow.appendChild(text("th", "", name));
         });
         thead.appendChild(headRow);
@@ -193,12 +220,10 @@ export function renderFragment(): string {
         rows.forEach(function (r) {
           var tr = document.createElement("tr");
           COLUMNS.forEach(function (col) {
-            var pair = col[1](r);
-            tr.appendChild(text("td", "", String(pair[0])));
-            tr.appendChild(text("td", "", pair[1]));
+            tr.appendChild(text("td", "", col[1](r)));
           });
-          tr.appendChild(text("td", "kuma-total", money(r.costTotal)));
-          tr.appendChild(text("td", "", count(r.requestCount)));
+          tr.appendChild(text("td", "", share(r.totalTokens || 0, totalTokens)));
+          tr.appendChild(text("td", "", share(r.costTotal || 0, totalCost)));
           tbody.appendChild(tr);
         });
         table.appendChild(tbody);

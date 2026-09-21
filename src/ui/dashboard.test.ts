@@ -293,6 +293,7 @@ describe("服务启动与路由", () => {
         tokensCacheWrite: 0,
         tokensInput: 10,
         tokensOutput: 5,
+        toolCalls: 0,
       });
     }
 
@@ -375,6 +376,7 @@ describe("服务启动与路由", () => {
       tokensCacheWrite: 0,
       tokensInput: 10,
       tokensOutput: 5,
+      toolCalls: 0,
     });
 
     const res = await call(

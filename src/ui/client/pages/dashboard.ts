@@ -8,8 +8,6 @@ import { ATLAS_FAMILY, FAMILY_KEY, THEME_KEY } from "../constants.ts";
  */
 export function dashboardPageFragment(): string {
   return `
-      /** 当前归因维度；由归因区块的按钮切换。 */
-      var dimension = "project";
       function markRangeButtons(current) {
         var buttons = document.querySelectorAll("[data-range]");
         Array.prototype.forEach.call(buttons, function (btn) {
@@ -29,7 +27,6 @@ export function dashboardPageFragment(): string {
         markRangeButtons(period);
         var overview = data.overview || {};
         renderOverview(overview, period);
-        renderAttribution(data.attribution || [], dimension, overview.costTotal || 0);
         renderVendors(vendors);
         renderNotice(vendors);
         renderStats(data.stats || [], period);
@@ -82,22 +79,11 @@ export function dashboardPageFragment(): string {
       }
 
       function load() {
-        return api(
-          "/api/dashboard?period=" + encodeURIComponent(period) +
-            "&dimension=" + encodeURIComponent(dimension)
-        ).then(render);
+        return api("/api/dashboard?period=" + encodeURIComponent(period)).then(
+          render
+        );
       }
 
-      function wireDimensions() {
-        var buttons = document.querySelectorAll("[data-dimension]");
-        Array.prototype.forEach.call(buttons, function (btn) {
-          btn.addEventListener("click", function () {
-            dimension = btn.getAttribute("data-dimension") || dimension;
-            markDimensionButtons(dimension);
-            refresh();
-          });
-        });
-      }
 
       function refresh() {
         return withBusy(load);
@@ -170,14 +156,14 @@ export function dashboardPageFragment(): string {
         btn.textContent = mode === "dark" ? t("page.dashboard.toLight") : t("page.dashboard.toDark");
       }
 
+      /** 家族下拉：选中值就是目标家族，不需要在代码里做二态取反。 */
       function wireFamily() {
-        var btn = el("kuma-family");
-        if (!btn) { return; }
-        syncFamilyButton(btn);
-        btn.addEventListener("click", function () {
-          var current = document.documentElement.getAttribute("data-family") || "default";
-          applyFamily(current === "${ATLAS_FAMILY}" ? "default" : "${ATLAS_FAMILY}");
-          syncFamilyButton(btn);
+        var select = el("kuma-family");
+        if (!select) { return; }
+        syncFamilySelect(select);
+        select.addEventListener("change", function () {
+          applyFamily(select.value);
+          syncFamilySelect(select);
           redrawChart();
         });
       }
@@ -196,10 +182,10 @@ export function dashboardPageFragment(): string {
         }
       }
 
-      function syncFamilyButton(btn) {
+      /** 把当前家族写回下拉选中值；首帧与切换后都要同步。 */
+      function syncFamilySelect(select) {
         var atlas = document.documentElement.getAttribute("data-family") === "${ATLAS_FAMILY}";
-        btn.setAttribute("aria-pressed", String(atlas));
-        btn.textContent = atlas ? t("page.dashboard.toDefault") : t("page.dashboard.toAtlas");
+        select.value = atlas ? "${ATLAS_FAMILY}" : "default";
       }
 
       /** 主题或家族变化后重建图表：颜色取自 CSS 变量，必须重建才能换色。 */
@@ -222,8 +208,7 @@ export function dashboardPageFragment(): string {
       }
 
       wireRanges();
-      wireDimensions();
-      wireRail();
+      wireTabs();
       wireTheme();
       wireFamily();
       wireRefreshAll();

@@ -14,6 +14,9 @@ import { generateAccountsHTML } from "./pages/accounts.ts";
 import { generateEmptyHTML } from "./pages/empty.ts";
 import { generateSettingsHTML } from "./pages/settings.ts";
 
+/** 中日韩字符区间；英文条目里不该出现。提到顶层是 lint 的 useTopLevelRegex 要求。 */
+const CJK = /[\u4e00-\u9fff]/u;
+
 describe("generateDashboardHTML 结构", () => {
   it("包含供应商卡片容器、统计表容器与趋势图 canvas", () => {
     const html = generateDashboardHTML();
@@ -23,15 +26,14 @@ describe("generateDashboardHTML 结构", () => {
     expect(html).toContain('id="kuma-chart"');
   });
 
-  it("默认暗色主题，token 取自 THEMES.md 的家族定义", () => {
+  it("首帧默认图鉴亮色，四套主题选择器同表输出", () => {
     const html = generateDashboardHTML();
-    expect(html).toContain('data-theme="dark"');
-    // 默认家族的暗色背景与前景
-    expect(html).toContain("--background: oklch(0.2679 0.0036 106.6427)");
-    expect(html).toContain("--foreground: oklch(0.8074 0.0142 93.0137)");
-    // 亮色与图鉴家族的选择器同表输出，供切换直接换值
+    expect(html).toContain('data-family="atlas"');
+    expect(html).toContain('data-theme="light"');
+    // 四套选择器都在同一张表里，切换时直接换值
     expect(html).toContain(':root[data-theme="light"]');
     expect(html).toContain(':root[data-family="atlas"]');
+    expect(html).toContain(':root[data-family="atlas"][data-theme="light"] {');
   });
 
   it("首帧偏好脚本位于可见内容之前", () => {
@@ -43,10 +45,21 @@ describe("generateDashboardHTML 结构", () => {
     expect(bootstrapAt).toBeLessThan(bodyAt);
   });
 
-  it("提供主题家族切换按钮", () => {
+  it("主题家族是下拉，亮暗仍是独立按钮", () => {
     const html = generateDashboardHTML();
-    expect(html).toContain('id="kuma-family"');
-    expect(html).toContain("图鉴风");
+    expect(html).toContain('<select id="kuma-family"');
+    // 两个选项：默认与图鉴
+    expect(html).toContain('<option value="default"');
+    expect(html).toContain('<option value="atlas"');
+    // 亮暗保持按钮，不进下拉
+    expect(html).toContain('<button type="button" id="kuma-theme"');
+  });
+
+  it("正文宽度有上限并居中，宽表继续横向滚动", () => {
+    const css = dashboardCss();
+    expect(css).toContain("max-width: 1280px;");
+    expect(css).toContain("margin: 0 auto;");
+    expect(css).toContain(".kuma-scroll { overflow-x: auto;");
   });
 
   it("首帧脚本与页内脚本共用 CSP nonce", () => {
@@ -296,15 +309,14 @@ describe("页面互链", () => {
   });
 });
 
-describe("主面板信息层级与分区索引轨", () => {
-  it("花费概览置顶，用量归因在趋势之前，供应商健康降为末块", () => {
+describe("主面板标签页与信息层级", () => {
+  it("四个标签页按概览、统计、趋势、供应商的顺序排列，默认选中第一个", () => {
     const html = generateDashboardHTML();
     const positions = [
-      'id="section-overview"',
-      'id="section-attribution"',
-      'id="section-stats"',
-      'id="section-chart"',
-      'id="section-vendors"',
+      'data-tab="overview"',
+      'data-tab="stats"',
+      'data-tab="chart"',
+      'data-tab="vendors"',
     ].map((marker) => html.indexOf(marker));
     expect(positions.every((index) => index > -1)).toBe(true);
     expect(positions).toEqual(
@@ -312,33 +324,48 @@ describe("主面板信息层级与分区索引轨", () => {
         ...positions,
       ].sort((a, b) => a - b),
     );
+    expect(html).toContain(
+      'id="kuma-tab-overview" aria-controls="kuma-panel-overview" aria-selected="true"',
+    );
+    // 两个区块的显示名按需求调整，另两个沿用原词条
+    expect(html).toContain(">使用量总览</button>");
+    expect(html).toContain(">供应商总览</button>");
   });
 
-  it("提供概览容器、归因维度按钮与索引轨条目", () => {
+  it("四个面板与标签配对，只有概览面板默认可见，归因区块已移除", () => {
     const html = generateDashboardHTML();
-    expect(html).toContain('id="kuma-overview"');
-    expect(html).toContain('id="kuma-attribution"');
-    for (const dimension of [
-      "project",
-      "session",
-      "vendorModel",
-    ]) {
-      expect(html).toContain(`data-dimension="${dimension}"`);
-    }
     for (const id of [
-      "section-overview",
-      "section-vendors",
+      "overview",
+      "stats",
+      "chart",
+      "vendors",
     ]) {
-      expect(html).toContain(`data-rail-target="${id}"`);
+      expect(html).toContain(`aria-labelledby="kuma-tab-${id}"`);
     }
+    expect(html).toContain('data-tab-panel="overview">');
+    for (const id of [
+      "stats",
+      "chart",
+      "vendors",
+    ]) {
+      expect(html).toContain(`data-tab-panel="${id}" hidden>`);
+    }
+    // 用量归因区块、维度按钮与分区索引轨都已移除
+    // 用量归因区块、维度按钮与分区索引轨都已移除（页面脚本里仍有旧片段，见 3.4）
+    expect(html).not.toContain('id="kuma-attribution"');
+    expect(html).not.toContain('data-dimension="');
+    expect(html).not.toContain('data-rail-target="');
   });
 
-  it("索引轨只在 Atlas 家族显示，窄视口隐藏", () => {
+  it("已移除的导航结构与索引轨不留样式", () => {
     const css = dashboardCss();
-    expect(css).toContain(".kuma-rail { display: none; }");
-    expect(css).toContain('[data-family="atlas"] .kuma-rail {');
-    const narrow = css.slice(css.indexOf("@media (max-width: 1100px)"));
-    expect(narrow).toContain('[data-family="atlas"] .kuma-rail { display: none; }');
+    for (const selector of [
+      ".kuma-rail",
+      ".kuma-layout",
+      ".kuma-section-head",
+    ]) {
+      expect(css, selector).not.toContain(selector);
+    }
   });
 });
 
@@ -477,6 +504,20 @@ describe("中英双语结构", () => {
     for (const [key, entry] of Object.entries(MESSAGES)) {
       expect(entry.zh, key).not.toBe("");
       expect(typeof entry.en, key).toBe("string");
+    }
+  });
+
+  it("统计表词条齐备：14 个键，中英都非空且英文没有中文残留", () => {
+    const statsEntries = Object.entries(MESSAGES).filter(([key]) =>
+      key.startsWith("stats."),
+    );
+    // 供应商、模型、请求次数、四类 token 与各自费用、工具调用次数、两列占比
+    expect(statsEntries.map(([key]) => key)).toHaveLength(14);
+    for (const [key, entry] of statsEntries) {
+      expect(entry.en, key).not.toBe("");
+      expect(entry.zh, key).not.toBe("");
+      // 切到英文后这一列不该出现中日韩字符
+      expect(entry.en, key).not.toMatch(CJK);
     }
   });
 });

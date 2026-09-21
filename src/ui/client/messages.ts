@@ -87,33 +87,9 @@ export const MESSAGES = {
     en: "Re-authorize",
     zh: "重新授权",
   },
-  "aria.dimension": {
-    en: "Attribution dimension",
-    zh: "归因维度",
-  },
-  "aria.rail": {
-    en: "Section index",
-    zh: "分区索引",
-  },
   "aria.timeRange": {
     en: "Time range",
     zh: "时间范围",
-  },
-  "attribution.cost": {
-    en: "Cost",
-    zh: "花费",
-  },
-  "attribution.dimension": {
-    en: "Dimension",
-    zh: "维度",
-  },
-  "attribution.share": {
-    en: "Share",
-    zh: "占比",
-  },
-  "attribution.tokens": {
-    en: "Token",
-    zh: "Token",
   },
   "chart.aria": {
     en: "Cost and token trend over time",
@@ -130,6 +106,10 @@ export const MESSAGES = {
   "chart.svgTitle": {
     en: "Cost and token trend",
     zh: "费用与 token 趋势",
+  },
+  "chart.tokens": {
+    en: "Tokens",
+    zh: "tokens",
   },
   "check.apiKey": {
     en: "API key",
@@ -219,18 +199,6 @@ export const MESSAGES = {
   "common.updatedAt": {
     en: "Updated at",
     zh: "更新于",
-  },
-  "dimension.project": {
-    en: "Project",
-    zh: "项目",
-  },
-  "dimension.session": {
-    en: "Session",
-    zh: "会话",
-  },
-  "dimension.vendorModel": {
-    en: "Vendor · model",
-    zh: "供应商·模型",
   },
   "font.group": {
     en: "Font size",
@@ -401,6 +369,18 @@ export const MESSAGES = {
     en: "Vendor accounts",
     zh: "供应商账户",
   },
+  "page.dashboard.family": {
+    en: "Theme style",
+    zh: "主题风格",
+  },
+  "page.dashboard.familyAtlas": {
+    en: "Atlas",
+    zh: "图鉴",
+  },
+  "page.dashboard.familyDefault": {
+    en: "Default",
+    zh: "默认",
+  },
   "page.dashboard.loading": {
     en: "Loading…",
     zh: "正在加载…",
@@ -414,17 +394,9 @@ export const MESSAGES = {
     en: "xpi-kuma Dashboard",
     zh: "xpi-kuma 监控面板",
   },
-  "page.dashboard.toAtlas": {
-    en: "Atlas",
-    zh: "图鉴风",
-  },
   "page.dashboard.toDark": {
     en: "Dark",
     zh: "暗色",
-  },
-  "page.dashboard.toDefault": {
-    en: "Default",
-    zh: "默认风",
   },
   "page.dashboard.toLight": {
     en: "Light",
@@ -468,10 +440,6 @@ export const MESSAGES = {
     en: "Account overview",
     zh: "账户概览",
   },
-  "section.attribution": {
-    en: "Usage attribution",
-    zh: "用量归因",
-  },
   "section.chart": {
     en: "Cost & token trend",
     zh: "费用与 token 趋势",
@@ -494,8 +462,8 @@ export const MESSAGES = {
   },
 
   "section.overview": {
-    en: "Spend overview",
-    zh: "花费概览",
+    en: "Usage overview",
+    zh: "使用量总览",
   },
   "section.stats": {
     en: "Usage stats",
@@ -506,8 +474,8 @@ export const MESSAGES = {
     zh: "供应商体检",
   },
   "section.vendors": {
-    en: "Vendor health",
-    zh: "供应商健康",
+    en: "Vendor overview",
+    zh: "供应商总览",
   },
   "settings.actionNone": {
     en: "—",
@@ -649,9 +617,41 @@ export const MESSAGES = {
     en: "Cache write",
     zh: "缓存写",
   },
+  "stats.costCacheRead": {
+    en: "Cache read cost",
+    zh: "缓存读费用",
+  },
+  "stats.costCacheWrite": {
+    en: "Cache write cost",
+    zh: "缓存写费用",
+  },
+  "stats.costInput": {
+    en: "Input cost",
+    zh: "输入费用",
+  },
+  "stats.costOutput": {
+    en: "Output cost",
+    zh: "输出费用",
+  },
+  "stats.model": {
+    en: "Model",
+    zh: "模型",
+  },
+  "stats.provider": {
+    en: "Vendor",
+    zh: "供应商",
+  },
   "stats.requests": {
     en: "Requests",
-    zh: "请求数",
+    zh: "请求次数",
+  },
+  "stats.shareCost": {
+    en: "Cost share",
+    zh: "费用占比",
+  },
+  "stats.shareTokens": {
+    en: "Token share",
+    zh: "tokens 占比",
   },
   "stats.tokensInput": {
     en: "Input tok",
@@ -661,13 +661,9 @@ export const MESSAGES = {
     en: "Output tok",
     zh: "输出 tok",
   },
-  "stats.totalCost": {
-    en: "Total cost",
-    zh: "总费用",
-  },
-  "stats.vendorModel": {
-    en: "Vendor / model",
-    zh: "供应商 / 模型",
+  "stats.toolCalls": {
+    en: "Tool calls",
+    zh: "工具调用次数",
   },
   "unit.day": {
     en: " days",

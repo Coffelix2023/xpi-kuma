@@ -93,10 +93,37 @@ class FakeElement {
 
   click(): void {
     for (const handler of this.listeners.get("click") ?? []) {
-      // 页面脚本会对 rail 链接调用 event.preventDefault()
+      // 页面脚本会调用 event.preventDefault()
       handler({
         preventDefault: () => {},
       });
+    }
+  }
+
+  /** 标签页键盘导航只记录焦点落在谁身上，不做真实焦点管理。 */
+  focused = false;
+
+  focus(): void {
+    this.focused = true;
+  }
+
+  /** 派发一次 keydown；事件对象只带页面脚本读到的字段。 */
+  keydown(key: string): void {
+    for (const handler of this.listeners.get("keydown") ?? []) {
+      handler({
+        key,
+        preventDefault: () => {},
+      });
+    }
+  }
+
+  /** 下拉的选中值：页面脚本直接读写这个属性。 */
+  value = "";
+
+  /** 派发一次 change；下拉的交互入口。 */
+  change(): void {
+    for (const handler of this.listeners.get("change") ?? []) {
+      handler({});
     }
   }
 
@@ -197,7 +224,9 @@ class FakeDocument {
 /** 与 `generateSettingsHTML()` 产出的 shell 结构一致的最小 DOM（体检页用）。 */
 function settingsShell(): FakeDocument {
   const doc = new FakeDocument();
-  doc.root.setAttribute("data-theme", "dark");
+  // 与 pageShell 的首帧默认一致：图鉴家族 · 亮色
+  doc.root.setAttribute("data-family", "atlas");
+  doc.root.setAttribute("data-theme", "light");
   doc.add("div", "kuma-updated");
   const errorSection = doc.add("section", "section-diagnostics-error");
   errorSection.hidden = true;
@@ -219,7 +248,8 @@ function settingsShell(): FakeDocument {
 /** 与 `generateEmptyHTML()` 产出的 shell 结构一致的最小 DOM（引导页用）。 */
 function emptyShell(): FakeDocument {
   const doc = new FakeDocument();
-  doc.root.setAttribute("data-theme", "dark");
+  doc.root.setAttribute("data-family", "atlas");
+  doc.root.setAttribute("data-theme", "light");
   doc.add("div", "kuma-updated");
   const vendorsSection = doc.add("section", "section-guide-vendors");
   vendorsSection.hidden = true;
@@ -234,7 +264,8 @@ function emptyShell(): FakeDocument {
 /** 与 `generateAccountsHTML()` 产出的 shell 结构一致的最小 DOM（账户页用）。 */
 function accountsShell(): FakeDocument {
   const doc = new FakeDocument();
-  doc.root.setAttribute("data-theme", "dark");
+  doc.root.setAttribute("data-family", "atlas");
+  doc.root.setAttribute("data-theme", "light");
   doc.add("div", "kuma-updated");
   doc.add("div", "kuma-accounts");
   doc.add("div", "kuma-accounts-notice");
@@ -248,11 +279,11 @@ function accountsShell(): FakeDocument {
 
 function shell(): FakeDocument {
   const doc = new FakeDocument();
-  doc.root.setAttribute("data-theme", "dark");
+  doc.root.setAttribute("data-family", "atlas");
+  doc.root.setAttribute("data-theme", "light");
   doc.add("div", "kuma-updated");
   doc.add("div", "kuma-overview");
   doc.add("div", "kuma-overview-notice");
-  doc.add("div", "kuma-attribution");
   doc.add("div", "kuma-vendors");
   doc.add("div", "kuma-notice");
   doc.add("div", "kuma-stats");
@@ -260,32 +291,34 @@ function shell(): FakeDocument {
   doc.add("button", "kuma-refresh-all");
   for (const id of [
     "kuma-theme",
-    "kuma-family",
     "kuma-font-dec",
     "kuma-font-inc",
     "kuma-font-reset",
   ]) {
     doc.add("button", id).setAttribute("data-preference", "");
   }
+  // 家族是下拉：选中值就是目标家族
+  const family = doc.add("select", "kuma-family");
+  family.setAttribute("data-preference", "");
   const navLink = doc.add("a");
   navLink.setAttribute("data-kuma-nav", "/accounts");
   navLink.setAttribute("href", "/accounts");
-  for (const dimension of [
-    "project",
-    "session",
-    "vendorModel",
-  ]) {
-    doc.add("button").setAttribute("data-dimension", dimension);
-  }
-  // 分区索引轨：区块与轨链接成对，覆盖滚动定位与 aria-current 更新
-  for (const sectionId of [
-    "section-overview",
-    "section-vendors",
-  ]) {
-    doc.add("div", sectionId);
-    const railLink = doc.add("a");
-    railLink.setAttribute("data-rail-target", sectionId);
-  }
+  // 标签页：每个标签配一个面板，初始状态与页面 HTML 一致（第一个选中并可见）
+  const tabIds = [
+    "overview",
+    "stats",
+    "chart",
+    "vendors",
+  ];
+  tabIds.forEach((id, index) => {
+    const tab = doc.add("button");
+    tab.setAttribute("data-tab", id);
+    tab.setAttribute("aria-selected", String(index === 0));
+    tab.setAttribute("tabindex", index === 0 ? "0" : "-1");
+    const panel = doc.add("section");
+    panel.setAttribute("data-tab-panel", id);
+    panel.hidden = index !== 0;
+  });
   for (const period of [
     "1h",
     "24h",
@@ -435,7 +468,7 @@ describe("凭据引导", () => {
     await flush();
 
     const [path, init] = h.fetchMock.mock.calls[0];
-    expect(path).toBe("/api/dashboard?period=24h&dimension=project");
+    expect(path).toBe("/api/dashboard?period=24h");
     expect(init.headers.Authorization).toBe("Bearer token-abc");
   });
 
@@ -449,7 +482,7 @@ describe("凭据引导", () => {
   });
 });
 
-describe("花费概览与用量归因", () => {
+describe("使用量总览与统计表", () => {
   it("概览渲染本期花费、token、请求数与覆盖项目数", async () => {
     const h = harness();
     h.fetchMock.mockReturnValue(
@@ -501,19 +534,11 @@ describe("花费概览与用量归因", () => {
     expect(text).toContain("999");
   });
 
-  it("归因表、统计表与供应商卡的时长同样走紧凑格式", async () => {
+  it("统计表与供应商卡的时长同样走紧凑格式", async () => {
     const h = harness();
     h.fetchMock.mockReturnValue(
       respond(
         dashboard({
-          attribution: [
-            {
-              costTotal: 1,
-              key: "/tmp/a",
-              requestCount: 12345,
-              tokens: 1234567,
-            },
-          ],
           stats: [
             {
               cacheReadCost: 0,
@@ -545,12 +570,143 @@ describe("花费概览与用量归因", () => {
     h.start();
     await flush();
 
-    expect(h.doc.getElementById("kuma-attribution")?.textContent).toContain("1.23M");
-    expect(h.doc.getElementById("kuma-attribution")?.textContent).toContain("12,345");
     expect(h.doc.getElementById("kuma-stats")?.textContent).toContain("1.23M");
     expect(h.doc.getElementById("kuma-stats")?.textContent).toContain("1,234");
     expect(h.doc.getElementById("kuma-vendors")?.textContent).toContain("1,234 ms");
     expect(h.doc.getElementById("kuma-vendors")?.textContent).toContain("12,345 ms");
+  });
+
+  it("统计表列头按需求顺序排列，占比按本期合计算出", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          stats: [
+            {
+              costCacheRead: 0.1,
+              costCacheWrite: 0.2,
+              costInput: 1,
+              costOutput: 2,
+              costTotal: 3,
+              model: "m1",
+              provider: "p1",
+              requestCount: 1234,
+              tokensCacheRead: 10,
+              tokensCacheWrite: 20,
+              tokensInput: 100,
+              tokensOutput: 200,
+              toolCalls: 7,
+              totalTokens: 330,
+            },
+            {
+              costCacheRead: 0,
+              costCacheWrite: 0,
+              costInput: 9,
+              costOutput: 0,
+              costTotal: 9,
+              model: "m2",
+              provider: "p2",
+              requestCount: 5,
+              tokensCacheRead: 0,
+              tokensCacheWrite: 0,
+              tokensInput: 600,
+              tokensOutput: 0,
+              toolCalls: 3,
+              totalTokens: 600,
+            },
+          ],
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    // FakeDocument 只支持简单选择器，这里按结构逐层取：host > div.kuma-scroll > table
+    const table = h.doc.getElementById("kuma-stats")?.children[0]?.children[0];
+    const headers = (table?.children[0]?.children[0]?.children ?? []).map(
+      (cell) => cell.textContent,
+    );
+    expect(headers).toEqual([
+      "供应商",
+      "模型",
+      "请求次数",
+      "输入 tok",
+      "输入费用",
+      "输出 tok",
+      "输出费用",
+      "缓存读",
+      "缓存读费用",
+      "缓存写",
+      "缓存写费用",
+      "工具调用次数",
+      "tokens 占比",
+      "费用占比",
+    ]);
+
+    const rows = (table?.children[1]?.children ?? []).map((row) =>
+      row.children.map((cell) => cell.textContent),
+    );
+    expect(rows[0]).toEqual([
+      "p1",
+      "m1",
+      "1,234",
+      "100",
+      "¥1.00",
+      "200",
+      "¥2.00",
+      "10",
+      "¥0.10",
+      "20",
+      "¥0.20",
+      "7",
+      "35.5%",
+      "25.0%",
+    ]);
+    // 分摊取自全表合计：两行占比之和为 100.0%
+    expect(rows[1]?.slice(-2)).toEqual([
+      "64.5%",
+      "75.0%",
+    ]);
+  });
+
+  it("统计表合计为 0 时占比显示 0.0% 而不是破折号", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          stats: [
+            {
+              costCacheRead: 0,
+              costCacheWrite: 0,
+              costInput: 0,
+              costOutput: 0,
+              costTotal: 0,
+              model: "m1",
+              provider: "p1",
+              requestCount: 0,
+              tokensCacheRead: 0,
+              tokensCacheWrite: 0,
+              tokensInput: 0,
+              tokensOutput: 0,
+              toolCalls: 0,
+            },
+          ],
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    const table = h.doc.getElementById("kuma-stats")?.children[0]?.children[0];
+    const cells = (table?.children[1]?.children[0]?.children ?? []).map(
+      (cell) => cell.textContent,
+    );
+    expect(cells.slice(-2)).toEqual([
+      "0.0%",
+      "0.0%",
+    ]);
   });
 
   it("本期没有记录时提示并给出去引导页的入口", async () => {
@@ -569,102 +725,51 @@ describe("花费概览与用量归因", () => {
     // 站内链接同样带上本次凭据 fragment
     expect(guide?.getAttribute("href")).toBe("/empty#token-abc");
   });
-
-  it("归因表按花费算占比，空键显示未知", async () => {
-    const h = harness();
-    h.fetchMock.mockReturnValue(
-      respond(
-        dashboard({
-          attribution: [
-            {
-              costTotal: 3,
-              key: "/tmp/a",
-              requestCount: 2,
-              tokens: 30,
-            },
-            {
-              costTotal: 1,
-              key: "",
-              requestCount: 1,
-              tokens: 10,
-            },
-          ],
-          overview: {
-            costTotal: 4,
-            projectCount: 1,
-            requestCount: 3,
-            totalTokens: 40,
-          },
-        }),
-      ),
-    );
-
-    h.start();
-    await flush();
-
-    const host = h.doc.getElementById("kuma-attribution");
-    expect(host?.textContent).toContain("75.0%");
-    expect(host?.textContent).toContain("25.0%");
-    expect(host?.textContent).toContain("未知");
-  });
-
-  it("切换归因维度后按新维度重查", async () => {
-    const h = harness();
-    h.fetchMock.mockReturnValue(respond(dashboard()));
-    h.start();
-    await flush();
-    h.fetchMock.mockClear();
-
-    const buttons = h.doc.querySelectorAll("[data-dimension]");
-    const session = buttons.find(
-      (btn) => btn.getAttribute("data-dimension") === "session",
-    );
-    session?.click();
-    await flush();
-
-    expect(h.fetchMock.mock.calls.at(-1)?.[0]).toBe(
-      "/api/dashboard?period=24h&dimension=session",
-    );
-    expect(session?.getAttribute("aria-pressed")).toBe("true");
-    expect(
-      h.doc
-        .querySelectorAll('[data-dimension="project"]')[0]
-        .getAttribute("aria-pressed"),
-    ).toBe("false");
-  });
-
-  it("归因无数据时显示暂无数据，不渲染空表", async () => {
-    const h = harness();
-    h.fetchMock.mockReturnValue(respond(dashboard()));
-
-    h.start();
-    await flush();
-
-    const host = h.doc.getElementById("kuma-attribution");
-    expect(host?.children).toHaveLength(1);
-    // 假 DOM 的 textContent 只聚合子节点，这里断言引导入口本身
-    // 空表换成引导入口：主面板无记录时要把用户送去引导页
-    const guide = h.doc
-      .querySelectorAll("[data-kuma-nav]")
-      .find((link) => link.getAttribute("data-kuma-nav") === "/empty");
-    expect(guide?.getAttribute("href")).toBe("/empty#token-abc");
-  });
 });
 
 describe("分区索引轨", () => {
-  it("点击滚动到对应区块并更新 aria-current", async () => {
+  it("点击标签切换面板，同一时刻只有一个 aria-selected=true", async () => {
     const h = harness();
     h.fetchMock.mockReturnValue(respond(dashboard()));
     h.start();
     await flush();
 
-    const links = h.doc.querySelectorAll("[data-rail-target]");
-    expect(links).toHaveLength(2);
-    links[1].click();
+    const tabs = h.doc.querySelectorAll("[data-tab]");
+    const panels = h.doc.querySelectorAll("[data-tab-panel]");
+    expect(tabs).toHaveLength(4);
+    expect(panels).toHaveLength(4);
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    expect(panels[0].hidden).toBe(false);
 
-    expect(h.doc.getElementById("section-vendors")?.scrolled).toBe(true);
-    expect(links[1].getAttribute("aria-current")).toBe("location");
-    expect(links[0].getAttribute("aria-current")).toBeNull();
+    tabs[1].click();
+
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(tabs[0].getAttribute("aria-selected")).toBe("false");
+    expect(panels[1].hidden).toBe(false);
+    expect(panels[0].hidden).toBe(true);
+  });
+
+  it("方向键在标签间循环，Home / End 跳到首尾", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const tabs = h.doc.querySelectorAll("[data-tab]");
+    tabs[0].keydown("ArrowRight");
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(tabs[1].focused).toBe(true);
+
+    tabs[1].keydown("ArrowRight");
+    expect(tabs[2].getAttribute("aria-selected")).toBe("true");
+
+    tabs[0].keydown("ArrowLeft");
+    expect(tabs[3].getAttribute("aria-selected")).toBe("true");
+
+    tabs[3].keydown("Home");
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    tabs[0].keydown("End");
+    expect(tabs[3].getAttribute("aria-selected")).toBe("true");
   });
 });
 
@@ -687,9 +792,7 @@ describe("时间范围与探测", () => {
     h.doc.querySelectorAll('[data-range="7d"]')[0].click();
     await flush();
 
-    expect(h.fetchMock.mock.calls.at(-1)?.[0]).toBe(
-      "/api/dashboard?period=7d&dimension=project",
-    );
+    expect(h.fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/dashboard?period=7d");
     expect(
       h.doc.querySelectorAll('[data-range="7d"]')[0].getAttribute("aria-pressed"),
     ).toBe("true");
@@ -712,9 +815,7 @@ describe("时间范围与探测", () => {
     const [path, init] = h.fetchMock.mock.calls[0];
     expect(path).toBe("/api/probes");
     expect(init.method).toBe("POST");
-    expect(h.fetchMock.mock.calls[1][0]).toBe(
-      "/api/dashboard?period=24h&dimension=project",
-    );
+    expect(h.fetchMock.mock.calls[1][0]).toBe("/api/dashboard?period=24h");
   });
 
   it("卡片刷新按钮只探测该供应商", async () => {
@@ -967,28 +1068,43 @@ describe("主题与家族偏好", () => {
     h.start();
     await flush();
 
-    const btn = h.doc.getElementById("kuma-family");
-    expect(btn).not.toBeNull();
-    btn?.click();
+    // 首帧默认是图鉴家族：选「默认」后移除属性，选回「图鉴」再设上
+    const select = h.doc.getElementById("kuma-family");
+    if (!select) {
+      throw new Error("shell 缺少家族下拉");
+    }
+    expect(select.value).toBe("atlas");
+
+    select.value = "default";
+    select.change();
+    expect(h.doc.documentElement.getAttribute("data-family")).toBeNull();
+    expect(h.storage.get("kuma.family")).toBe("default");
+
+    select.value = "atlas";
+    select.change();
     expect(h.doc.documentElement.getAttribute("data-family")).toBe("atlas");
     expect(h.storage.get("kuma.family")).toBe("atlas");
 
     // 模拟刷新后重新打开：拿持久化的偏好跑一次首帧脚本
     const reopened = new FakeElement("html");
-    reopened.setAttribute("data-theme", "dark");
+    reopened.setAttribute("data-family", "atlas");
+    reopened.setAttribute("data-theme", "light");
     runBootstrap(preferenceBootstrapScript(), reopened, h.storage);
     expect(reopened.getAttribute("data-family")).toBe("atlas");
   });
 
-  it("再次点击切回默认家族并移除属性", async () => {
+  it("选到默认家族时移除属性并写入偏好", async () => {
     const h = harness();
     h.fetchMock.mockReturnValue(respond(dashboard()));
     h.start();
     await flush();
 
-    const btn = h.doc.getElementById("kuma-family");
-    btn?.click();
-    btn?.click();
+    const select = h.doc.getElementById("kuma-family");
+    if (!select) {
+      throw new Error("shell 缺少家族下拉");
+    }
+    select.value = "default";
+    select.change();
     expect(h.doc.documentElement.getAttribute("data-family")).toBeNull();
     expect(h.storage.get("kuma.family")).toBe("default");
   });
@@ -999,25 +1115,32 @@ describe("主题与家族偏好", () => {
     h.start();
     await flush();
 
+    // 首帧默认是亮色，所以按钮文案是「切到暗色」
     const btn = h.doc.getElementById("kuma-theme");
-    expect(btn?.textContent).toBe("亮色");
-    btn?.click();
-    expect(h.doc.documentElement.getAttribute("data-theme")).toBe("light");
-    expect(h.storage.get("kuma.theme")).toBe("light");
     expect(btn?.textContent).toBe("暗色");
+    btn?.click();
+    expect(h.doc.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(h.storage.get("kuma.theme")).toBe("dark");
+    expect(btn?.textContent).toBe("亮色");
   });
 
-  it("家族按钮的 aria-pressed 反映当前家族", async () => {
+  it("家族下拉的选中值反映当前家族", async () => {
     const h = harness();
     h.fetchMock.mockReturnValue(respond(dashboard()));
     h.start();
     await flush();
 
-    const btn = h.doc.getElementById("kuma-family");
-    expect(btn?.getAttribute("aria-pressed")).toBe("false");
-    btn?.click();
-    expect(btn?.getAttribute("aria-pressed")).toBe("true");
-    expect(btn?.textContent).toBe("默认风");
+    // 首帧默认图鉴家族
+    const select = h.doc.getElementById("kuma-family");
+    if (!select) {
+      throw new Error("shell 缺少家族下拉");
+    }
+    expect(select.value).toBe("atlas");
+
+    select.value = "default";
+    select.change();
+    expect(select.value).toBe("default");
+    expect(h.doc.documentElement.getAttribute("data-family")).toBeNull();
   });
 });
 
@@ -1512,7 +1635,8 @@ describe("零数据引导页脚本", () => {
 /** 带语言按钮与 data-i18n 元素的最小 DOM（双语切换用）。 */
 function langShell(): FakeDocument {
   const doc = new FakeDocument();
-  doc.root.setAttribute("data-theme", "dark");
+  doc.root.setAttribute("data-family", "atlas");
+  doc.root.setAttribute("data-theme", "light");
   doc.root.setAttribute("data-title-key", "page.dashboard.title");
   doc.add("div", "kuma-updated");
   doc.add("div", "kuma-vendors");
@@ -1524,7 +1648,6 @@ function langShell(): FakeDocument {
   doc.add("button", "kuma-refresh-all");
   for (const id of [
     "kuma-theme",
-    "kuma-family",
   ]) {
     doc.add("button", id).setAttribute("data-preference", "");
   }

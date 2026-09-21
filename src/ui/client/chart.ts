@@ -187,7 +187,7 @@ export function chartFragment(): string {
         Object.keys(point.byProvider || {}).forEach(function (name) {
           parts.push(name + " ¥" + group(point.byProvider[name] || 0, 4));
         });
-        parts.push(t("attribution.tokens") + " " + count(point.tokens || 0));
+        parts.push(t("chart.tokens") + " " + count(point.tokens || 0));
         return parts.join(" · ");
       }
 

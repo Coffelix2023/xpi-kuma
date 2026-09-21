@@ -30,8 +30,12 @@ export function preferenceBootstrapScript(): string {
     if (theme === "light" || theme === "dark") {
       document.documentElement.setAttribute("data-theme", theme);
     }
-    if (localStorage.getItem("${FAMILY_KEY}") === "${ATLAS_FAMILY}") {
+    // 家族：静态默认是 atlas，所以偏好为 default 时必须显式移除属性才能回落
+    var family = localStorage.getItem("${FAMILY_KEY}");
+    if (family === "${ATLAS_FAMILY}") {
       document.documentElement.setAttribute("data-family", "${ATLAS_FAMILY}");
+    } else if (family === "default") {
+      document.documentElement.removeAttribute("data-family");
     }
     // 语言只需要先定 <html lang>：正文由 body 末尾的双语片段按同一偏好替换
     var lang = localStorage.getItem("${LANGUAGE_KEY}");

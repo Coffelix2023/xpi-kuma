@@ -28,6 +28,8 @@ export interface UsageRecord {
   tokensCacheWrite: number;
   tokensInput: number;
   tokensOutput: number;
+  /** 该次调用发起的工具调用（toolCall）条数 */
+  toolCalls: number;
 }
 
 /** 供应商可用性状态。`unknown` 表示尚未探测过。 */
@@ -68,6 +70,8 @@ export interface AggregatedStats {
   tokensCacheWrite: number;
   tokensInput: number;
   tokensOutput: number;
+  /** 该分组的工具调用条数之和 */
+  toolCalls: number;
   /** 四类 token 之和 */
   totalTokens: number;
 }

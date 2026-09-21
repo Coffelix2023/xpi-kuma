@@ -29,53 +29,30 @@ const RANGE_LABELS: [
   ],
 ];
 
-/** 归因维度按钮的取值与词条键。 */
-const DIMENSION_LABELS: [
-  string,
-  MessageKey,
-][] = [
-  [
-    "project",
-    "dimension.project",
-  ],
-  [
-    "session",
-    "dimension.session",
-  ],
-  [
-    "vendorModel",
-    "dimension.vendorModel",
-  ],
-];
-
 /**
- * 分区索引轨的条目：目标区块 id 与词条键。
+ * 面板标签页：面板 id 与词条键，顺序即从左到右的显示顺序，也是面板的展示顺序。
  *
- * 只在 Atlas 家族下显示（`.kuma-atlas-only`），窄视口由媒体查询隐藏；顺序与正文
- * 区块顺序一致，点击后由页内脚本滚动定位并更新 `aria-current`。
+ * id 同时生成 `kuma-tab-<id>` / `kuma-panel-<id>` 与 `data-tab` / `data-tab-panel`，
+ * 页内脚本靠它把标签与面板配对（见 `client/nav.ts` 的 `wireTabs`）。
  */
-const RAIL_SECTIONS: [
+const TABS: [
   string,
   MessageKey,
 ][] = [
   [
-    "section-overview",
+    "overview",
     "section.overview",
   ],
   [
-    "section-attribution",
-    "section.attribution",
-  ],
-  [
-    "section-stats",
+    "stats",
     "section.stats",
   ],
   [
-    "section-chart",
+    "chart",
     "section.chart",
   ],
   [
-    "section-vendors",
+    "vendors",
     "section.vendors",
   ],
 ];
@@ -88,26 +65,22 @@ export interface DashboardOptions {
 /**
  * 主面板正文。
  *
- * 区块顺序即信息层级（tasks.md 6.4）：花费概览置顶（首屏一眼看出本期花了多少），
- * 其后是归因明细、按 `provider × model` 的使用量统计、趋势图，供应商健康降为次级块。
- * 时间范围按钮随概览一起放在首屏，切换后概览、归因、统计与趋势一起刷新。
+ * 四个标签页从左到右是使用量总览、使用量统计、趋势与供应商总览：概览置顶（首屏一眼
+ * 看出本期花了多少），其后是按 `provider × model` 的使用量统计与趋势图，供应商总览殿后。
+ * 时间范围按钮随概览面板一起，切换后概览、统计与趋势一起刷新。
  *
- * 正文与右侧分区索引轨并排：索引轨只在 Atlas 家族下显示，窄视口由媒体查询隐藏。
+ * 面板一次性全部渲染，切换只改可见性（见 `client/nav.ts` 的 `wireTabs`），刷新不重建 DOM。
  *
  * 所有可见文案都写成 `data-i18n` 键 + 默认中文（`zh()`），页内脚本按同一份字典切换语言。
  */
 function dashboardBody(): string {
   const ranges = RANGE_LABELS.map(
     ([period, key]) =>
-      `        <button type="button" data-range="${period}"${i18nAttr(key)} aria-pressed="${String(period === DEFAULT_PERIOD)}">${zh(key)}</button>`,
+      `      <button type="button" data-range="${period}"${i18nAttr(key)} aria-pressed="${String(period === DEFAULT_PERIOD)}">${zh(key)}</button>`,
   ).join("\n");
-  const dimensions = DIMENSION_LABELS.map(
-    ([dimension, key]) =>
-      `            <button type="button" data-dimension="${dimension}"${i18nAttr(key)} aria-pressed="${String(dimension === "project")}">${zh(key)}</button>`,
-  ).join("\n");
-  const rail = RAIL_SECTIONS.map(
-    ([id, key]) =>
-      `      <a href="#${id}" data-rail-target="${id}"${i18nAttr(key)}>${zh(key)}</a>`,
+  const tabs = TABS.map(
+    ([id, key], index) =>
+      `        <button type="button" role="tab" id="kuma-tab-${id}" aria-controls="kuma-panel-${id}" aria-selected="${String(index === 0)}" tabindex="${index === 0 ? "0" : "-1"}" data-tab="${id}"${i18nAttr(key)}>${zh(key)}</button>`,
   ).join("\n");
 
   return `  <header>
@@ -118,64 +91,47 @@ function dashboardBody(): string {
     <div class="kuma-actions">
       <button type="button" id="kuma-refresh-all"${i18nAttr("page.dashboard.refreshAll")}>${zh("page.dashboard.refreshAll")}</button>
       <button type="button" id="kuma-theme" data-preference aria-pressed="false"${i18nAttr("page.dashboard.toLight")}>${zh("page.dashboard.toLight")}</button>
-      <button type="button" id="kuma-family" data-preference aria-pressed="false"${i18nAttr("page.dashboard.toAtlas")}>${zh("page.dashboard.toAtlas")}</button>
+      <select id="kuma-family" data-preference${i18nAria("page.dashboard.family")}>
+        <option value="default"${i18nAttr("page.dashboard.familyDefault")}>${zh("page.dashboard.familyDefault")}</option>
+        <option value="atlas"${i18nAttr("page.dashboard.familyAtlas")}>${zh("page.dashboard.familyAtlas")}</option>
+      </select>
 ${fontControlsHtml()}
       <button type="button" id="kuma-lang"></button>
     </div>
   </header>
 
-  <div class="kuma-layout">
-    <main>
-      <section id="section-overview" aria-labelledby="kuma-overview-title">
-        <div class="kuma-actions kuma-section-head">
-          <h2 id="kuma-overview-title" style="margin:0"${i18nAttr("section.overview")}>${zh("section.overview")}</h2>
-          <div class="kuma-actions" role="group"${i18nAria("aria.timeRange")}>
+  <main>
+    <div class="kuma-tablist" role="tablist">
+${tabs}
+    </div>
+
+    <section role="tabpanel" id="kuma-panel-overview" aria-labelledby="kuma-tab-overview" data-tab-panel="overview">
+      <div class="kuma-actions" role="group"${i18nAria("aria.timeRange")}>
 ${ranges}
-          </div>
-        </div>
-        <div id="kuma-overview"></div>
-        <div id="kuma-overview-notice" hidden></div>
-      </section>
+      </div>
+      <div id="kuma-overview"></div>
+      <div id="kuma-overview-notice" hidden></div>
+    </section>
 
-      <section id="section-attribution" aria-labelledby="kuma-attribution-title">
-        <div class="kuma-actions kuma-section-head">
-          <h2 id="kuma-attribution-title" style="margin:0"${i18nAttr("section.attribution")}>${zh("section.attribution")}</h2>
-          <div class="kuma-actions" role="group"${i18nAria("aria.dimension")}>
-${dimensions}
-          </div>
-        </div>
-        <div id="kuma-attribution"></div>
-      </section>
+    <section role="tabpanel" id="kuma-panel-stats" aria-labelledby="kuma-tab-stats" data-tab-panel="stats" hidden>
+      <div id="kuma-stats"></div>
+    </section>
 
-      <section id="section-stats" aria-labelledby="kuma-stats-title">
-        <h2 id="kuma-stats-title"${i18nAttr("section.stats")}>${zh("section.stats")}</h2>
-        <div id="kuma-stats"></div>
-      </section>
+    <section role="tabpanel" id="kuma-panel-chart" aria-labelledby="kuma-tab-chart" data-tab-panel="chart" hidden>
+      <div class="kuma-chart-wrap">
+        <div id="kuma-chart" role="img"${i18nAria("chart.aria")}></div>
+      </div>
+    </section>
 
-      <section id="section-chart" aria-labelledby="kuma-chart-title">
-        <h2 id="kuma-chart-title"${i18nAttr("section.chart")}>${zh("section.chart")}</h2>
-        <div class="kuma-chart-wrap">
-          <div id="kuma-chart" role="img"${i18nAria("chart.aria")}></div>
-        </div>
-      </section>
-
-      <section id="section-vendors" aria-labelledby="kuma-vendors-title">
-        <div class="kuma-actions kuma-section-head">
-          <h2 id="kuma-vendors-title" style="margin:0"${i18nAttr("section.vendors")}>${zh("section.vendors")}</h2>
-          <div class="kuma-actions">
-            <a class="kuma-link" data-kuma-nav="/accounts" href="/accounts"${i18nAttr("link.accounts")}>${zh("link.accounts")}</a>
-            <a class="kuma-link" data-kuma-nav="/settings" href="/settings"${i18nAttr("link.settings")}>${zh("link.settings")}</a>
-          </div>
-        </div>
-        <div id="kuma-vendors"></div>
-        <div id="kuma-notice" hidden></div>
-      </section>
-    </main>
-
-    <nav class="kuma-rail kuma-atlas-only"${i18nAria("aria.rail")}>
-${rail}
-    </nav>
-  </div>
+    <section role="tabpanel" id="kuma-panel-vendors" aria-labelledby="kuma-tab-vendors" data-tab-panel="vendors" hidden>
+      <div class="kuma-actions">
+        <a class="kuma-link" data-kuma-nav="/accounts" href="/accounts"${i18nAttr("link.accounts")}>${zh("link.accounts")}</a>
+        <a class="kuma-link" data-kuma-nav="/settings" href="/settings"${i18nAttr("link.settings")}>${zh("link.settings")}</a>
+      </div>
+      <div id="kuma-vendors"></div>
+      <div id="kuma-notice" hidden></div>
+    </section>
+  </main>
 `;
 }
 

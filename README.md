@@ -101,7 +101,7 @@ Data written by the extension:
 
 | Table | Written on | Contents |
 | --- | --- | --- |
-| `usage_records` | every assistant message (`message_end`) | real token counts and cost, as reported by the provider |
+| `usage_records` | every assistant message (`message_end`) | real token counts, cost, and tool-call counts, as reported by the provider |
 | `probe_records` | each scheduled or manual probe | status, TTFT, total response time |
 
 The footer shows the current session totals as `💰 ¥0.05 | 📊 1.2K`, refreshed on every turn.
@@ -132,10 +132,14 @@ stays authenticated.
 
 | Page | Path | What it shows |
 | --- | --- | --- |
-| Main panel | `/` | Cost overview, attribution by project / session / vendor·model, statistics, trend, vendor health |
+| Main panel | `/` | Four tabs: usage overview, usage stats, trend, vendor overview |
 | Accounts | `/accounts` | Balance per vendor, where that number came from, and the action needed to refresh it |
 | Config checkup | `/settings` | Read-only report on `config.yaml`: six checks per vendor, plus global and storage facts |
 | Getting started | `/empty` | Guidance when no vendor is configured, or none has recorded usage yet |
+
+The main panel's four sections are tabs — one visible at a time. The header's theme family is a
+dropdown (default / atlas) with a separate light-dark button; with no stored preference the default
+look is **atlas · light**, kept under `kuma.family` and `kuma.theme` and applied before the first paint.
 
 The page header carries a language toggle (`#kuma-lang`) for English and Simplified Chinese. The choice
 is stored in `localStorage` under `kuma.lang` and applied before the first paint.
@@ -144,6 +148,10 @@ The same header carries a font-size control — `A−` / `A+` / reset — on all
 available (85% to 130%); the choice is stored under `kuma.font` and applied before the first paint.
 Counts, costs and durations use thousands separators, and totals switch to `M` (millions) or `亿`
 (100 millions) so long numbers stay readable at a glance.
+
+The usage stats table on the main panel has ten column groups — **vendor / model / requests / input, output, cache-read and
+cache-write tokens with their cost / tool calls / token share / cost share** — with shares computed against the whole period.
+Body width is capped at `1280px`, and wider tables scroll horizontally inside the body instead of breaking the layout.
 
 **Balances fall back through three tiers**, per vendor and in order. A tier that fails only adds a reason;
 it never aborts the row.

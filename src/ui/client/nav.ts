@@ -20,34 +20,42 @@ export function navFragment(): string {
       }
 
       /**
-       * 分区索引轨：点击滚动到目标区块，并把它标为当前项。
+       * 标签页：点击或方向键切换面板，一次只显示一个。
        *
-       * 轨只在 Atlas 家族下可见（样式负责），但事件绑定对所有家族都做 —— 切换家族时
-       * 不需要重建 DOM。
+       * 面板全部预先渲染，切换只改 hidden 属性，因此不触发重新请求、也不重建 DOM。
+       * 键盘交互按 WAI-ARIA Tabs 模式：只有当前标签在 tab 序里（roving tabindex），
+       * 左右键循环，Home / End 跳首尾。没有标签的页面（子页）安静跳过。
        */
-      function wireRail() {
-        var links = document.querySelectorAll("[data-rail-target]");
-        Array.prototype.forEach.call(links, function (link) {
-          link.addEventListener("click", function (event) {
-            var id = link.getAttribute("data-rail-target");
-            var target = id ? document.getElementById(id) : null;
-            if (!target) { return; }
+      function wireTabs() {
+        var tabs = Array.prototype.slice.call(document.querySelectorAll("[data-tab]"));
+        if (tabs.length === 0) { return; }
+        tabs.forEach(function (tab, index) {
+          tab.addEventListener("click", function () { selectTab(tab, tabs); });
+          tab.addEventListener("keydown", function (event) {
+            var key = event.key;
+            var next = null;
+            if (key === "ArrowRight") { next = tabs[(index + 1) % tabs.length]; }
+            if (key === "ArrowLeft") { next = tabs[(index - 1 + tabs.length) % tabs.length]; }
+            if (key === "Home") { next = tabs[0]; }
+            if (key === "End") { next = tabs[tabs.length - 1]; }
+            if (!next) { return; }
             event.preventDefault();
-            target.scrollIntoView({ block: "start" });
-            setRailCurrent(id);
+            selectTab(next, tabs);
+            next.focus();
           });
         });
       }
 
-      /** 把当前区块写进轨的 aria-current，其余项清除。 */
-      function setRailCurrent(id) {
-        var links = document.querySelectorAll("[data-rail-target]");
-        Array.prototype.forEach.call(links, function (link) {
-          if (link.getAttribute("data-rail-target") === id) {
-            link.setAttribute("aria-current", "location");
-          } else {
-            link.removeAttribute("aria-current");
-          }
+      /** 选中一个标签：同步 roving tabindex、aria-selected 与各面板的 hidden。 */
+      function selectTab(tab, tabs) {
+        tabs.forEach(function (item) {
+          var selected = item === tab;
+          item.setAttribute("aria-selected", String(selected));
+          item.setAttribute("tabindex", selected ? "0" : "-1");
+        });
+        var panels = document.querySelectorAll("[data-tab-panel]");
+        Array.prototype.forEach.call(panels, function (panel) {
+          panel.hidden = panel.getAttribute("data-tab-panel") !== tab.getAttribute("data-tab");
         });
       }
 `;

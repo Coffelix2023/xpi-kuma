@@ -47,8 +47,13 @@ ${fonts}
 
     * { box-sizing: border-box; }
 
+    /*
+     * 正文宽度上限：桌面满宽时表格会被拉成横跨整屏的长行，数据反而不好对齐；1280px 在
+     * 1440p / 2560p 下都留出边距，更宽的表继续走 .kuma-scroll 横向滚动。
+     */
     body {
-      margin: 0;
+      margin: 0 auto;
+      max-width: 1280px;
       padding: var(--kuma-space-3);
       background: var(--background);
       color: var(--foreground);
@@ -90,11 +95,7 @@ ${fonts}
 
     .kuma-actions { display: flex; gap: var(--kuma-space-1); align-items: center; }
 
-    /* 区块头：标题在左，该块的切换按钮在右 */
-    .kuma-section-head { justify-content: space-between; align-items: baseline; }
 
-    .kuma-layout { display: flex; gap: var(--kuma-space-3); align-items: flex-start; }
-    .kuma-layout main { flex: 1 1 auto; min-width: 0; }
 
     /* 花费概览：四项数字，窄视口自动折行 */
     .kuma-overview {
@@ -143,6 +144,50 @@ ${fonts}
       border-color: var(--primary);
       color: var(--primary-foreground);
     }
+
+    /*
+     * 标签页：横向排布，选中项用下划线而不是填充 —— 与按钮的 aria-pressed 填充态区分开，
+     * 免得一屏里出现两处「看起来像开关」的实心块。
+     */
+    .kuma-tablist {
+      display: flex;
+      gap: var(--kuma-space-1);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: var(--kuma-space-3);
+    }
+    .kuma-tablist button[role="tab"] {
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      padding: 6px 12px;
+      color: var(--muted-foreground);
+      font-size: var(--kuma-font-md);
+    }
+    /* 覆盖 button:hover 的底色：标签页的悬停只改文字色 */
+    .kuma-tablist button[role="tab"]:hover:not(:disabled) {
+      background: transparent;
+      color: var(--foreground);
+    }
+    .kuma-tablist button[role="tab"][aria-selected="true"] {
+      color: var(--foreground);
+      border-bottom-color: var(--primary);
+    }
+    .kuma-tablist button[role="tab"]:focus-visible { outline-offset: -2px; }
+
+    /* 主题家族下拉：与按钮同尺寸同族色，展开项由系统绘制 */
+    select {
+      font-family: inherit;
+      font-size: var(--kuma-font-sm);
+      color: var(--foreground);
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: ${radius(-2)};
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+    select:hover { border-color: var(--primary); }
+    select:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 
     .kuma-grid {
       display: grid;
@@ -271,32 +316,6 @@ ${fonts}
     }
 
     /* 窄视口：卡片换更多列，表格继续横向滚动，图表压低高度 */
-    /*
-     * 分区索引轨：家族专属装饰，只在 Atlas 家族显示。
-     *
-     * 元素同时带 .kuma-atlas-only（display: none + atlas 下 revert），这里用更高
-     * 特异性的 [data-family="atlas"] .kuma-rail 给出实际的轨布局 —— 必须排在
-     * .kuma-atlas-only 规则之后，否则 revert 会把轨打回 block。
-     */
-    .kuma-rail { display: none; }
-    [data-family="atlas"] .kuma-rail {
-      display: flex;
-      flex-direction: column;
-      flex: 0 0 auto;
-      gap: 2px;
-      position: sticky;
-      top: var(--kuma-space-2);
-      border-left: 1px solid var(--border);
-      padding-left: var(--kuma-space-1);
-    }
-    .kuma-rail a { color: var(--muted-foreground); font-size: var(--kuma-font-sm); text-decoration: none; padding: 2px 0; }
-    .kuma-rail a:hover { color: var(--primary); }
-    .kuma-rail a[aria-current="location"] { color: var(--primary); font-weight: 700; }
-
-    /* 窄视口放不下正文与索引轨：隐藏索引轨，正文保持可读 */
-    @media (max-width: 1100px) {
-      [data-family="atlas"] .kuma-rail { display: none; }
-    }
 
     @media (max-width: 800px) {
       body { padding: var(--kuma-space-2); }

@@ -44,8 +44,9 @@ export function fontControlsHtml(): string {
  * **纯静态结构，不含监控数据与访问凭据** —— 凭据在 URL fragment 里，首帧请求无法
  * 携带，数据一律由页内脚本另行请求。
  *
- * 主题与家族的 token 表由 `dashboardCss()` 输出，首帧偏好由 head 里的同步脚本应用，
- * 因此子页面不需要各自的主题按钮也能跟随主面板的偏好。
+ * 首帧默认外观是**图鉴家族 · 亮色**（`data-family="atlas"` + `data-theme="light"`），即无
+ * 偏好时的兜底；head 里的同步脚本会用已保存的偏好覆盖它。主题与家族的 token 表由
+ * `dashboardCss()` 输出，因此子页面不需要各自的主题按钮也能跟随主面板的偏好。
  */
 export function pageShell(options: PageShellOptions): string {
   const nonce = options.nonce ? ` nonce="${escapeHtml(options.nonce)}"` : "";
@@ -54,7 +55,7 @@ export function pageShell(options: PageShellOptions): string {
     : "";
 
   return `<!doctype html>
-<html lang="zh-CN" data-theme="dark" data-title-key="${options.titleKey}">
+<html lang="zh-CN" data-family="atlas" data-theme="light" data-title-key="${options.titleKey}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

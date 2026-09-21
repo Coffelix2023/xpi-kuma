@@ -18,7 +18,7 @@ import { Database } from "./storage/database.ts";
 import type { KumaConfig, UsageRecord } from "./types.ts";
 import { type DashboardServer, startDashboardServer } from "./ui/dashboard.ts";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 const STATUS_KEY = "xpi-kuma";
 
 /** 会话级运行时状态；`session_shutdown` 后清空。 */

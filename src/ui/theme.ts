@@ -46,6 +46,23 @@ export const SPACING_TOKENS = {
 } as const satisfies ThemeTokenSet;
 
 /**
+ * 面板字号刻度：scale 1 时的基准像素值。
+ *
+ * 与 `SPACING_TOKENS` 一样是本仓库自定刻度（不来自 THEMES.md）。实际字号由
+ * `dashboard-css.ts` 乘上用户档位 `--kuma-font-scale` 得出，所以这里只登记基准值，
+ * 间距与圆角不参与缩放。
+ */
+export const FONT_TOKENS = {
+  // 键名按 lint 的字母序要求排列（useSortedKeys），字号大小以数值为准
+  "kuma-font-lg": "13px",
+  "kuma-font-md": "12px",
+  "kuma-font-sm": "11px",
+  "kuma-font-xl": "14px",
+  "kuma-font-xs": "10px",
+  "kuma-font-xxl": "18px",
+} as const satisfies ThemeTokenSet;
+
+/**
  * 半径派生值。
  *
  * Atlas 家族的 `--radius` 是 `0rem`，直接写 `calc(var(--radius) - 4px)` 会算出 `-4px`，

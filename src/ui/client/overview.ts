@@ -31,9 +31,9 @@ export function overviewFragment(): string {
         box.className = "kuma-overview";
         [
           [t("overview.cost"), money(data.costTotal)],
-          [t("overview.tokens"), String(data.totalTokens || 0)],
-          [t("overview.requests"), String(data.requestCount || 0)],
-          [t("overview.projects"), String(data.projectCount || 0)]
+          [t("overview.tokens"), count(data.totalTokens || 0)],
+          [t("overview.requests"), count(data.requestCount || 0)],
+          [t("overview.projects"), count(data.projectCount || 0)]
         ].forEach(function (pair) {
           var card = document.createElement("div");
           card.className = "kuma-metric";
@@ -113,8 +113,8 @@ export function overviewFragment(): string {
           var tr = document.createElement("tr");
           tr.appendChild(text("td", "", attributionLabel(row.key, dimension)));
           tr.appendChild(text("td", "kuma-total", money(row.costTotal)));
-          tr.appendChild(text("td", "", String(row.tokens)));
-          tr.appendChild(text("td", "", String(row.requestCount)));
+          tr.appendChild(text("td", "", count(row.tokens)));
+          tr.appendChild(text("td", "", count(row.requestCount)));
           tr.appendChild(text("td", "", share.toFixed(1) + "%"));
           tbody.appendChild(tr);
         });

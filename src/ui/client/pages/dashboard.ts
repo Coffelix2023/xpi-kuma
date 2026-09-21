@@ -38,10 +38,16 @@ export function dashboardPageFragment(): string {
         setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString(dateLocale()));
       }
 
+      /**
+       * 数据刷新结束后重新启用被置灰的按钮。
+       *
+       * 跳过带 data-preference 标记的偏好类按钮（主题 / 家族 / 字号档位）：它们的可用
+       * 状态由自己的偏好决定，跟着刷新一起解禁会让「已到边界」的档位按钮又变成可点。
+       */
       function enableButtons() {
         var buttons = document.querySelectorAll("button");
         Array.prototype.forEach.call(buttons, function (btn) {
-          if (btn.id === "kuma-theme" || btn.id === "kuma-family") { return; }
+          if (btn.getAttribute("data-preference") !== null) { return; }
           btn.disabled = false;
         });
         var all = el("kuma-refresh-all");

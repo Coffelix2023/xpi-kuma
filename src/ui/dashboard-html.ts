@@ -2,7 +2,7 @@ import type { StatsPeriod } from "../types.ts";
 import { DEFAULT_PERIOD } from "./client/constants.ts";
 import { i18nAria, i18nAttr, type MessageKey, zh } from "./client/messages.ts";
 import { dashboardClientScript } from "./dashboard-client.ts";
-import { pageShell } from "./shell.ts";
+import { fontControlsHtml, pageShell } from "./shell.ts";
 
 export { DEFAULT_PERIOD };
 
@@ -117,8 +117,9 @@ function dashboardBody(): string {
     </div>
     <div class="kuma-actions">
       <button type="button" id="kuma-refresh-all"${i18nAttr("page.dashboard.refreshAll")}>${zh("page.dashboard.refreshAll")}</button>
-      <button type="button" id="kuma-theme" aria-pressed="false"${i18nAttr("page.dashboard.toLight")}>${zh("page.dashboard.toLight")}</button>
-      <button type="button" id="kuma-family" aria-pressed="false"${i18nAttr("page.dashboard.toAtlas")}>${zh("page.dashboard.toAtlas")}</button>
+      <button type="button" id="kuma-theme" data-preference aria-pressed="false"${i18nAttr("page.dashboard.toLight")}>${zh("page.dashboard.toLight")}</button>
+      <button type="button" id="kuma-family" data-preference aria-pressed="false"${i18nAttr("page.dashboard.toAtlas")}>${zh("page.dashboard.toAtlas")}</button>
+${fontControlsHtml()}
       <button type="button" id="kuma-lang"></button>
     </div>
   </header>

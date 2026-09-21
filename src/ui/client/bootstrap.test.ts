@@ -105,6 +105,37 @@ describe("preferenceBootstrapScript", () => {
     };
     expect(() => runPreference(throwing)).not.toThrow();
   });
+
+  it("字号档位偏好：合法档位写 data-font，越界与脏值不写", () => {
+    expect(
+      runPreference(
+        new Map([
+          [
+            "kuma.font",
+            "4",
+          ],
+        ]),
+      ).getAttribute("data-font"),
+    ).toBe("4");
+    for (const dirty of [
+      "0",
+      "6",
+      "",
+      "abc",
+    ]) {
+      expect(
+        runPreference(
+          new Map([
+            [
+              "kuma.font",
+              dirty,
+            ],
+          ]),
+        ).getAttribute("data-font"),
+        dirty,
+      ).toBeNull();
+    }
+  });
 });
 
 describe("bootstrapFragment", () => {

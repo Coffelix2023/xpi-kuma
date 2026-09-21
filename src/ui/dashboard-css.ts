@@ -1,4 +1,4 @@
-import { radius, SPACING_TOKENS, themeFamilyCss } from "./theme.ts";
+import { FONT_TOKENS, radius, SPACING_TOKENS, themeFamilyCss } from "./theme.ts";
 
 /**
  * 面板样式表。
@@ -17,6 +17,10 @@ export function dashboardCss(): string {
   const spacing = Object.entries(SPACING_TOKENS)
     .map(([name, value]) => `      --${name}: ${value};`)
     .join("\n");
+  // 字号刻度：基准值来自 theme.ts，乘上用户档位后才是实际字号
+  const fonts = Object.entries(FONT_TOKENS)
+    .map(([name, value]) => `      --${name}: calc(${value} * var(--kuma-font-scale));`)
+    .join("\n");
 
   return `
 ${themeFamilyCss()}
@@ -26,6 +30,21 @@ ${themeFamilyCss()}
 ${spacing}
     }
 
+    /* 字号档位：默认档的 scale 写在这里，其余档位在下方按 data-font 覆盖 */
+    :root {
+      --kuma-font-scale: 1;
+${fonts}
+    }
+
+    /*
+     * 字号档位：1 最小、5 最大，3 即默认档（不写规则，回落上一块的 1）。
+     * 档位只改 --kuma-font-scale，间距与圆角不受影响。
+     */
+    :root[data-font="1"] { --kuma-font-scale: 0.85; }
+    :root[data-font="2"] { --kuma-font-scale: 0.92; }
+    :root[data-font="4"] { --kuma-font-scale: 1.15; }
+    :root[data-font="5"] { --kuma-font-scale: 1.3; }
+
     * { box-sizing: border-box; }
 
     body {
@@ -34,7 +53,7 @@ ${spacing}
       background: var(--background);
       color: var(--foreground);
       font-family: var(--font-sans);
-      font-size: 12px;
+      font-size: var(--kuma-font-md);
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
     }
@@ -50,14 +69,14 @@ ${spacing}
     }
 
     h1 {
-      font-size: 14px;
+      font-size: var(--kuma-font-xl);
       font-weight: 700;
       margin: 0;
       letter-spacing: 0.02em;
     }
 
     h2 {
-      font-size: 11px;
+      font-size: var(--kuma-font-sm);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -67,7 +86,7 @@ ${spacing}
 
     section { margin-bottom: var(--kuma-space-3); }
 
-    .kuma-generated { color: var(--muted-foreground); font-size: 11px; }
+    .kuma-generated { color: var(--muted-foreground); font-size: var(--kuma-font-sm); }
 
     .kuma-actions { display: flex; gap: var(--kuma-space-1); align-items: center; }
 
@@ -88,10 +107,10 @@ ${spacing}
       border-radius: ${radius()};
       padding: var(--kuma-space-2);
     }
-    .kuma-metric dt { color: var(--muted-foreground); font-size: 11px; }
+    .kuma-metric dt { color: var(--muted-foreground); font-size: var(--kuma-font-sm); }
     .kuma-metric dd {
       margin: 4px 0 0;
-      font-size: 18px;
+      font-size: var(--kuma-font-xxl);
       font-weight: 700;
       font-family: var(--font-mono);
       font-variant-numeric: tabular-nums;
@@ -99,7 +118,7 @@ ${spacing}
 
     button {
       font-family: inherit;
-      font-size: 11px;
+      font-size: var(--kuma-font-sm);
       color: var(--foreground);
       background: transparent;
       border: 1px solid var(--border);
@@ -145,8 +164,8 @@ ${spacing}
       margin-bottom: var(--kuma-space-1);
     }
 
-    .kuma-card-name { font-weight: 700; font-size: 13px; }
-    .kuma-card-model { color: var(--muted-foreground); font-size: 11px; word-break: break-all; font-family: var(--font-mono); }
+    .kuma-card-name { font-weight: 700; font-size: var(--kuma-font-lg); }
+    .kuma-card-model { color: var(--muted-foreground); font-size: var(--kuma-font-sm); word-break: break-all; font-family: var(--font-mono); }
 
     .kuma-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px var(--kuma-space-1); }
     .kuma-kv dt { color: var(--muted-foreground); }
@@ -154,7 +173,7 @@ ${spacing}
 
     .kuma-badge {
       display: inline-block;
-      font-size: 10px;
+      font-size: var(--kuma-font-xs);
       text-transform: uppercase;
       letter-spacing: 0.06em;
       padding: 1px 6px;
@@ -188,7 +207,7 @@ ${spacing}
 
     .kuma-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: ${radius()}; }
 
-    table { border-collapse: collapse; width: 100%; font-size: 11px; }
+    table { border-collapse: collapse; width: 100%; font-size: var(--kuma-font-sm); }
     th, td { padding: 6px 10px; text-align: right; white-space: nowrap; }
     th { color: var(--muted-foreground); font-weight: 600; text-align: right; border-bottom: 1px solid var(--border); }
     th:first-child, td:first-child { text-align: left; }
@@ -214,7 +233,7 @@ ${spacing}
     /* 子页用的行内链接与引导步骤 */
     a.kuma-link {
       color: var(--foreground);
-      font-size: 11px;
+      font-size: var(--kuma-font-sm);
       text-decoration: none;
       border-bottom: 1px solid var(--border);
     }
@@ -229,7 +248,7 @@ ${spacing}
       padding: var(--kuma-space-1) var(--kuma-space-2);
       margin: 0 0 var(--kuma-space-3);
       color: var(--muted-foreground);
-      font-size: 11px;
+      font-size: var(--kuma-font-sm);
     }
 
     /* 键值列表的宽版：标签固定、值可折行（路径与错误信息都很长） */
@@ -270,7 +289,7 @@ ${spacing}
       border-left: 1px solid var(--border);
       padding-left: var(--kuma-space-1);
     }
-    .kuma-rail a { color: var(--muted-foreground); font-size: 11px; text-decoration: none; padding: 2px 0; }
+    .kuma-rail a { color: var(--muted-foreground); font-size: var(--kuma-font-sm); text-decoration: none; padding: 2px 0; }
     .kuma-rail a:hover { color: var(--primary); }
     .kuma-rail a[aria-current="location"] { color: var(--primary); font-weight: 700; }
 

@@ -23,12 +23,12 @@ export function accountsPageFragment(): string {
       /** 余额文案：取不到值就是「未知」，绝不显示 ¥0.00。 */
       function amountText(value, currency) {
         if (typeof value !== "number" || !isFinite(value)) { return t("common.unknown"); }
-        return currencyPrefix(currency) + value.toFixed(2);
+        return currencyPrefix(currency) + group(value, 2);
       }
 
       function topupText(row) {
         if (typeof row.topup !== "number" || !isFinite(row.topup)) { return t("common.unknown"); }
-        return currencyPrefix(row.currency) + row.topup.toFixed(2);
+        return currencyPrefix(row.currency) + group(row.topup, 2);
       }
 
       function syncText(row) {
@@ -53,10 +53,10 @@ export function accountsPageFragment(): string {
           parts.push(t("accounts.trustNoNumbers"));
         }
         if (overview.manualCount > 0) {
-          parts.push(overview.manualCount + t("accounts.trustManualSuffix"));
+          parts.push(count(overview.manualCount) + t("accounts.trustManualSuffix"));
         }
         if (overview.staleCount > 0) {
-          parts.push(overview.staleCount + t("accounts.trustStaleSuffix"));
+          parts.push(count(overview.staleCount) + t("accounts.trustStaleSuffix"));
         }
         if (parts.length === 0) {
           parts.push(t("accounts.trustAllFresh"));

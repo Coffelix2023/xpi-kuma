@@ -1,6 +1,6 @@
 import { i18nAttr, zh } from "../client/messages.ts";
 import { emptyClientScript } from "../dashboard-client.ts";
-import { type PageOptions, pageShell } from "../shell.ts";
+import { fontControlsHtml, type PageOptions, pageShell } from "../shell.ts";
 
 /**
  * 零数据引导态。
@@ -18,6 +18,7 @@ export function generateEmptyHTML(options: PageOptions = {}): string {
     </div>
     <div class="kuma-actions">
       <a class="kuma-link" data-kuma-nav="/" href="/"${i18nAttr("link.backToDashboard")}>${zh("link.backToDashboard")}</a>
+${fontControlsHtml()}
       <button type="button" id="kuma-lang"></button>
     </div>
   </header>

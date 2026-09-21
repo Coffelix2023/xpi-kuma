@@ -1,6 +1,6 @@
 import { i18nAttr, zh } from "../client/messages.ts";
 import { settingsClientScript } from "../dashboard-client.ts";
-import { type PageOptions, pageShell } from "../shell.ts";
+import { fontControlsHtml, type PageOptions, pageShell } from "../shell.ts";
 
 /**
  * 配置体检页外壳。
@@ -18,6 +18,7 @@ export function generateSettingsHTML(options: PageOptions = {}): string {
     <div class="kuma-actions">
       <button type="button" id="kuma-reload"${i18nAttr("settings.reload")}>${zh("settings.reload")}</button>
       <a class="kuma-link" data-kuma-nav="/" href="/"${i18nAttr("link.backToDashboard")}>${zh("link.backToDashboard")}</a>
+${fontControlsHtml()}
       <button type="button" id="kuma-lang"></button>
     </div>
   </header>

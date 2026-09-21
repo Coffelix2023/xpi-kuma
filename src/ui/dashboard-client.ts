@@ -2,6 +2,7 @@ import { apiFragment } from "./client/api.ts";
 import { bootstrapFragment, preferenceBootstrapScript } from "./client/bootstrap.ts";
 import { chartFragment } from "./client/chart.ts";
 import { DEFAULT_PERIOD, POLL_INTERVAL_MS } from "./client/constants.ts";
+import { fontScaleFragment } from "./client/font.ts";
 import { i18nFragment } from "./client/i18n.ts";
 import { navFragment } from "./client/nav.ts";
 import { overviewFragment } from "./client/overview.ts";
@@ -19,7 +20,7 @@ export { POLL_INTERVAL_MS, preferenceBootstrapScript };
  *
  * 四个页面的脚本只有最后一段（页面装配）不同，其余片段与顺序完全一致：
  * bootstrap（凭据与状态）→ api（请求）→ poll（轮询）→ nav（站内链接）→
- * i18n（双语字典与切换）→ render（渲染工具）→ 页面片段。
+ * i18n（双语字典与切换）→ font（字号档位）→ render（渲染工具）→ 页面片段。
  *
  * bootstrap 必须最先：后续片段都依赖它声明的状态变量；i18n 的 `applyLanguage`
  * 在片段末尾立即执行，因此要排在 DOM 就绪之后（脚本本就在 `</body>` 前）。
@@ -36,6 +37,7 @@ ${apiFragment()}
 ${pollFragment()}
 ${navFragment()}
 ${i18nFragment()}
+${fontScaleFragment()}
 ${renderFragment()}
 ${pageFragment}
     })();`;

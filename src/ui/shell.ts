@@ -1,4 +1,5 @@
-import { type MessageKey, zh } from "./client/messages.ts";
+import { FONT_DEC_ID, FONT_INC_ID, FONT_RESET_ID } from "./client/constants.ts";
+import { i18nAria, i18nAttr, type MessageKey, zh } from "./client/messages.ts";
 import { preferenceBootstrapScript } from "./dashboard-client.ts";
 import { dashboardCss } from "./dashboard-css.ts";
 import { escapeHtml } from "./html.ts";
@@ -19,6 +20,23 @@ export interface PageOptions {
   /** CSP nonce；缺省时不输出 nonce 属性（离线快照或测试） */
   nonce?: string;
 }
+
+/**
+ * 面板字号档位控件：`A−` / `A+` / `重置`，四个页面的 header 共用同一份结构。
+ *
+ * 可见文案与 aria-label 都带 `data-i18n` 键，语言切换自动跟随。点击后由页内脚本改
+ * `<html data-font>`（见 `client/font.ts`），档位存 localStorage，跨页面与刷新都生效。
+ * `data-preference` 标记让面板的数据刷新不去改这些按钮的可用状态 ——
+ * 它们的禁用状态由当前档位决定。
+ */
+export function fontControlsHtml(): string {
+  return `      <span class="kuma-actions" role="group"${i18nAria("font.group")}>
+        <button type="button" id="${FONT_DEC_ID}" data-preference${i18nAria("font.smaller")}>A−</button>
+        <button type="button" id="${FONT_INC_ID}" data-preference${i18nAria("font.larger")}>A+</button>
+        <button type="button" id="${FONT_RESET_ID}" data-preference${i18nAttr("font.reset")}>${zh("font.reset")}</button>
+      </span>`;
+}
+
 /**
  * 面板页面的公共外壳。
  *

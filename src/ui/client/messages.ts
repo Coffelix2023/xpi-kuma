@@ -232,6 +232,22 @@ export const MESSAGES = {
     en: "Vendor · model",
     zh: "供应商·模型",
   },
+  "font.group": {
+    en: "Font size",
+    zh: "字号",
+  },
+  "font.larger": {
+    en: "Increase font size",
+    zh: "放大字号",
+  },
+  "font.reset": {
+    en: "Reset",
+    zh: "重置",
+  },
+  "font.smaller": {
+    en: "Decrease font size",
+    zh: "缩小字号",
+  },
   "global.bytesPrefix": {
     en: "Exists (",
     zh: "存在（",

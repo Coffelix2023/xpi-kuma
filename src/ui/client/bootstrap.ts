@@ -4,7 +4,14 @@
  * 必须最先拼装：后续片段（请求、轮询、页面）都依赖这里声明的状态变量
  * （token / period / lastTrend / busy / timer）与 el / readToken / setStatus。
  */
-import { ATLAS_FAMILY, FAMILY_KEY, THEME_KEY } from "./constants.ts";
+import {
+  ATLAS_FAMILY,
+  FAMILY_KEY,
+  FONT_KEY,
+  FONT_MAX_LEVEL,
+  FONT_MIN_LEVEL,
+  THEME_KEY,
+} from "./constants.ts";
 import { LANGUAGE_KEY } from "./i18n.ts";
 
 /**
@@ -30,6 +37,11 @@ export function preferenceBootstrapScript(): string {
     var lang = localStorage.getItem("${LANGUAGE_KEY}");
     if (lang === "en" || lang === "zh") {
       document.documentElement.setAttribute("lang", lang === "en" ? "en" : "zh-CN");
+    }
+    // 字号档位：越界或非数字一律不设属性，正文片段会按默认档处理
+    var fontLevel = Math.round(Number(localStorage.getItem("${FONT_KEY}")));
+    if (fontLevel >= ${FONT_MIN_LEVEL} && fontLevel <= ${FONT_MAX_LEVEL}) {
+      document.documentElement.setAttribute("data-font", String(fontLevel));
     }
   } catch (error) {
     // 存储不可用时按默认外观继续，不阻断页面

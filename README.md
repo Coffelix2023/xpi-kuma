@@ -140,6 +140,11 @@ stays authenticated.
 The page header carries a language toggle (`#kuma-lang`) for English and Simplified Chinese. The choice
 is stored in `localStorage` under `kuma.lang` and applied before the first paint.
 
+The same header carries a font-size control — `A−` / `A+` / reset — on all four pages. Five steps are
+available (85% to 130%); the choice is stored under `kuma.font` and applied before the first paint.
+Counts, costs and durations use thousands separators, and totals switch to `M` (millions) or `亿`
+(100 millions) so long numbers stay readable at a glance.
+
 **Balances fall back through three tiers**, per vendor and in order. A tier that fails only adds a reason;
 it never aborts the row.
 

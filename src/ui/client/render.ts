@@ -24,14 +24,46 @@ export function renderFragment(): string {
         return "⚪";
       }
 
+      /**
+       * 千分位分组：固定小数位，locale 跟随界面语言（zh-CN 与 en-US 都用逗号分组）。
+       *
+       * 非数值输入返回破折号，让表格能降级显示而不是把 NaN 摆到用户面前。
+       */
+      function group(n, digits) {
+        if (typeof n !== "number" || !isFinite(n)) { return "—"; }
+        return n.toLocaleString(dateLocale(), {
+          minimumFractionDigits: digits,
+          maximumFractionDigits: digits
+        });
+      }
+
+      /**
+       * 数量显示：不足百万用整数千分位，百万级用 M、亿级用亿（两位小数，去掉尾随 0）。
+       *
+       * 先判亿再判 M：1,234,567 读作 1.23M 比读七位数字快，但 1,234 仍要精确成 1,234。
+       */
+      function count(n) {
+        if (typeof n !== "number" || !isFinite(n)) { return "—"; }
+        var abs = Math.abs(n);
+        if (abs >= 1e8) { return trimZeros((n / 1e8).toFixed(2)) + "亿"; }
+        if (abs >= 1e6) { return trimZeros((n / 1e6).toFixed(2)) + "M"; }
+        return group(Math.round(n), 0);
+      }
+
+      /** 去掉定点小数的尾随 0：1.20 → 1.2、2.00 → 2。 */
+      function trimZeros(text) {
+        // 片段是模板字符串：正则里的反斜杠要写两次，才原样进入页内脚本
+        return text.indexOf(".") === -1 ? text : text.replace(/0+$/, "").replace(/\\.$/, "");
+      }
+
       function money(n) {
         if (typeof n !== "number" || !isFinite(n)) { return "¥-"; }
-        return "¥" + n.toFixed(2);
+        return "¥" + group(n, 2);
       }
 
       function ms(n) {
         if (typeof n !== "number" || !isFinite(n)) { return "—"; }
-        return Math.round(n) + " ms";
+        return group(Math.round(n), 0) + " ms";
       }
 
       function price(p) {
@@ -120,10 +152,10 @@ export function renderFragment(): string {
       /** 统计表列：表头词条键 + 取值函数。 */
       var COLUMNS = [
         ["stats.vendorModel", function (r) { return [r.provider + " · " + r.model]; }],
-        ["stats.tokensInput", function (r) { return [r.tokensInput, money(r.costInput)]; }],
-        ["stats.tokensOutput", function (r) { return [r.tokensOutput, money(r.costOutput)]; }],
-        ["stats.cacheRead", function (r) { return [r.tokensCacheRead, money(r.costCacheRead)]; }],
-        ["stats.cacheWrite", function (r) { return [r.tokensCacheWrite, money(r.costCacheWrite)]; }]
+        ["stats.tokensInput", function (r) { return [count(r.tokensInput), money(r.costInput)]; }],
+        ["stats.tokensOutput", function (r) { return [count(r.tokensOutput), money(r.costOutput)]; }],
+        ["stats.cacheRead", function (r) { return [count(r.tokensCacheRead), money(r.costCacheRead)]; }],
+        ["stats.cacheWrite", function (r) { return [count(r.tokensCacheWrite), money(r.costCacheWrite)]; }]
       ];
 
       function renderStats(rows, currentPeriod) {
@@ -166,7 +198,7 @@ export function renderFragment(): string {
             tr.appendChild(text("td", "", pair[1]));
           });
           tr.appendChild(text("td", "kuma-total", money(r.costTotal)));
-          tr.appendChild(text("td", "", String(r.requestCount)));
+          tr.appendChild(text("td", "", count(r.requestCount)));
           tbody.appendChild(tr);
         });
         table.appendChild(tbody);

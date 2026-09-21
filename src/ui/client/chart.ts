@@ -5,6 +5,8 @@
  */
 export function chartFragment(): string {
   return `
+      /** 图表标签字号：SVG 不受 CSS 影响，renderChart 按面板字号档位更新它。 */
+      var chartLabelSize = 10;
       function renderChart(trend) {
         var host = el("kuma-chart");
         if (!host) { return; }
@@ -21,6 +23,8 @@ export function chartFragment(): string {
         ];
         var ink = cssVar(style, "--muted-foreground");
         var rule = cssVar(style, "--border");
+        var fontScale = Number(cssVar(style, "--kuma-font-scale")) || 1;
+        chartLabelSize = 10 * fontScale;
 
         var providers = [];
         trend.forEach(function (point) {
@@ -74,7 +78,7 @@ export function chartFragment(): string {
             "stroke-width": 1,
             x1: padLeft, x2: padLeft + plotW, y1: gridY, y2: gridY,
           }));
-          svg.appendChild(svgLabel(padLeft - 8, gridY + 3, "¥" + gridValue.toFixed(4), ink, "end"));
+          svg.appendChild(svgLabel(padLeft - 8, gridY + 3, "¥" + group(gridValue, 4), ink, "end"));
         }
 
         // 横轴时间标签，最多 6 个
@@ -170,7 +174,7 @@ export function chartFragment(): string {
       function svgLabel(x, y, value, color, anchor) {
         return svgNode("text", {
           fill: color,
-          "font-size": 10,
+          "font-size": chartLabelSize,
           "text-anchor": anchor,
           x: x,
           y: y,
@@ -181,9 +185,9 @@ export function chartFragment(): string {
       function pointSummary(point) {
         var parts = [new Date(point.bucketStart).toLocaleString(dateLocale())];
         Object.keys(point.byProvider || {}).forEach(function (name) {
-          parts.push(name + " ¥" + (point.byProvider[name] || 0).toFixed(4));
+          parts.push(name + " ¥" + group(point.byProvider[name] || 0, 4));
         });
-        parts.push(t("attribution.tokens") + " " + (point.tokens || 0));
+        parts.push(t("attribution.tokens") + " " + count(point.tokens || 0));
         return parts.join(" · ");
       }
 

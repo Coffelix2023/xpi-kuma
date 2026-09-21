@@ -258,8 +258,15 @@ function shell(): FakeDocument {
   doc.add("div", "kuma-stats");
   doc.add("div", "kuma-chart");
   doc.add("button", "kuma-refresh-all");
-  doc.add("button", "kuma-theme");
-  doc.add("button", "kuma-family");
+  for (const id of [
+    "kuma-theme",
+    "kuma-family",
+    "kuma-font-dec",
+    "kuma-font-inc",
+    "kuma-font-reset",
+  ]) {
+    doc.add("button", id).setAttribute("data-preference", "");
+  }
   const navLink = doc.add("a");
   navLink.setAttribute("data-kuma-nav", "/accounts");
   navLink.setAttribute("href", "/accounts");
@@ -464,9 +471,86 @@ describe("花费概览与用量归因", () => {
     const host = h.doc.getElementById("kuma-overview");
     expect(host?.textContent).toContain("本期花费");
     expect(host?.textContent).toContain("¥12.50");
-    expect(host?.textContent).toContain("1234");
+    expect(host?.textContent).toContain("1,234");
     expect(host?.textContent).toContain("覆盖项目数");
     expect(h.doc.getElementById("kuma-overview-notice")?.hidden).toBe(true);
+  });
+
+  it("概览数字：百万级用 M、亿级用亿，小数字保留千分位", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          overview: {
+            costTotal: 12345.6,
+            projectCount: 1234567,
+            requestCount: 999,
+            totalTokens: 123456789,
+          },
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    const text = h.doc.getElementById("kuma-overview")?.textContent ?? "";
+    expect(text).toContain("¥12,345.60");
+    expect(text).toContain("1.23亿");
+    expect(text).toContain("1.23M");
+    expect(text).toContain("999");
+  });
+
+  it("归因表、统计表与供应商卡的时长同样走紧凑格式", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          attribution: [
+            {
+              costTotal: 1,
+              key: "/tmp/a",
+              requestCount: 12345,
+              tokens: 1234567,
+            },
+          ],
+          stats: [
+            {
+              cacheReadCost: 0,
+              cacheWriteCost: 0,
+              costCacheRead: 0,
+              costCacheWrite: 0,
+              costInput: 1,
+              costOutput: 2,
+              costTotal: 3,
+              model: "m1",
+              provider: "p1",
+              requestCount: 1234,
+              tokensCacheRead: 0,
+              tokensCacheWrite: 0,
+              tokensInput: 1234567,
+              tokensOutput: 1,
+            },
+          ],
+          vendors: [
+            vendor({
+              totalTime: 1234,
+              ttft: 12345,
+            }),
+          ],
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    expect(h.doc.getElementById("kuma-attribution")?.textContent).toContain("1.23M");
+    expect(h.doc.getElementById("kuma-attribution")?.textContent).toContain("12,345");
+    expect(h.doc.getElementById("kuma-stats")?.textContent).toContain("1.23M");
+    expect(h.doc.getElementById("kuma-stats")?.textContent).toContain("1,234");
+    expect(h.doc.getElementById("kuma-vendors")?.textContent).toContain("1,234 ms");
+    expect(h.doc.getElementById("kuma-vendors")?.textContent).toContain("12,345 ms");
   });
 
   it("本期没有记录时提示并给出去引导页的入口", async () => {
@@ -665,6 +749,63 @@ describe("时间范围与探测", () => {
     await flush();
     expect(all?.disabled).toBe(false);
     expect(all?.textContent).toBe("全部刷新");
+  });
+});
+
+describe("字号档位控件", () => {
+  it("A+ / A− 移动档位并写入 localStorage，到边界后禁用", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const dec = h.doc.getElementById("kuma-font-dec");
+    const inc = h.doc.getElementById("kuma-font-inc");
+    const reset = h.doc.getElementById("kuma-font-reset");
+    expect(dec?.disabled).toBe(false);
+    expect(inc?.disabled).toBe(false);
+
+    inc?.click();
+    expect(h.doc.root.getAttribute("data-font")).toBe("4");
+    expect(h.storage.get("kuma.font")).toBe("4");
+
+    inc?.click();
+    expect(h.doc.root.getAttribute("data-font")).toBe("5");
+    expect(inc?.disabled).toBe(true);
+    expect(dec?.disabled).toBe(false);
+
+    reset?.click();
+    expect(h.doc.root.getAttribute("data-font")).toBe("3");
+    expect(h.storage.get("kuma.font")).toBe("3");
+    expect(inc?.disabled).toBe(false);
+
+    dec?.click();
+    dec?.click();
+    expect(h.doc.root.getAttribute("data-font")).toBe("1");
+    expect(dec?.disabled).toBe(true);
+  });
+
+  it("越界档位按默认档处理，数据刷新不解禁边界按钮", async () => {
+    const h = harness();
+    h.doc.root.setAttribute("data-font", "9");
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const dec = h.doc.getElementById("kuma-font-dec");
+    const inc = h.doc.getElementById("kuma-font-inc");
+    expect(dec?.disabled).toBe(false);
+    expect(inc?.disabled).toBe(false);
+
+    inc?.click();
+    inc?.click();
+    expect(h.doc.root.getAttribute("data-font")).toBe("5");
+    expect(inc?.disabled).toBe(true);
+
+    // 一次数据刷新会重新启用被置灰的按钮，偏好类按钮必须豁免，否则边界禁用状态丢失
+    h.doc.getElementById("kuma-refresh-all")?.click();
+    await flush();
+    expect(inc?.disabled).toBe(true);
   });
 });
 
@@ -1381,8 +1522,12 @@ function langShell(): FakeDocument {
   doc.add("div", "kuma-stats");
   doc.add("div", "kuma-chart");
   doc.add("button", "kuma-refresh-all");
-  doc.add("button", "kuma-theme");
-  doc.add("button", "kuma-family");
+  for (const id of [
+    "kuma-theme",
+    "kuma-family",
+  ]) {
+    doc.add("button", id).setAttribute("data-preference", "");
+  }
   doc.add("button", "kuma-lang");
   const title = doc.add("h1", "kuma-title");
   title.setAttribute("data-i18n", "page.dashboard.title");

@@ -35,7 +35,7 @@ export function settingsPageFragment(): string {
       function formatBytes(bytes) {
         if (typeof bytes !== "number" || !isFinite(bytes)) { return t("common.unknown"); }
         if (bytes < 1024) { return bytes + " B"; }
-        return (bytes / 1024).toFixed(1) + " KB";
+        return group(bytes / 1024, 1) + " KB";
       }
 
       /** 配置明细：路径、来源、文件状态、解析结果与修改时间。 */
@@ -76,7 +76,7 @@ export function settingsPageFragment(): string {
         var issues = el("kuma-issues");
         if (issues) {
           issues.textContent = issueCount > 0
-            ? t("settings.issuesPrefix") + issueCount + t("settings.issuesSuffix")
+            ? t("settings.issuesPrefix") + count(issueCount) + t("settings.issuesSuffix")
             : t("settings.allPass");
         }
 

@@ -191,8 +191,15 @@ export interface RetentionConfig {
   rawRecords: number;
 }
 
-/** `.pi/xpi-kuma/config.yaml` 的解析结果。 */
+/** 面板服务配置。 */
+export interface DashboardConfig {
+  /** 监听端口；被占用时回退系统随机端口 */
+  port: number;
+}
+
+/** 全局配置 `~/.pi/agent/data/xpi-kuma/config.yaml` 的解析结果。 */
 export interface KumaConfig {
+  dashboard: DashboardConfig;
   retention: RetentionConfig;
   vendors: VendorConfig[];
 }

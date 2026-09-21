@@ -1,6 +1,6 @@
 # xpi-kuma 配置示例
 #
-# 用法：复制到 <项目根>/.pi/xpi-kuma/config.yaml 后按需修改。
+# 用法：实际生效的是全局配置 `~/.pi/agent/data/xpi-kuma/config.yaml`（缺文件时首次运行自动生成模板）。
 # 密钥请使用 ${ENV_VAR} 占位符，不要直接写明文。
 
 vendors:

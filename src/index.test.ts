@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { request } from "node:http";
+import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,16 @@ import type {
   SessionStartEvent,
   TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { readConfigTemplate, resolveConfigPath } from "./config.ts";
 import { Database, defaultDatabasePath } from "./storage/database.ts";
 import type { AttributionDimension } from "./types.ts";
@@ -21,6 +30,9 @@ const VERSION_PATTERN = /const VERSION = "([^"]+)"/;
 
 /** 版本号形状；发布号必须是 `X.Y.Z`。 */
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+
+/** 面板 URL 形状：`http://127.0.0.1:<端口>/#<凭据>`。 */
+const DASHBOARD_URL_PATTERN = /^http:\/\/127\.0\.0\.1:\d+\/#/;
 
 /**
  * 记录浏览器打开请求。
@@ -86,7 +98,9 @@ function setupCwd(): string {
       recursive: true,
     }),
   );
-  const configPath = resolveConfigPath(dir);
+  // 配置只从全局目录读：临时项目目录同时充当 agent 目录
+  process.env.PI_CODING_AGENT_DIR = dir;
+  const configPath = resolveConfigPath();
   mkdirSync(dirname(configPath), {
     recursive: true,
   });
@@ -125,12 +139,13 @@ async function sessionShutdown(
 async function runCommand(
   commands: ReturnType<typeof fakePi>["commands"],
   ctx: ExtensionContext,
+  args = "",
 ): Promise<void> {
   const handler = commands.get("xpi-kuma")?.handler;
   if (!handler) {
     throw new Error("/xpi-kuma 命令未注册");
   }
-  await handler("", ctx);
+  await handler(args, ctx);
 }
 
 function messageEnd(
@@ -234,6 +249,16 @@ beforeEach(() => {
   );
 });
 
+/**
+ * 服务现在跨会话常驻：测试之间必须显式 `off`，否则监听端口与数据库连接会串到下个用例。
+ */
+afterEach(async () => {
+  const { api, commands } = fakePi();
+  extensionFactory(api);
+  const { ctx } = fakeCtx(tmpdir());
+  await runCommand(commands, ctx, "off");
+});
+
 afterAll(() => {
   delete process.env.PI_CODING_AGENT_DIR;
   while (cleanups.length > 0) {
@@ -257,7 +282,9 @@ describe("扩展注册", () => {
       "turn_end",
     ]);
     expect(commands.has("xpi-kuma")).toBe(true);
-    expect(commands.get("xpi-kuma")?.description).toBe("打开或重新打开监控面板");
+    expect(commands.get("xpi-kuma")?.description).toBe(
+      "打开监控面板（on / off 开关，缺省等同 on）",
+    );
   });
 
   it("VERSION 常量与 package.json 的 version 保持一致", () => {
@@ -467,10 +494,17 @@ describe("会话生命周期", () => {
   it("配置无法创建时提示用户而不抛错", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
-    const dir = setupCwd();
-    // 把 cwd 指向一个普通文件：loadConfig 既不能建目录也不能读文件
+    const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-index-"));
+    cleanups.push(() =>
+      rmSync(dir, {
+        force: true,
+        recursive: true,
+      }),
+    );
+    // 把 agent 目录指到一个普通文件：loadConfig 既不能建目录也不能写模板
     const blocker = join(dir, "blocker");
     writeFileSync(blocker, "");
+    process.env.PI_CODING_AGENT_DIR = blocker;
     const { ctx, notify } = fakeCtx(blocker);
 
     await expect(sessionStart(handlers, ctx)).resolves.toBeUndefined();
@@ -488,7 +522,7 @@ describe("监控面板服务", () => {
     await runCommand(commands, ctx);
 
     expect(openBrowser).toHaveBeenCalledTimes(1);
-    expect(lastUrl()).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/#/);
+    expect(lastUrl()).toMatch(DASHBOARD_URL_PATTERN);
     await sessionShutdown(handlers, ctx);
   });
 
@@ -540,25 +574,54 @@ describe("监控面板服务", () => {
     await sessionShutdown(handlers, ctx);
   });
 
-  it("会话未初始化时只提示，不启动服务", async () => {
+  it("会话未初始化时命令也能启动服务", async () => {
     const { api, commands } = fakePi();
     extensionFactory(api);
-    const { ctx, notify } = fakeCtx(setupCwd());
+    const { ctx } = fakeCtx(setupCwd());
 
-    await runCommand(commands, ctx);
+    await runCommand(commands, ctx, "on");
 
-    expect(openBrowser).not.toHaveBeenCalled();
-    expect(notify).toHaveBeenCalledWith(
-      expect.stringContaining("会话尚未初始化"),
-      "warning",
-    );
+    expect(openBrowser).toHaveBeenCalledTimes(1);
+  });
+
+  it("目标端口被占用时回退随机端口并提示实际端口", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const dir = setupCwd();
+    // 占住一个端口，再把它写进配置当目标端口
+    const probe = createServer();
+    await new Promise<void>((resolve) => {
+      probe.listen(0, "127.0.0.1", resolve);
+    });
+    const address = probe.address();
+    const busy = typeof address === "object" && address !== null ? address.port : 0;
+    writeFileSync(resolveConfigPath(), `dashboard:\n  port: ${busy}\nvendors: []\n`);
+    const { ctx, notify } = fakeCtx(dir);
+    await sessionStart(handlers, ctx);
+
+    try {
+      await runCommand(commands, ctx);
+
+      const fallback = notify.mock.calls
+        .map((call) => String(call[0]))
+        .find((text) => text.includes("已被占用"));
+      expect(fallback).toBeDefined();
+      expect(fallback).toContain(String(busy));
+      expect(lastUrl()).toMatch(DASHBOARD_URL_PATTERN);
+      expect(new URL(lastUrl()).port).not.toBe(String(busy));
+    } finally {
+      await new Promise<void>((resolve) => {
+        probe.close(() => resolve());
+      });
+      await sessionShutdown(handlers, ctx);
+    }
   });
 
   it("无配置供应商时仍启动服务并提示配置路径", async () => {
     const { api, commands, handlers } = fakePi();
     extensionFactory(api);
     const dir = setupCwd();
-    const configPath = resolveConfigPath(dir);
+    const configPath = resolveConfigPath();
     writeFileSync(configPath, "vendors: []\nretention:\n  raw_records: 7\n");
     const { ctx, notify } = fakeCtx(dir);
     await sessionStart(handlers, ctx);
@@ -566,7 +629,7 @@ describe("监控面板服务", () => {
     await runCommand(commands, ctx);
 
     expect(notify).toHaveBeenCalledWith(
-      "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml",
+      "未配置任何供应商，请编辑 ~/.pi/agent/data/xpi-kuma/config.yaml",
       "warning",
     );
     expect(openBrowser).toHaveBeenCalledTimes(1);
@@ -574,41 +637,51 @@ describe("监控面板服务", () => {
   });
 });
 
-describe("会话切换释放服务", () => {
-  const reasons = [
-    "quit",
-    "reload",
-    "new",
-    "resume",
-    "fork",
-  ] as const;
+describe("常驻与 on/off 开关", () => {
+  it("session_shutdown 不释放端口，服务与凭据都还在", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+    await runCommand(commands, ctx);
+    const url = lastUrl();
 
-  for (const reason of reasons) {
-    it(`session_shutdown(${reason}) 释放端口并使旧凭据失效`, async () => {
-      const { api, commands, handlers } = fakePi();
-      extensionFactory(api);
-      const { ctx } = fakeCtx(setupCwd());
-      await sessionStart(handlers, ctx);
-      await runCommand(commands, ctx);
-      const first = lastUrl();
-      const oldToken = new URL(first).hash.slice(1);
+    await sessionShutdown(handlers, ctx, "quit");
 
-      await sessionShutdown(handlers, ctx, reason);
-      await expect(rawStatus(first)).rejects.toThrow();
+    expect(
+      await rawStatus(`${new URL(url).origin}/api/dashboard`, {
+        authorization: `Bearer ${new URL(url).hash.slice(1)}`,
+      }),
+    ).toBe(200);
+  });
 
-      await sessionStart(handlers, ctx, "new");
-      await runCommand(commands, ctx);
-      const second = lastUrl();
+  it("off 释放端口，on 重新启动并复用同一凭据", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+    await runCommand(commands, ctx);
+    const first = lastUrl();
 
-      expect(second).not.toBe(first);
-      expect(
-        await rawStatus(`${new URL(second).origin}/api/dashboard`, {
-          authorization: `Bearer ${oldToken}`,
-        }),
-      ).toBe(401);
-      await sessionShutdown(handlers, ctx);
-    });
-  }
+    await runCommand(commands, ctx, "off");
+    await expect(rawStatus(first)).rejects.toThrow();
+
+    await runCommand(commands, ctx, "on");
+
+    expect(lastUrl()).toBe(first);
+  });
+
+  it("未知参数只提示，不启动服务", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx, notify } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    await runCommand(commands, ctx, "wat");
+
+    expect(openBrowser).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("未知参数"), "warning");
+  });
 });
 
 describe("统计累加语义", () => {

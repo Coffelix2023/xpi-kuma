@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ConfigError,
+  DEFAULT_DASHBOARD_PORT,
   expandEnvPlaceholders,
   loadConfig,
   readConfigTemplate,
@@ -12,7 +13,13 @@ import {
 
 const cleanups: (() => void)[] = [];
 
-function tempCwd(): string {
+/**
+ * 切到一个新的临时 agent 目录。
+ *
+ * 配置现在只从全局目录读写，隔离只能靠 `PI_CODING_AGENT_DIR` —— `getAgentDir()`
+ * 每次调用都读环境变量，因此逐个用例切换即可。
+ */
+function tempAgentDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-config-"));
   cleanups.push(() =>
     rmSync(dir, {
@@ -20,11 +27,12 @@ function tempCwd(): string {
       recursive: true,
     }),
   );
+  process.env.PI_CODING_AGENT_DIR = dir;
   return dir;
 }
 
-function writeConfig(cwd: string, content: string): void {
-  const path = resolveConfigPath(cwd);
+function writeConfig(content: string): void {
+  const path = resolveConfigPath();
   mkdirSync(dirname(path), {
     recursive: true,
   });
@@ -32,6 +40,7 @@ function writeConfig(cwd: string, content: string): void {
 }
 
 afterEach(() => {
+  delete process.env.PI_CODING_AGENT_DIR;
   while (cleanups.length > 0) {
     cleanups.pop()?.();
   }
@@ -39,12 +48,10 @@ afterEach(() => {
 
 describe("loadConfig", () => {
   it("解析仓库自带的示例配置", () => {
-    const cwd = tempCwd();
-    writeConfig(cwd, readConfigTemplate());
+    tempAgentDir();
+    writeConfig(readConfigTemplate());
 
-    const config = loadConfig({
-      cwd,
-    });
+    const config = loadConfig();
 
     expect(config.vendors).toHaveLength(3);
     expect(config.vendors[0]).toMatchObject({
@@ -68,56 +75,42 @@ describe("loadConfig", () => {
   });
 
   it("文件不存在时从模板自动创建", () => {
-    const cwd = tempCwd();
-    const configPath = resolveConfigPath(cwd);
+    tempAgentDir();
+    const configPath = resolveConfigPath();
 
-    const config = loadConfig({
-      cwd,
-    });
+    const config = loadConfig();
 
     expect(readFileSync(configPath, "utf8")).toBe(readConfigTemplate());
     expect(config.vendors.length).toBeGreaterThan(0);
   });
 
   it("createIfMissing=false 时文件缺失抛错", () => {
-    const cwd = tempCwd();
+    tempAgentDir();
     expect(() =>
       loadConfig({
-        cwd,
         createIfMissing: false,
       }),
     ).toThrow(ConfigError);
   });
 
   it("缺少必填字段时抛错", () => {
-    const cwd = tempCwd();
-    writeConfig(cwd, "vendors:\n  - name: OpenAI\n    model: gpt-4o-mini\n");
-    expect(() =>
-      loadConfig({
-        cwd,
-      }),
-    ).toThrow(/endpoint/);
+    tempAgentDir();
+    writeConfig("vendors:\n  - name: OpenAI\n    model: gpt-4o-mini\n");
+    expect(() => loadConfig()).toThrow(/endpoint/);
   });
 
   it("非法 probe.timeout 抛错", () => {
-    const cwd = tempCwd();
+    tempAgentDir();
     writeConfig(
-      cwd,
       'vendors:\n  - name: OpenAI\n    endpoint: "https://x/v1"\n    model: m\n    probe:\n      timeout: -1\n',
     );
-    expect(() =>
-      loadConfig({
-        cwd,
-      }),
-    ).toThrow(/timeout/);
+    expect(() => loadConfig()).toThrow(/timeout/);
   });
 
   it("无 vendors 时返回空列表", () => {
-    const cwd = tempCwd();
-    writeConfig(cwd, "retention:\n  raw_records: 3\n");
-    const config = loadConfig({
-      cwd,
-    });
+    tempAgentDir();
+    writeConfig("retention:\n  raw_records: 3\n");
+    const config = loadConfig();
     expect(config.vendors).toEqual([]);
     expect(config.retention).toEqual({
       rawRecords: 3,
@@ -125,26 +118,53 @@ describe("loadConfig", () => {
   });
 });
 
+describe("dashboard.port", () => {
+  it("段缺失时用内置默认端口", () => {
+    tempAgentDir();
+    writeConfig("vendors: []\n");
+    expect(loadConfig().dashboard).toEqual({
+      port: DEFAULT_DASHBOARD_PORT,
+    });
+  });
+
+  it("解析自定义端口", () => {
+    tempAgentDir();
+    writeConfig("dashboard:\n  port: 6001\nvendors: []\n");
+    expect(loadConfig().dashboard.port).toBe(6001);
+  });
+
+  it("非 1..65535 的整数一律抛 ConfigError", () => {
+    for (const port of [
+      "0",
+      "65536",
+      '"5180"',
+      "1.5",
+    ]) {
+      tempAgentDir();
+      writeConfig(`dashboard:\n  port: ${port}\nvendors: []\n`);
+      expect(() => loadConfig(), port).toThrow(ConfigError);
+    }
+  });
+
+  it("dashboard 不是映射时抛错", () => {
+    tempAgentDir();
+    writeConfig("dashboard: 5180\nvendors: []\n");
+    expect(() => loadConfig()).toThrow("dashboard 必须是映射");
+  });
+});
+
 /**
- * 两份示例配置都是用户入口：随包发布的模板，与项目内的参考副本。
- * 它们一旦失效或彼此漂移，用户照抄就会踩坑，因此在这里锁住。
+ * 随包模板是唯一的用户入口：它一旦失效，用户照抄就会踩坑，因此在这里锁住。
  */
 describe("示例配置文件", () => {
-  const projectExample = readFileSync(
-    join(import.meta.dirname, "..", ".pi", "xpi-kuma", "config.example.yaml"),
-    "utf8",
-  );
-
   function parseAsConfig(content: string) {
-    const cwd = tempCwd();
-    writeConfig(cwd, content);
-    return loadConfig({
-      cwd,
-    });
+    tempAgentDir();
+    writeConfig(content);
+    return loadConfig();
   }
 
-  it("项目内的示例副本可被正常解析", () => {
-    const config = parseAsConfig(projectExample);
+  it("随包模板可被正常解析", () => {
+    const config = parseAsConfig(readConfigTemplate());
     expect(config.vendors.map((v) => v.name)).toEqual([
       "OpenAI",
       "Anthropic",
@@ -155,12 +175,8 @@ describe("示例配置文件", () => {
     });
   });
 
-  it("与随包模板保持一致，避免各自漂移", () => {
-    expect(parseAsConfig(projectExample)).toEqual(parseAsConfig(readConfigTemplate()));
-  });
-
   it("示例里不含明文密钥，只用环境变量占位", () => {
-    const config = parseAsConfig(projectExample);
+    const config = parseAsConfig(readConfigTemplate());
     for (const vendor of config.vendors) {
       expect(vendor.apiKey).toMatch(/^\$\{[A-Z0-9_]+\}$/);
     }
@@ -168,14 +184,12 @@ describe("示例配置文件", () => {
 });
 describe("YAML 语法错误", () => {
   it("抛出包含行号的友好错误", () => {
-    const cwd = tempCwd();
-    writeConfig(cwd, "vendors:\n  - name: OpenAI\n   model: broken-indent\n");
+    tempAgentDir();
+    writeConfig("vendors:\n  - name: OpenAI\n   model: broken-indent\n");
 
     let caught: unknown;
     try {
-      loadConfig({
-        cwd,
-      });
+      loadConfig();
     } catch (error) {
       caught = error;
     }
@@ -187,13 +201,9 @@ describe("YAML 语法错误", () => {
   });
 
   it("根节点不是映射时抛错", () => {
-    const cwd = tempCwd();
-    writeConfig(cwd, "- just\n- a\n- list\n");
-    expect(() =>
-      loadConfig({
-        cwd,
-      }),
-    ).toThrow(/根节点/);
+    tempAgentDir();
+    writeConfig("- just\n- a\n- list\n");
+    expect(() => loadConfig()).toThrow(/根节点/);
   });
 });
 
@@ -210,16 +220,13 @@ describe("expandEnvPlaceholders", () => {
   });
 
   it("加载配置时解析 api_key 占位符", () => {
-    const cwd = tempCwd();
+    tempAgentDir();
     process.env.XPI_KUMA_TEST_KEY = "sk-test";
     writeConfig(
-      cwd,
       'vendors:\n  - name: OpenAI\n    endpoint: "https://x/v1"\n    model: m\n    api_key: "${XPI_KUMA_TEST_KEY}"\n',
     );
 
-    const config = loadConfig({
-      cwd,
-    });
+    const config = loadConfig();
     delete process.env.XPI_KUMA_TEST_KEY;
 
     expect(config.vendors[0].apiKey).toBe("sk-test");
@@ -228,9 +235,8 @@ describe("expandEnvPlaceholders", () => {
 
 describe("余额与授权配置段", () => {
   it("段缺失时视为未配置", () => {
-    const cwd = tempCwd();
+    tempAgentDir();
     writeConfig(
-      cwd,
       [
         "vendors:",
         '  - name: "A"',
@@ -239,18 +245,15 @@ describe("余额与授权配置段", () => {
       ].join("\n"),
     );
 
-    const config = loadConfig({
-      cwd,
-    });
+    const config = loadConfig();
 
     expect(config.vendors[0].balance).toBeUndefined();
     expect(config.vendors[0].oauth).toBeUndefined();
   });
 
   it("解析 balance 与 oauth 段", () => {
-    const cwd = tempCwd();
+    tempAgentDir();
     writeConfig(
-      cwd,
       [
         "vendors:",
         '  - name: "A"',
@@ -268,9 +271,7 @@ describe("余额与授权配置段", () => {
       ].join("\n"),
     );
 
-    const config = loadConfig({
-      cwd,
-    });
+    const config = loadConfig();
 
     expect(config.vendors[0].balance).toEqual({
       apiPath: "/v1/balance",
@@ -308,9 +309,8 @@ describe("余额与授权配置段", () => {
     ] as const;
 
     for (const [segment, pattern] of cases) {
-      const cwd = tempCwd();
+      tempAgentDir();
       writeConfig(
-        cwd,
         [
           "vendors:",
           '  - name: "A"',
@@ -320,18 +320,13 @@ describe("余额与授权配置段", () => {
         ].join("\n"),
       );
 
-      expect(() =>
-        loadConfig({
-          cwd,
-        }),
-      ).toThrow(pattern);
+      expect(() => loadConfig()).toThrow(pattern);
     }
   });
 
   it("OAuth 段缺项按未配置处理，不报错", () => {
-    const cwd = tempCwd();
+    tempAgentDir();
     writeConfig(
-      cwd,
       [
         "vendors:",
         '  - name: "A"',
@@ -342,9 +337,7 @@ describe("余额与授权配置段", () => {
       ].join("\n"),
     );
 
-    const config = loadConfig({
-      cwd,
-    });
+    const config = loadConfig();
 
     expect(config.vendors[0].oauth).toBeUndefined();
   });

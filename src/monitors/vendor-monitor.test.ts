@@ -109,6 +109,9 @@ function vendor(overrides: Partial<VendorConfig> = {}): VendorConfig {
 
 function config(vendors: VendorConfig[]): KumaConfig {
   return {
+    dashboard: {
+      port: 5180,
+    },
     retention: {
       rawRecords: 7,
     },

@@ -48,8 +48,8 @@ export const MESSAGES = {
     zh: "请输入 ",
   },
   "accounts.promptSuffix": {
-    en: " (written back to .pi/xpi-kuma/config.yaml)",
-    zh: " 的当前余额（写回 .pi/xpi-kuma/config.yaml）",
+    en: " (written back to ~/.pi/agent/data/xpi-kuma/config.yaml)",
+    zh: " 的当前余额（写回 ~/.pi/agent/data/xpi-kuma/config.yaml）",
   },
   "accounts.topupTotal": {
     en: "Total topped up",
@@ -269,8 +269,8 @@ export const MESSAGES = {
     zh: "在本项目里正常使用 Pi：新的 LLM 调用会经 message_end 自动计入用量。",
   },
   "guide.dataPath2": {
-    en: "Configure vendors in .pi/xpi-kuma/config.yaml so probes and accounts can show up.",
-    zh: "在 .pi/xpi-kuma/config.yaml 里配置供应商，面板才能展示探测与账户信息。",
+    en: "Configure vendors in ~/.pi/agent/data/xpi-kuma/config.yaml so probes and accounts can show up.",
+    zh: "在 ~/.pi/agent/data/xpi-kuma/config.yaml 里配置供应商，面板才能展示探测与账户信息。",
   },
   "guide.dataPath3": {
     en: "Re-run /xpi-kuma to reopen the panel; once data exists the dashboard replaces this page.",
@@ -297,8 +297,8 @@ export const MESSAGES = {
     zh: "配置文件里目前没有任何供应商，面板因此没有供应商、账户与探测信息可展示。",
   },
   "guide.vendorsStep1": {
-    en: "Open .pi/xpi-kuma/config.yaml (a template is created on first run).",
-    zh: "打开 .pi/xpi-kuma/config.yaml（首次运行面板时会自动生成模板）。",
+    en: "Open ~/.pi/agent/data/xpi-kuma/config.yaml (a template is created on first run).",
+    zh: "打开 ~/.pi/agent/data/xpi-kuma/config.yaml（首次运行时会自动生成模板）。",
   },
   "guide.vendorsStep2": {
     en: "Add an entry under vendors: name / endpoint / model / api_key.",
@@ -590,8 +590,8 @@ export const MESSAGES = {
     zh: "配置来源",
   },
   "settings.sourceNote": {
-    en: "Project .pi/xpi-kuma/config.yaml",
-    zh: "项目内 .pi/xpi-kuma/config.yaml",
+    en: "Global ~/.pi/agent/data/xpi-kuma/config.yaml",
+    zh: "全局 ~/.pi/agent/data/xpi-kuma/config.yaml",
   },
   "source.api": {
     en: "API query",
@@ -674,8 +674,8 @@ export const MESSAGES = {
     zh: "最近探测",
   },
   "vendor.noVendor": {
-    en: "No vendor configured — edit .pi/xpi-kuma/config.yaml",
-    zh: "未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml",
+    en: "No vendor configured — edit ~/.pi/agent/data/xpi-kuma/config.yaml",
+    zh: "未配置任何供应商，请编辑 ~/.pi/agent/data/xpi-kuma/config.yaml",
   },
   "vendor.pricePerK": {
     en: "Price / 1k tok",

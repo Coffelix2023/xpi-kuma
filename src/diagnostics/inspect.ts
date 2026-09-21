@@ -95,9 +95,11 @@ function safeStat(path: string): Stats | null {
  *
  * **绝不写盘**：不使用会创建模板的 `loadConfig()`，只看 `existsSync`；文件缺失只报告位置，
  * 解析失败只报告原因与行号，不修改原文件、不生成"修复后"副本。
+ *
+ * `cwd` 只用于在体检页展示「当前项目」；配置位置与它无关（全局唯一）。
  */
 export function collectDiagnostics(cwd: string = process.cwd()): DiagnosticsPayload {
-  const configPath = resolveConfigPath(cwd);
+  const configPath = resolveConfigPath();
   const base: DiagnosticsPayload = {
     configExists: false,
     configModifiedAt: null,

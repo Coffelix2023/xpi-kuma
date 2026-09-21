@@ -20,8 +20,9 @@ function tempDir(prefix = "xpi-kuma-inspect-"): string {
   return dir;
 }
 
-function writeConfig(dir: string, content: string): void {
-  const path = resolveConfigPath(dir);
+/** 写进全局配置路径（`PI_CODING_AGENT_DIR` 已由 beforeEach 指到临时目录）。 */
+function writeConfig(content: string): void {
+  const path = resolveConfigPath();
   mkdirSync(dirname(path), {
     recursive: true,
   });
@@ -71,7 +72,6 @@ describe("只读体检", () => {
   it("解析失败时给出行号，且不展示半截供应商表与全局项", () => {
     const dir = tempDir();
     writeConfig(
-      dir,
       [
         "vendors:",
         '  - name: "A"',
@@ -91,7 +91,7 @@ describe("只读体检", () => {
 
   it("结构错误同样 fail-closed", () => {
     const dir = tempDir();
-    writeConfig(dir, "vendors: 不是列表");
+    writeConfig("vendors: 不是列表");
 
     const payload = collectDiagnostics(dir);
 
@@ -102,7 +102,7 @@ describe("只读体检", () => {
 
   it("环境变量未设置时标注未设置并给出下一步", () => {
     const dir = tempDir();
-    writeConfig(dir, configWith(""));
+    writeConfig(configWith(""));
 
     const payload = collectDiagnostics(dir);
     const vendor = payload.vendors?.[0];
@@ -119,7 +119,7 @@ describe("只读体检", () => {
   it("环境变量已设置时该项通过", () => {
     process.env.XPI_KUMA_DIAG_KEY = "sk-secret-value";
     const dir = tempDir();
-    writeConfig(dir, configWith(""));
+    writeConfig(configWith(""));
 
     const payload = collectDiagnostics(dir);
     const check = payload.vendors?.[0].checks.find((item) => item.key === "apiKey");
@@ -133,7 +133,6 @@ describe("只读体检", () => {
   it("价格缺输出项时标注不完整并说明费用按零计", () => {
     const dir = tempDir();
     writeConfig(
-      dir,
       configWith(
         [
           "    price:",
@@ -154,7 +153,6 @@ describe("只读体检", () => {
   it("未配密钥时给出补齐占位符的建议", () => {
     const dir = tempDir();
     writeConfig(
-      dir,
       [
         "vendors:",
         '  - name: "A"',
@@ -174,10 +172,7 @@ describe("只读体检", () => {
 
   it("明文密钥不回显，只标注不是占位符", () => {
     const dir = tempDir();
-    writeConfig(
-      dir,
-      configWith("").replace('"${XPI_KUMA_DIAG_KEY}"', '"sk-plain-text"'),
-    );
+    writeConfig(configWith("").replace('"${XPI_KUMA_DIAG_KEY}"', '"sk-plain-text"'));
 
     const payload = collectDiagnostics(dir);
     const check = payload.vendors?.[0].checks.find((item) => item.key === "apiKey");
@@ -205,7 +200,7 @@ describe("只读体检", () => {
 describe("全局与存储项", () => {
   it("用量库不存在时标注不存在，而不是 0 字节", () => {
     const dir = tempDir();
-    writeConfig(dir, configWith(""));
+    writeConfig(configWith(""));
 
     const global = collectDiagnostics(dir).global;
 
@@ -217,7 +212,7 @@ describe("全局与存储项", () => {
 
   it("用量库存在时给出字节数", () => {
     const dir = tempDir();
-    writeConfig(dir, configWith(""));
+    writeConfig(configWith(""));
     const dbPath = defaultDatabasePath();
     mkdirSync(dirname(dbPath), {
       recursive: true,
@@ -232,7 +227,7 @@ describe("全局与存储项", () => {
 
   it("保留天数标注是否为默认值，并带上探测默认参数", () => {
     const dir = tempDir();
-    writeConfig(dir, configWith(""));
+    writeConfig(configWith(""));
 
     const withoutRetention = collectDiagnostics(dir).global;
     expect(withoutRetention?.retentionDays).toBe(7);
@@ -242,7 +237,6 @@ describe("全局与存储项", () => {
 
     const explicit = tempDir();
     writeConfig(
-      explicit,
       [
         configWith(""),
         "retention:",

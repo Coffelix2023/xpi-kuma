@@ -37,7 +37,6 @@ export interface AccountsPayload {
 
 export interface AccountServiceOptions {
   config: KumaConfig;
-  cwd: string;
   database: Database;
   logger: FileLogger;
   tokenStore?: OAuthTokenStore;
@@ -51,7 +50,6 @@ export interface AccountServiceOptions {
  */
 export class AccountService {
   private readonly config: KumaConfig;
-  private readonly cwd: string;
   private readonly database: Database;
   private readonly logger: FileLogger;
   private readonly tokenStore: OAuthTokenStore;
@@ -59,7 +57,6 @@ export class AccountService {
 
   constructor(options: AccountServiceOptions) {
     this.config = options.config;
-    this.cwd = options.cwd;
     this.database = options.database;
     this.logger = options.logger;
     this.tokenStore = options.tokenStore ?? new OAuthTokenStore();
@@ -144,7 +141,7 @@ export class AccountService {
   /** 手动填写余额：写回配置文件，并更新内存配置与快照。 */
   writeManual(vendorName: string, input: ManualBalanceInput): AccountsPayload {
     const vendor = this.findVendor(vendorName);
-    writeManualBalance(this.cwd, vendorName, input);
+    writeManualBalance(vendorName, input);
     const topup = input.topup ?? vendor.balance?.topup ?? null;
     vendor.balance = {
       ...vendor.balance,

@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { request } from "node:http";
+import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,9 @@ import type { KumaConfig } from "../types.ts";
 import { type DashboardServer, startDashboardServer } from "./dashboard.ts";
 
 const CONFIG: KumaConfig = {
+  dashboard: {
+    port: 5180,
+  },
   retention: {
     rawRecords: 7,
   },
@@ -93,7 +96,9 @@ function call(
 /** 建一个含最小配置文件的临时项目根：手动填写要真的改这份配置。 */
 function tempProject(): string {
   const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-project-"));
-  const path = resolveConfigPath(dir);
+  // 配置只从全局目录读：临时项目目录同时充当 agent 目录
+  process.env.PI_CODING_AGENT_DIR = dir;
+  const path = resolveConfigPath();
   mkdirSync(dirname(path), {
     recursive: true,
   });
@@ -117,7 +122,7 @@ function tempProject(): string {
   );
   return dir;
 }
-async function start(): Promise<{
+async function start(options: { port?: number } = {}): Promise<{
   accountService: AccountService;
   collector: UsageCollector;
   monitor: VendorMonitor;
@@ -132,17 +137,15 @@ async function start(): Promise<{
   const projectDir = tempProject();
   const accountService = new AccountService({
     config: CONFIG,
-    cwd: projectDir,
     database,
     logger: new FileLogger(join(projectDir, "xpi-kuma-test.log")),
   });
   cleanups.push(() => database.close());
-  const server = await startDashboardServer(
-    collector,
-    monitor,
+  const server = await startDashboardServer(collector, monitor, {
     accountService,
-    projectDir,
-  );
+    cwd: projectDir,
+    port: options.port,
+  });
   servers.push(server);
   return {
     accountService,
@@ -151,6 +154,20 @@ async function start(): Promise<{
     projectDir,
     server,
   };
+}
+
+/** 借系统分配一个当前空闲的端口，用于「固定端口」用例。 */
+async function freePort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>((resolve) => {
+    probe.listen(0, "127.0.0.1", resolve);
+  });
+  const address = probe.address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
+  await new Promise<void>((resolve) => {
+    probe.close(() => resolve());
+  });
+  return port;
 }
 
 beforeAll(() => {
@@ -181,6 +198,27 @@ describe("服务启动与路由", () => {
     expect(first.server.url).toBe(
       `http://127.0.0.1:${first.server.port}/#${first.server.token}`,
     );
+  });
+
+  it("指定端口时固定监听该端口", async () => {
+    const port = await freePort();
+    const { server } = await start({
+      port,
+    });
+
+    expect(server.port).toBe(port);
+    expect(server.portFallback).toBe(false);
+  });
+
+  it("目标端口被占用时回退随机端口并标记，不抛错", async () => {
+    const first = await start();
+    const { server } = await start({
+      port: first.server.port,
+    });
+
+    expect(server.portFallback).toBe(true);
+    expect(server.port).not.toBe(first.server.port);
+    expect(server.port).toBeGreaterThan(0);
   });
 
   it("根页面返回不含监控数据与凭据的 shell", async () => {
@@ -608,7 +646,7 @@ describe("体检接口", () => {
 
   it("返回只读快照：配置路径、逐供应商检查与全局项", async () => {
     const { projectDir, server } = await start();
-    const before = readFileSync(resolveConfigPath(projectDir), "utf8");
+    const before = readFileSync(resolveConfigPath(), "utf8");
     const res = await call(server.port, "/api/diagnostics", {
       headers: {
         authorization: `Bearer ${server.token}`,
@@ -617,13 +655,13 @@ describe("体检接口", () => {
 
     expect(res.status).toBe(200);
     const data = JSON.parse(res.body);
-    expect(data.configPath).toBe(resolveConfigPath(projectDir));
+    expect(data.configPath).toBe(resolveConfigPath());
     expect(data.configExists).toBe(true);
     expect(data.vendors).toHaveLength(2);
     expect(data.vendors[0].checks).toHaveLength(6);
     expect(data.global.cwd).toBe(projectDir);
     // 只读：查询不改动配置文件
-    expect(readFileSync(resolveConfigPath(projectDir), "utf8")).toBe(before);
+    expect(readFileSync(resolveConfigPath(), "utf8")).toBe(before);
   });
 });
 
@@ -723,7 +761,7 @@ describe("账户接口", () => {
   });
 
   it("手动填写写回配置文件并在响应里回显", async () => {
-    const { projectDir, server } = await start();
+    const { server } = await start();
     const res = await call(server.port, "/api/accounts/manual", {
       body: JSON.stringify({
         balance: 5.5,
@@ -742,9 +780,7 @@ describe("账户接口", () => {
     expect(
       data.rows.find((row: { vendor: string }) => row.vendor === "Anthropic").balance,
     ).toBe(5.5);
-    expect(readFileSync(resolveConfigPath(projectDir), "utf8")).toContain(
-      "manual: 5.5",
-    );
+    expect(readFileSync(resolveConfigPath(), "utf8")).toContain("manual: 5.5");
   });
 
   it("手动填写缺少字段时返回 400", async () => {

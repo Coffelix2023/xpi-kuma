@@ -25,7 +25,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 把手动填写的余额写回 `<cwd>/.pi/xpi-kuma/config.yaml`（第三档降级）。
+ * 把手动填写的余额写回全局配置 `~/.pi/agent/data/xpi-kuma/config.yaml`（第三档降级）。
  *
  * 三条纪律：
  *
@@ -35,11 +35,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * 3. 解析失败或找不到该供应商时**拒绝写入**，原文件一个字节都不动。
  */
 export function writeManualBalance(
-  cwd: string,
   vendorName: string,
   input: ManualBalanceInput,
 ): ManualBalanceResult {
-  const configPath = resolveConfigPath(cwd);
+  const configPath = resolveConfigPath();
   const raw = readFileSync(configPath, "utf8");
   const document = parseDocument(raw);
   const syntaxError = document.errors[0];

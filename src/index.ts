@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
   ExtensionAPI,
@@ -9,7 +10,7 @@ import type {
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { AccountService } from "./accounts/service.ts";
 import { UsageCollector } from "./collectors/usage-collector.ts";
-import { ConfigError, loadConfig } from "./config.ts";
+import { ConfigError, loadConfig, resolveConfigPath } from "./config.ts";
 import { formatStatus } from "./lib/format.ts";
 import { FileLogger } from "./lib/log.ts";
 import { openInBrowser } from "./lib/open-browser.ts";
@@ -21,13 +22,18 @@ import { type DashboardServer, startDashboardServer } from "./ui/dashboard.ts";
 const VERSION = "0.5.0";
 const STATUS_KEY = "xpi-kuma";
 
-/** 会话级运行时状态；`session_shutdown` 后清空。 */
+/**
+ * 进程级运行时：`on` 建立、`off` 销毁；会话切换不重建。
+ *
+ * 面板与后台监测都常驻，所以数据库、累加器、探测定时器都挂在这里；只有 `cwd`
+ * 是会话级字段，随当前会话更新（体检页展示「当前项目」）。
+ */
 interface Runtime {
   accountService: AccountService;
   config: KumaConfig;
-  /** 当前会话的工作目录；面板的体检页据此解析配置与存储 */
+  /** 当前会话的工作目录；体检页据此展示「当前项目」 */
   cwd: string;
-  /** 当前会话的监控 Web 服务；未打开时为 null */
+  /** 进程内常驻的监控 Web 服务；未打开时为 null */
   dashboardServer: DashboardServer | null;
   database: Database;
   usageCollector: UsageCollector;
@@ -50,18 +56,40 @@ export default function xpiKuma(pi: ExtensionAPI): void {
     handleTurnEnd(event, ctx);
   });
 
-  pi.on("session_shutdown", (_event, ctx) => stopSession(ctx));
+  pi.on("session_shutdown", (_event, ctx) => clearStatus(ctx));
 
   pi.registerCommand("xpi-kuma", {
-    description: "打开或重新打开监控面板",
-    handler: async (_args, ctx) => {
-      const current = runtime;
-      if (!current) {
-        ctx.ui.notify(`xpi-kuma ${VERSION}：会话尚未初始化，请稍后重试`, "warning");
+    description: "打开监控面板（on / off 开关，缺省等同 on）",
+    handler: async (args, ctx) => {
+      const action = args.trim();
+      if (action === "off") {
+        await stopRuntime(ctx);
         return;
       }
+      if (action !== "" && action !== "on") {
+        ctx.ui.notify(`未知参数「${action}」，可用：on / off`, "warning");
+        return;
+      }
+      let current = runtime;
+      if (!current) {
+        try {
+          current = initRuntime(ctx.cwd);
+        } catch (error) {
+          logger.error("启动监控面板服务失败", error);
+          ctx.ui.notify(
+            error instanceof ConfigError
+              ? error.message
+              : `启动监控面板服务失败：${describeError(error)}`,
+            "error",
+          );
+          return;
+        }
+      }
       if (current.config.vendors.length === 0) {
-        ctx.ui.notify("未配置任何供应商，请编辑 .pi/xpi-kuma/config.yaml", "warning");
+        ctx.ui.notify(
+          "未配置任何供应商，请编辑 ~/.pi/agent/data/xpi-kuma/config.yaml",
+          "warning",
+        );
       }
       let server: DashboardServer;
       try {
@@ -70,6 +98,12 @@ export default function xpiKuma(pi: ExtensionAPI): void {
         logger.error("启动监控面板服务失败", error);
         ctx.ui.notify(`启动监控面板服务失败：${describeError(error)}`, "error");
         return;
+      }
+      if (server.portFallback) {
+        ctx.ui.notify(
+          `默认端口 ${current.config.dashboard.port} 已被占用，本次面板改用 ${server.port}`,
+          "warning",
+        );
       }
       try {
         await openInBrowser(server.url);
@@ -86,47 +120,39 @@ export default function xpiKuma(pi: ExtensionAPI): void {
   });
 }
 
-/** 初始化数据库、配置与探测任务；失败不抛错，避免阻断 Pi 启动。 */
+/**
+ * 初始化（或复用）进程级运行时，并刷新会话级状态。
+ *
+ * 服务跨会话常驻：已有运行时只更新 `cwd`、清空会话累加器并刷新 footer；
+ * `session_shutdown` 不再拆掉服务，只有 `xpi-kuma off` 才关。
+ */
 async function startSession(
   event: SessionStartEvent,
   ctx: ExtensionContext,
 ): Promise<void> {
   try {
-    await stopSession(ctx);
-    const config = loadConfig({
-      cwd: ctx.cwd,
-    });
-    const database = new Database();
-    const usageCollector = new UsageCollector(database);
-    const vendorMonitor = new VendorMonitor(database, config);
-    const accountService = new AccountService({
-      config,
-      cwd: ctx.cwd,
-      database,
-      logger,
-    });
+    notifyLegacyConfig(ctx);
+    const current = runtime ?? initRuntime(ctx.cwd);
+    // 会话级：体检页展示当前项目，累加器按会话清零
+    current.cwd = ctx.cwd;
+    current.usageCollector.resetSession();
 
     // 保留期清理在会话启动时执行一次
-    const removed = database.cleanOldRecords(config.retention.rawRecords);
+    const removed = current.database.cleanOldRecords(
+      current.config.retention.rawRecords,
+    );
     if (removed > 0) {
       logger.info(
-        `清理了 ${removed} 条超过 ${config.retention.rawRecords} 天的使用量记录`,
+        `清理了 ${removed} 条超过 ${current.config.retention.rawRecords} 天的使用量记录`,
       );
     }
 
-    vendorMonitor.start();
-    runtime = {
-      accountService,
-      config,
-      cwd: ctx.cwd,
-      dashboardServer: null,
-      database,
-      usageCollector,
-      vendorMonitor,
-    };
-    ctx.ui.setStatus(STATUS_KEY, formatStatus(usageCollector.getCurrentSessionStats()));
+    ctx.ui.setStatus(
+      STATUS_KEY,
+      formatStatus(current.usageCollector.getCurrentSessionStats()),
+    );
     logger.info(
-      `会话启动（${event.reason}）：${config.vendors.length} 个供应商，${vendorMonitor.activeTimerCount} 个探测定时器`,
+      `会话启动（${event.reason}）：${current.config.vendors.length} 个供应商，${current.vendorMonitor.activeTimerCount} 个探测定时器`,
     );
   } catch (error) {
     logger.error("会话启动失败", error);
@@ -137,15 +163,61 @@ async function startSession(
 }
 
 /**
- * 关闭监控 Web 服务、停止探测并关闭数据库，最后清除 footer 状态。
+ * 建立进程级运行时：加载配置、开数据库、启动探测定时器。
  *
- * 先置空 runtime，重复调用会立即返回，因此 `session_start` 与
- * `session_shutdown` 都可以安全地等待它。顺序固定：先停 HTTP 服务，再停
- * 探测，最后关数据库，避免在途 API 请求读到已关闭的连接。
+ * 抛错交给调用方提示；失败时不留下半截运行时（先全部建好，再赋值给 `runtime`）。
  */
-async function stopSession(ctx: ExtensionContext): Promise<void> {
+function initRuntime(cwd: string): Runtime {
+  const config = loadConfig();
+  const database = new Database();
+  const usageCollector = new UsageCollector(database);
+  const vendorMonitor = new VendorMonitor(database, config);
+  const accountService = new AccountService({
+    config,
+    database,
+    logger,
+  });
+  vendorMonitor.start();
+  runtime = {
+    accountService,
+    config,
+    cwd,
+    dashboardServer: null,
+    database,
+    usageCollector,
+    vendorMonitor,
+  };
+  logger.info(`xpi-kuma ${VERSION} 运行时已建立，服务跨会话常驻`);
+  return runtime;
+}
+
+/**
+ * 旧的项目级配置只提示迁移，不写盘。
+ *
+ * 配置已改为全局唯一。全局文件还没建、而当前项目里还留着旧文件时，用户大概率以为
+ * 配置丢了，这里给出可复制的 `cp` 命令，但不替用户决定搬哪一份。
+ */
+function notifyLegacyConfig(ctx: ExtensionContext): void {
+  const legacyPath = join(ctx.cwd, ".pi", "xpi-kuma", "config.yaml");
+  if (existsSync(resolveConfigPath()) || !existsSync(legacyPath)) {
+    return;
+  }
+  ctx.ui.notify(
+    `xpi-kuma 已改用全局配置 ${resolveConfigPath()}；检测到旧配置 ${legacyPath}，可自行 cp 迁移`,
+    "warning",
+  );
+}
+
+/**
+ * 关闭面板服务、停止探测并关闭数据库（`xpi-kuma off`）。
+ *
+ * 顺序固定：先停 HTTP 服务，再停探测，最后关数据库，避免在途 API 请求读到已关闭的
+ * 连接。`session_shutdown` 不再调用这里 —— 服务要跨会话常驻。
+ */
+async function stopRuntime(ctx: ExtensionContext): Promise<void> {
   const current = runtime;
   if (!current) {
+    ctx.ui.notify("xpi-kuma 面板已处于关闭状态", "info");
     return;
   }
   runtime = null;
@@ -153,7 +225,17 @@ async function stopSession(ctx: ExtensionContext): Promise<void> {
   await quietly(() => current.dashboardServer?.close());
   await quietly(() => current.vendorMonitor.stop());
   await quietly(() => current.database.close());
-  await quietly(() => ctx.ui.setStatus(STATUS_KEY, undefined));
+  clearStatus(ctx);
+  ctx.ui.notify("xpi-kuma 面板已关闭（/xpi-kuma on 可重新启动）", "info");
+}
+
+/** 清除 footer 状态；宿主接口异常只记日志，不影响其它清理步骤。 */
+function clearStatus(ctx: ExtensionContext): void {
+  try {
+    ctx.ui.setStatus(STATUS_KEY, undefined);
+  } catch (error) {
+    logger.error("清除 footer 状态失败", error);
+  }
 }
 
 /** 清理步骤彼此独立：单步失败只记日志，不阻断后续步骤。 */
@@ -178,8 +260,11 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
   dashboardStart ??= startDashboardServer(
     current.usageCollector,
     current.vendorMonitor,
-    current.accountService,
-    current.cwd,
+    {
+      accountService: current.accountService,
+      cwd: current.cwd,
+      port: current.config.dashboard.port,
+    },
   ).then(
     (server) => {
       current.dashboardServer = server;

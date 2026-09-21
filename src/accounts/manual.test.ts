@@ -24,9 +24,16 @@ const BASE_CONFIG = [
   "    custom_field: keep-me",
 ].join("\n");
 
-function tempCwd(content = BASE_CONFIG): string {
+/**
+ * 切到新的临时 agent 目录并写入配置。
+ *
+ * 写回目标现在是全局配置，所以必须先把 `PI_CODING_AGENT_DIR` 指到临时目录，
+ * 再解析路径 —— `getAgentDir()` 每次调用都读环境变量。
+ */
+function tempAgentDir(content = BASE_CONFIG): string {
   const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-manual-"));
-  const path = resolveConfigPath(dir);
+  process.env.PI_CODING_AGENT_DIR = dir;
+  const path = resolveConfigPath();
   mkdirSync(dirname(path), {
     recursive: true,
   });
@@ -40,11 +47,12 @@ function tempCwd(content = BASE_CONFIG): string {
   return dir;
 }
 
-function contentOf(cwd: string): string {
-  return readFileSync(resolveConfigPath(cwd), "utf8");
+function contentOf(): string {
+  return readFileSync(resolveConfigPath(), "utf8");
 }
 
 afterEach(() => {
+  delete process.env.PI_CODING_AGENT_DIR;
   while (cleanups.length > 0) {
     cleanups.pop()?.();
   }
@@ -52,21 +60,21 @@ afterEach(() => {
 
 describe("手动填写余额写盘", () => {
   it("写入手动余额与充值，注释与未知字段原样保留，并生成备份", () => {
-    const cwd = tempCwd();
-    const before = contentOf(cwd);
+    tempAgentDir();
+    const before = contentOf();
 
-    const result = writeManualBalance(cwd, "A", {
+    const result = writeManualBalance("A", {
       balance: 42.6,
       topup: 200,
     });
 
-    const after = contentOf(cwd);
+    const after = contentOf();
     expect(after).toContain("# 顶部注释必须保留");
     expect(after).toContain("custom_field: keep-me");
     expect(after).toContain("manual: 42.6");
     expect(after).toContain("topup: 200");
 
-    const backups = readdirSync(dirname(resolveConfigPath(cwd))).filter((name) =>
+    const backups = readdirSync(dirname(resolveConfigPath())).filter((name) =>
       name.includes(".bak-"),
     );
     expect(backups).toHaveLength(1);
@@ -75,7 +83,7 @@ describe("手动填写余额写盘", () => {
   });
 
   it("已有 balance 段时只补字段，不覆盖既有 api_path", () => {
-    const cwd = tempCwd(
+    tempAgentDir(
       [
         "vendors:",
         '  - name: "A"',
@@ -86,39 +94,39 @@ describe("手动填写余额写盘", () => {
       ].join("\n"),
     );
 
-    writeManualBalance(cwd, "A", {
+    writeManualBalance("A", {
       balance: 1.5,
     });
 
-    const after = contentOf(cwd);
+    const after = contentOf();
     expect(after).toContain('api_path: "/v1/balance"');
     expect(after).toContain("manual: 1.5");
   });
 
   it("解析失败时拒绝写入，原文件一个字节都不动", () => {
     const broken = 'vendors:\n  - name: "A"\n    endpoint: [unclosed\n';
-    const cwd = tempCwd(broken);
+    tempAgentDir(broken);
 
     expect(() =>
-      writeManualBalance(cwd, "A", {
+      writeManualBalance("A", {
         balance: 1,
       }),
     ).toThrow(/语法错误/);
-    expect(contentOf(cwd)).toBe(broken);
-    expect(readdirSync(dirname(resolveConfigPath(cwd)))).toEqual([
+    expect(contentOf()).toBe(broken);
+    expect(readdirSync(dirname(resolveConfigPath()))).toEqual([
       "config.yaml",
     ]);
   });
 
   it("找不到该供应商时拒绝写入", () => {
-    const cwd = tempCwd();
-    const before = contentOf(cwd);
+    tempAgentDir();
+    const before = contentOf();
 
     expect(() =>
-      writeManualBalance(cwd, "不存在", {
+      writeManualBalance("不存在", {
         balance: 1,
       }),
     ).toThrow(/没有名为/);
-    expect(contentOf(cwd)).toBe(before);
+    expect(contentOf()).toBe(before);
   });
 });

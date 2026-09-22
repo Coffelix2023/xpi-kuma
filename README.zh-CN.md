@@ -25,7 +25,7 @@ Pi 会为每条 assistant 消息报告 token 数与费用,但没有任何地方�
 本仓库里的每个扩展都从同样四条规则出发:
 
 - **没有构建步骤。** Pi 直接加载 `./src/index.ts`,没有 `dist/`、没有打包器、不提交编译产物。
-- **Pi 原生 UI。** 扩展在终端里显示的一切都走 `ctx.ui.*`（footer 状态行与通知），绝不劫持终端，也不引入竞争性的终端框架；面板本身是回环 Web 页面，不在终端里渲染。
+- **Pi 原生 UI。** 扩展在终端里显示的一切都走 `ctx.ui.*`（通知），绝不劫持终端，也不引入竞争性的终端框架；面板本身是回环 Web 页面，不在终端里渲染。
 - **没有重度运行时依赖。** 只用宿主提供的 API 加严格类型;工具 Schema 用 `typebox`,其余依赖都要先证明自己值得。
 - **门禁严格,没有例外。** TypeScript strict、Biome、Vitest 三条全绿才能提交。
 
@@ -119,7 +119,8 @@ retention:
 | `usage_records` | 每条 assistant 消息（`message_end`） | 供应商上报的真实 token 数、费用与工具调用条数 |
 | `probe_records` | 每次定时或手动探测 | 状态、TTFT、总响应时间 |
 
-footer 显示当前会话累计值，形如 `💰 ¥0.05 | 📊 1.2K`，每个 turn 结束后刷新。
+会话级的 token 与费用看 Pi 内置 footer 的 stats 行（已含 token 明细、缓存命中率与 `$cost`）；本扩展
+不再往 footer 写任何内容，周期聚合统一看面板。
 
 ### 监控面板
 
@@ -231,10 +232,10 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # 日常回路:在 Pi 内用 /r
     ├── index.ts               # 扩展入口(register 函数)
     ├── config.ts              # 全局 config.yaml 读取与 ${ENV_VAR} 展开
     ├── types.ts               # 共享领域类型
-    ├── collectors/            # 会话内用量累加
+    ├── collectors/            # 用量落库与聚合查询
     ├── monitors/              # 定时供应商探测
     ├── storage/               # SQLite 持久化
-    ├── lib/                   # 日志、格式化、浏览器唤起
+    ├── lib/                   # 日志、浏览器唤起
     └── ui/                    # 面板 HTTP 服务、页面渲染与主题
 ```
 

@@ -27,7 +27,7 @@ page needs none of it, and it uses the browser you already have.
 Every extension in this repository starts from the same four rules:
 
 - **No build step.** Pi loads `./src/index.ts` directly. No `dist/`, no bundler, no committed artifacts.
-- **Pi-native UI.** Everything the extension shows in the terminal goes through `ctx.ui.*` (the status line and notifications). It never hijacks the terminal or pulls in a competing terminal framework; the dashboard is a loopback web page rather than a terminal render.
+- **Pi-native UI.** Everything the extension shows in the terminal goes through `ctx.ui.*` (notifications). It never hijacks the terminal or pulls in a competing terminal framework; the dashboard is a loopback web page rather than a terminal render.
 - **No heavy runtime dependencies.** Host-provided APIs plus strict types; `typebox` for tool schemas, and nothing else unless it earns its place.
 - **Strict gates, no exceptions.** TypeScript strict, Biome, and Vitest must all pass before any commit.
 
@@ -122,7 +122,9 @@ Data written by the extension:
 | `usage_records` | every assistant message (`message_end`) | real token counts, cost, and tool-call counts, as reported by the provider |
 | `probe_records` | each scheduled or manual probe | status, TTFT, total response time |
 
-The footer shows the current session totals as `💰 ¥0.05 | 📊 1.2K`, refreshed on every turn.
+Session-level tokens and cost come from Pi's built-in footer stats line, which already carries the token
+breakdown, the cache hit rate, and `$cost`. This extension writes nothing to the footer; period
+aggregates live in the dashboard.
 
 ### Monitoring dashboard
 
@@ -248,10 +250,10 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # live loop: /reload inside Pi
     ├── index.ts               # Extension entrypoint (register function)
     ├── config.ts              # global config.yaml loading and ${ENV_VAR} expansion
     ├── types.ts               # Shared domain types
-    ├── collectors/            # In-memory session usage accumulation
+    ├── collectors/            # Usage persistence and aggregate queries
     ├── monitors/              # Scheduled vendor probes
     ├── storage/               # SQLite persistence
-    ├── lib/                   # Logger, formatting, browser launch
+    ├── lib/                   # Logger, browser launch
     └── ui/                    # Dashboard HTTP service, page rendering, theme
 ```
 

@@ -102,6 +102,16 @@ vendors:
       interval: "5m"              # 支持 5m / 30s / 1h
       timeout: 30000              # 毫秒
 
+  - name: "commandcode"         # command-code 上游 API 可达性探测样例
+    endpoint: "https://api.commandcode.ai/provider/v1"
+    model: "<your-commandcode-model>"   # 占位：按你的订阅填写 model
+    api_key: "${COMMANDCODE_API_KEY}"
+    price: { input: 0, output: 0 }       # 无公开价目，按你的实际价目填写
+    probe:
+      enabled: true
+      interval: "5m"
+      timeout: 30000
+
 retention:
   raw_records: 7                  # 原始记录保留天数
 ```
@@ -155,6 +165,8 @@ retention:
 
 主面板的四个区块是标签页，一次只显示一个；页头的主题家族是下拉（默认 / 图鉴），亮暗另有独立按钮。
 无偏好时的默认外观是**图鉴 · 亮色**，偏好存在 `localStorage` 的 `kuma.family` 与 `kuma.theme`，同样在首帧渲染前生效。
+页头的 actions 行还带时间范围按钮（1 小时 / 24 小时 / 7 天 / 30 天）。它是页面级筛选：切换后
+总览、统计、趋势与供应商四个标签一起按该周期刷新，选中的周期是全局的，不隶属任何单个标签。
 页头有中英切换按钮（`#kuma-lang`），偏好存在 `localStorage` 的 `kuma.lang`，在首帧渲染前就已生效。
 
 同一个页头还带字号调节（`A−` / `A+` / 重置），四个页面都有，共五档（85% 到 130%）；偏好存在
@@ -179,7 +191,7 @@ retention:
 `${ENV_VAR}` 占位符的名字，以及该变量当前是否已设置。解析失败时整块隐藏供应商表与全局项，
 改为显示错误、行号与路径，而不是展示半截数据。
 
-没有可用的余额接口才是常态，不是缺陷：`config.example.yaml` 里的三家样例目前都没有公开的余额接口，
+没有可用的余额接口才是常态，不是缺陷：`config.example.yaml` 里的四家样例目前都没有公开的余额接口，
 探测结论见 [`docs/probe-balance-and-oauth.md`](./docs/probe-balance-and-oauth.md)。
 
 ### 边界

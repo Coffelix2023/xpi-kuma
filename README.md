@@ -105,6 +105,16 @@ vendors:
       interval: "5m"              # 5m / 30s / 1h
       timeout: 30000              # milliseconds
 
+  - name: "commandcode"         # command-code upstream API reachability sample
+    endpoint: "https://api.commandcode.ai/provider/v1"
+    model: "<your-commandcode-model>"   # placeholder; fill in your subscribed model
+    api_key: "${COMMANDCODE_API_KEY}"
+    price: { input: 0, output: 0 }       # no public price list; fill in yours
+    probe:
+      enabled: true
+      interval: "5m"
+      timeout: 30000
+
 retention:
   raw_records: 7                  # days of raw records to keep
 ```
@@ -164,6 +174,9 @@ The main panel's four sections are tabs — one visible at a time. The header's 
 dropdown (default / atlas) with a separate light-dark button; with no stored preference the default
 look is **atlas · light**, kept under `kuma.family` and `kuma.theme` and applied before the first paint.
 
+The same header's actions row carries the time-range buttons (1h / 24h / 7d / 30d). They are a
+page-level filter: picking one refreshes overview, stats, trend and the vendor tab together, so the
+selected period is global instead of belonging to a single tab.
 The page header carries a language toggle (`#kuma-lang`) for English and Simplified Chinese. The choice
 is stored in `localStorage` under `kuma.lang` and applied before the first paint.
 
@@ -196,7 +209,7 @@ broken file, and never displays an API key — only the `${ENV_VAR}` placeholder
 variable is currently set. A file that fails to parse hides the vendor table and the global section
 entirely, showing the error, its line number, and the path instead of half the data.
 
-Vendors without a usable balance endpoint are the expected case, not a bug: none of the three samples in
+Vendors without a usable balance endpoint are the expected case, not a bug: none of the four samples in
 `config.example.yaml` expose a public balance API today. See
 [`docs/probe-balance-and-oauth.md`](./docs/probe-balance-and-oauth.md) for the probe results.
 

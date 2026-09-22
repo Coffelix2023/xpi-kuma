@@ -1,0 +1,245 @@
+# semantic-ui-map — usage-overview
+#
+# 双码分工：短码 P1-2-B1 给人念，全路径 chat.composer.send-btn 给机器认。
+# 本文件跨保真度共享：同一元素在 wireframe 与 hifi 阶段的 id / short 不变，
+# 只有 fidelities 各指一处。字段说明见 docs/semantic-ui-map-schema.md。
+meta:
+  project: usage-overview
+  version: 2
+  type: multi-page
+  updated: 2026-09-22 05:18
+  annotate_default: true
+pages:
+  P1:
+    id: overview
+    label: 使用量总览
+    route: screens/01-overview.html
+    status: proposed
+elements:
+  overview.range-tabs:
+    short: P1-1-B1
+    label: 时间范围选择器
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    behavior:
+      current: 顶部右侧四档切换 1小时/24小时/7天/30天
+  overview.tabs:
+    short: P1-12-B1
+    label: 面板标签栏
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    behavior:
+      current: 成品四标签 总览/统计/趋势/供应商，aria-selected 切换面板
+  overview.notice:
+    short: P1-13-B1
+    label: 概览提示条
+    type: text
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    behavior:
+      current: 对应成品 kuma-overview-notice：无记录显引导，有数据收起
+  overview.metrics:
+    short: P1-2-B1
+    label: 消费指标行
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    children:
+      - overview.metric-spend
+      - overview.metric-tokens
+      - overview.metric-requests
+      - overview.metric-projects
+      - overview.metric-cache-rate
+  overview.metric-spend:
+    short: P1-2-B2
+    label: 本期花费指标卡
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    parent: overview.metrics
+  overview.metric-tokens:
+    short: P1-2-B3
+    label: token 总量指标卡
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    parent: overview.metrics
+  overview.metric-requests:
+    short: P1-2-B4
+    label: 请求次数指标卡
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    parent: overview.metrics
+  overview.metric-projects:
+    short: P1-2-B5
+    label: 覆盖项目数指标卡
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    parent: overview.metrics
+  overview.metric-cache-rate:
+    short: P1-2-B6
+    label: 缓存命中率指标卡
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    parent: overview.metrics
+  overview.trend:
+    short: P1-3-B1
+    label: 消费趋势区
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+  overview.rank-model:
+    short: P1-4-B1
+    label: provider/model 消费排行
+    type: table
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+  overview.rank-project:
+    short: P1-5-B1
+    label: 项目费用排行
+    type: table
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+  overview.rank-efficiency:
+    short: P1-6-B1
+    label: 效率排行
+    type: table
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+  overview.insights:
+    short: P1-7-B1
+    label: 解释型建议区
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    children:
+      - overview.insight-cost
+      - overview.insight-efficiency
+      - overview.insight-cache
+  overview.insight-cost:
+    short: P1-7-B2
+    label: 成本建议卡片
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    parent: overview.insights
+    behavior:
+      current: 纵向堆叠，结论行在上，依据/样本/时间范围/置信度在下
+  overview.insight-efficiency:
+    short: P1-7-B3
+    label: 效率建议卡片
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    parent: overview.insights
+    behavior:
+      current: 纵向堆叠，仅在样本达阈值时给出真实结果
+  overview.insight-cache:
+    short: P1-7-B4
+    label: 缓存建议卡片
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/01-overview.html
+      hifi: null
+    parent: overview.insights
+    behavior:
+      current: 纵向堆叠，分母为零时显示未知而非 0%
+  overview.empty-state:
+    short: P1-8-B1
+    label: 空数据引导
+    type: section
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/02-empty.html
+      hifi: null
+    behavior:
+      current: 无记录时显零值或暂无数据，并引导查看产生数据的路径
+  overview.latency-unavailable:
+    short: P1-9-B1
+    label: 延迟不可用占位
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/03-latency-na.html
+      hifi: null
+    behavior:
+      current: 显暂无真实效率数据，不用 probe 或估算值替代
+  overview.low-sample-note:
+    short: P1-10-B1
+    label: 样本不足标注
+    type: text
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/04-low-sample.html
+      hifi: null
+    behavior:
+      current: 低于 10 条样本的组合标注数据不足，不进最佳建议
+  overview.insight-unavailable:
+    short: P1-11-B1
+    label: 建议不可用占位
+    type: component
+    status: proposed
+    stage_created: wireframe
+    fidelities:
+      wireframe: pages/overview/wireframe/current/screens/05-insight-na.html
+      hifi: null
+    behavior:
+      current: 洞察计算失败时显不可用，基础统计保留

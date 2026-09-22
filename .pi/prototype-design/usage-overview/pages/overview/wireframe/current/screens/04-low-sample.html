@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>使用量总览 · 线框 · 样本不足</title>
+  <style>
+    /* tokens — 灰阶四基础色，出处：根目录 THEMES.md Default-Themes */
+    :root { --background: oklch(0.9818 0.0054 95.0986); --foreground: oklch(0.3438 0.0269 95.7226); --border: oklch(0.8847 0.0069 97.3627); --muted: oklch(0.9341 0.0153 90.2390); }
+    .dark { --background: oklch(0.2679 0.0036 106.6427); --foreground: oklch(0.8074 0.0142 93.0137); --border: oklch(0.3618 0.0101 106.8928); --muted: oklch(0.2213 0.0038 106.7070); }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; padding: 16px 24px; background: var(--background); color: var(--foreground); font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+    .topbar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    h1 { margin: 0; font-size: 16px; display: flex; align-items: baseline; gap: 8px; }
+    .state-tag { font-size: 11px; padding: 1px 8px; border: 1px solid var(--border); opacity: .6; }
+    .status { font-size: 12px; opacity: .5; }
+    .toolbar { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+    .ranges { display: flex; border: 1px solid var(--border); }
+    .range-tab { padding: 5px 12px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+    .range-tab.is-active { background: var(--muted); font-weight: 600; }
+    .tablist { display: flex; gap: 20px; margin-top: 14px; border-bottom: 1px solid var(--border); }
+    .tab { padding: 8px 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: inherit; font: inherit; font-size: 14px; opacity: .55; cursor: pointer; }
+    .tab[aria-selected="true"] { opacity: 1; font-weight: 600; border-bottom-color: var(--foreground); }
+    main { margin-top: 18px; display: flex; flex-direction: column; gap: 22px; }
+    [hidden] { display: none !important; }
+    .block-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; opacity: .55; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .metric-card { border: 1px solid var(--border); padding: 10px 12px; }
+    .metric-card .value { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .metric-card .label { font-size: 12px; opacity: .6; }
+    .notice { border: 1px dashed var(--border); padding: 8px 12px; font-size: 13px; }
+    .notice a { color: inherit; }
+    .insight-list { display: flex; flex-direction: column; gap: 10px; }
+    .insight-card { border: 1px solid var(--border); border-left: 3px solid var(--foreground); padding: 8px 12px; }
+    .insight-card .conclusion { margin: 0; font-size: 13px; font-weight: 600; }
+    .insight-card dl { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 6px 0 0; font-size: 12px; }
+    .insight-card dt { opacity: .55; }
+    .insight-card dd { margin: 0 8px 0 4px; }
+    .rank-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .rank-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; opacity: .55; }
+    .rank-note { margin: 6px 0 0; font-size: 12px; opacity: .6; }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; font-weight: 600; opacity: .5; padding: 4px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 4px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .placeholder { background: var(--muted); padding: 10px 12px; font-size: 13px; }
+    .trend-svg { display: block; width: 100%; height: 160px; }
+    footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px; opacity: .5; }
+    @media (max-width: 800px) { body { padding: 8px; } .rank-grid { grid-template-columns: 1fr; } .tablist { gap: 14px; } }
+  </style>
+<style data-badge-system>
+:root {
+  --badge-display: block;
+}
+:where([data-semantic-badge]) {
+  position: relative;
+}
+[data-semantic-badge]::before {
+  content: attr(data-semantic-badge);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1000;
+  display: var(--badge-display);
+  padding: 2px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #4f46e5;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+}
+[data-semantic-badge][data-status="proposed"]::before {
+  background: #f59e0b;
+}
+[data-semantic-badge][data-status="confirmed"]::before {
+  background: #4f46e5;
+}
+[data-semantic-badge][data-status="locked"]::before {
+  background: #4b5563;
+}
+[data-semantic-badge][data-type="panel"]::before {
+  background: #7c3aed;
+}
+/* 朝向由注入的 JS 按元素 rect 写进 data-badge-pos：贴视口边时把徽标翻到反侧，
+   四角都放不下就退回默认的左上。无属性 = 左上，与不装本段时一致。 */
+[data-semantic-badge][data-badge-pos="tr"]::before {
+  left: auto;
+  right: -8px;
+}
+[data-semantic-badge][data-badge-pos="bl"]::before {
+  top: auto;
+  bottom: -8px;
+}
+[data-semantic-badge][data-badge-pos="br"]::before {
+  top: auto;
+  right: -8px;
+  bottom: -8px;
+  left: auto;
+}
+/* 密集区相邻元素的徽标会互相压（伪元素不参与布局，不会自己避让）。
+   抬到开关(2000)之下、其余徽标之上，hover 的那一个总能读全。 */
+[data-semantic-badge]:hover::before {
+  z-index: 1500;
+}
+.badge-toggle {
+  position: fixed;
+  top: 12px;
+  /* 顶部居中：left/right 同为 0 且宽度收窄，auto margin 平分剩余空间。
+     不用 translateX(-50%)：拖动会写 left，残留 transform 会再偏半格。
+     拖动后 right 被置为 auto，auto margin 归零，left 定位照常生效。 */
+  left: 0;
+  right: 0;
+  width: fit-content;
+  margin: 0 auto;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.badge-toggle-label {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  color: #4b5563;
+}
+.badge-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4f46e5;
+  border: none;
+  border-radius: 6px;
+}
+.badge-toggle button.off {
+  background: #4b5563;
+}
+/* 悬停/聚焦时显示完整短码的浮层。节点挂在 body 末尾，不在任何 overflow 容器内，
+   因此不会被祖先裁切；fixed + pointer-events:none 保证它不吃原型自己的点击。
+   z-index 取 1800：低于拖动开关(2000)，高于常显徽标 hover 时的 1500。 */
+.badge-tip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1800;
+  display: none;
+  max-width: 60vw;
+  padding: 4px 8px;
+  font-family: ui-monospace, "SF Mono", Monaco, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #111827;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.25);
+}
+.badge-tip.on {
+  display: block;
+}
+</style>
+</head>
+<body>
+  <header class="topbar" data-wireframe-block="header" data-priority="P0">
+    <h1>使用量总览 <span class="state-tag">状态：样本不足</span></h1>
+    <span class="status">已更新 14:32 · 示例数据，未接入生产统计</span>
+  </header>
+  <div class="toolbar" data-wireframe-block="toolbar" data-priority="P0">
+    <div class="ranges" id="overview.range-tabs" data-wireframe-block="range-tabs" data-priority="P0" role="group" aria-label="时间范围">
+      <button type="button" class="range-tab" data-range="1h">1小时</button>
+      <button type="button" class="range-tab is-active" data-range="24h" aria-current="true">24小时</button>
+      <button type="button" class="range-tab" data-range="7d">7天</button>
+      <button type="button" class="range-tab" data-range="30d">30天</button>
+    </div>
+  </div>
+  <nav class="tablist" id="overview.tabs" data-wireframe-block="tabs" data-priority="P0" role="tablist" aria-label="面板">
+    <button type="button" class="tab" role="tab" data-tab="overview" aria-selected="true">总览</button>
+    <button type="button" class="tab" role="tab" data-tab="stats" aria-selected="false" tabindex="-1">统计</button>
+    <button type="button" class="tab" role="tab" data-tab="chart" aria-selected="false" tabindex="-1">趋势</button>
+    <button type="button" class="tab" role="tab" data-tab="vendors" aria-selected="false" tabindex="-1">供应商</button>
+  </nav>
+  <main>
+    <section data-tab-panel="overview" aria-label="总览面板">
+      <div id="overview.metrics" data-wireframe-block="metrics" data-priority="P0" aria-label="消费指标">
+        <div class="metrics-grid">
+          <div class="metric-card" id="overview.metric-spend" data-wireframe-block="metric-spend" data-priority="P0"><div class="label">本期花费</div><div class="value">¥128.40</div></div>
+          <div class="metric-card" id="overview.metric-tokens" data-wireframe-block="metric-tokens" data-priority="P0"><div class="label">token 总量</div><div class="value">3,842,110</div></div>
+          <div class="metric-card" id="overview.metric-requests" data-wireframe-block="metric-requests" data-priority="P0"><div class="label">请求次数</div><div class="value">1,204</div></div>
+          <div class="metric-card" id="overview.metric-projects" data-wireframe-block="metric-projects" data-priority="P0"><div class="label">覆盖项目数</div><div class="value">7</div></div>
+          <div class="metric-card" id="overview.metric-cache-rate" data-wireframe-block="metric-cache-rate" data-priority="P0"><div class="label">缓存命中率</div><div class="value">64.8%</div></div>
+        </div>
+      </div>
+      <div class="notice" data-wireframe-block="notice" data-priority="P2" hidden></div>
+      <h2 class="block-title">解释型建议 · 只读，不改配置</h2>
+      <div id="overview.insights" data-wireframe-block="insights" data-priority="P1" aria-label="解释型建议">
+        <div class="insight-list">
+          <div class="placeholder">成本建议：候选组合样本不足，暂不给出最佳结论（门槛 10 次）</div>
+          <div class="placeholder">效率建议：样本不足，不进入最佳效率推荐</div>
+          <div class="placeholder">缓存建议：样本不足，不进入缓存最佳推荐</div>
+        </div>
+      </div>
+      <h2 class="block-title">排行摘要 · 完整口径见「统计」</h2>
+      <div class="rank-grid" data-wireframe-block="rank-grid" data-priority="P1">
+        <div id="overview.rank-model" data-wireframe-block="rank-model" data-priority="P1">
+          <h3 class="rank-title">provider/model 费用</h3>
+          <table>
+            <thead><tr><th>组合</th><th class="num">费用</th><th class="num">占比</th></tr></thead>
+            <tbody>
+              <tr><td>openai/gpt-5</td><td class="num">¥51.20</td><td class="num">39.9%</td></tr>
+              <tr><td>anthropic/claude-sonnet-4</td><td class="num">¥40.10</td><td class="num">31.2%</td></tr>
+              <tr><td>9router/claude-haiku</td><td class="num">¥14.80</td><td class="num">11.5%</td></tr>
+              <tr><td>其余 5 组</td><td class="num">¥22.30</td><td class="num">17.4%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="overview.rank-project" data-wireframe-block="rank-project" data-priority="P1">
+          <h3 class="rank-title">项目费用</h3>
+          <table>
+            <thead><tr><th>项目</th><th class="num">费用</th><th class="num">占比</th></tr></thead>
+            <tbody>
+              <tr><td>~/c6x_local/app-prd/xpi-kuma</td><td class="num">¥48.60</td><td class="num">37.9%</td></tr>
+              <tr><td>~/work/app-web</td><td class="num">¥35.20</td><td class="num">27.4%</td></tr>
+              <tr><td>~/lab/agents</td><td class="num">¥28.90</td><td class="num">22.5%</td></tr>
+              <tr><td>未知（存量记录）</td><td class="num">¥15.70</td><td class="num">12.2%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="overview.rank-efficiency" data-wireframe-block="rank-efficiency" data-priority="P1">
+          <h3 class="rank-title">效率（p95 首字）</h3>
+          <table>
+            <thead><tr><th>组合</th><th class="num">p95 首字</th><th class="num">样本</th><th>状态</th></tr></thead>
+            <tbody>
+              <tr><td>openai/gpt-5</td><td class="num">1,640ms</td><td class="num">42</td><td>达标</td></tr>
+              <tr><td>anthropic/claude-sonnet-4</td><td class="num">—</td><td class="num">7</td><td>数据不足</td></tr>
+              <tr><td>9router/claude-haiku</td><td class="num">—</td><td class="num">3</td><td>数据不足</td></tr>
+            </tbody>
+          </table>
+          <p class="rank-note" id="overview.low-sample-note" data-wireframe-block="low-sample-note" data-priority="P1" data-semantic-badge="P1-10-B1" data-status="proposed" data-type="text">样本门槛 ≥10 条；数据不足者不显示延迟、不进最佳建议，也不以 0 值代替</p>
+        </div>
+      </div>
+    </section>
+    <section data-tab-panel="stats" hidden aria-label="统计面板">
+      <h2 class="block-title">统计 · provider/model 明细（完整口径）</h2>
+      <div class="table-scroll" data-wireframe-block="stats-table" data-priority="P1">
+        <table>
+          <thead><tr><th>供应商</th><th>模型</th><th class="num">费用</th><th class="num">占比</th><th class="num">tokens</th><th class="num">请求数</th><th class="num">单请求成本</th><th class="num">缓存命中率</th></tr></thead>
+          <tbody>
+            <tr><td>anthropic</td><td>claude-sonnet-4</td><td class="num">¥40.10</td><td class="num">31.2%</td><td class="num">918,000</td><td class="num">318</td><td class="num">¥0.126</td><td class="num">62.4%</td></tr>
+            <tr><td>openai</td><td>gpt-5</td><td class="num">¥51.20</td><td class="num">39.9%</td><td class="num">842,000</td><td class="num">274</td><td class="num">¥0.187</td><td class="num">58.1%</td></tr>
+            <tr><td>9router</td><td>claude-haiku</td><td class="num">¥14.80</td><td class="num">11.5%</td><td class="num">610,000</td><td class="num">168</td><td class="num">¥0.088</td><td class="num">71.2%</td></tr>
+            <tr><td colspan="6">其余 5 个组合已汇总</td><td class="num">¥22.30</td><td class="num">17.4%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section data-tab-panel="chart" hidden aria-label="趋势面板">
+      <div id="overview.trend" data-wireframe-block="trend" data-priority="P1" aria-label="消费趋势">
+        <h2 class="block-title">消费趋势</h2>
+        <svg class="trend-svg" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="近 24 小时每小时费用折线示例，灰阶无交互">
+          <polyline points="0,128 50,112 100,118 150,86 200,96 250,66 300,74 350,50 400,62 450,36 500,52 550,32 600,44" fill="none" stroke="currentColor" stroke-width="2" />
+          <line x1="0" y1="150" x2="600" y2="150" stroke="currentColor" stroke-width="1" opacity="0.4" />
+        </svg>
+        <p class="status">时间轴 00:00 / 06:00 / 12:00 / 18:00 / 24:00 · 示例数据</p>
+      </div>
+    </section>
+    <section data-tab-panel="vendors" hidden aria-label="供应商面板">
+      <h2 class="block-title">供应商 probe</h2>
+      <div class="placeholder" data-wireframe-block="vendors" data-priority="P2">probe 健康卡片沿用成品现状，本变更不改动</div>
+    </section>
+  </main>
+  <footer data-wireframe-block="footer" data-priority="P2">
+    <p>示例数据，仅用于布局评审，未接入生产统计</p>
+  </footer>
+  <script>
+    (function () {
+      var tabs = document.querySelectorAll(".tab");
+      Array.prototype.forEach.call(tabs, function (tab) {
+        tab.addEventListener("click", function () {
+          Array.prototype.forEach.call(tabs, function (item) {
+            item.setAttribute("aria-selected", String(item === tab));
+          });
+          Array.prototype.forEach.call(document.querySelectorAll("[data-tab-panel]"), function (panel) {
+            panel.hidden = panel.getAttribute("data-tab-panel") !== tab.getAttribute("data-tab");
+          });
+        });
+      });
+    })();
+  </script>
+<div class="badge-toggle">
+  <span class="badge-toggle-label">🏷️ 语义标注</span>
+  <button type="button" data-badge-system id="badge-toggle-btn">ON</button>
+</div>
+<div class="badge-tip" aria-hidden="true"></div>
+<script data-badge-system>
+(function () {
+  var btn = document.getElementById("badge-toggle-btn");
+  if (!btn) return;
+  var root = document.documentElement;
+  var visible =
+    getComputedStyle(root).getPropertyValue("--badge-display").trim() !== "none";
+  function apply() {
+    root.style.setProperty("--badge-display", visible ? "block" : "none");
+    btn.textContent = visible ? "ON" : "OFF";
+    btn.classList.toggle("off", !visible);
+  }
+  var suppressClick = false;
+  btn.addEventListener("click", function () {
+    // 拖拽的 pointerup 之后浏览器还会派发一次 click，这里把它吃掉，
+    // 否则「把开关挪个位置」会顺手把标注关掉。
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
+    visible = !visible;
+    apply();
+  });
+
+  // ==================== 拖动 ====================
+  // 开关固定在右上角，挡住页面信息时用户可以拖走；位置记在 localStorage。
+  var box = btn.closest(".badge-toggle");
+  if (box) {
+    var STORE_KEY = "badge-toggle-pos";
+    var DRAG_THRESHOLD = 4;
+    var drag = null;
+
+    // 收边后才落笔：换到更小的窗口后，旧坐标会落在画布外。
+    function clampAndPlace(left, top) {
+      var maxLeft = Math.max(0, window.innerWidth - box.offsetWidth);
+      var maxTop = Math.max(0, window.innerHeight - box.offsetHeight);
+      var x = Math.min(Math.max(0, left), maxLeft);
+      var y = Math.min(Math.max(0, top), maxTop);
+      box.style.right = "auto";
+      box.style.left = x + "px";
+      box.style.top = y + "px";
+    }
+
+    try {
+      var saved = JSON.parse(window.localStorage.getItem(STORE_KEY) || "null");
+      if (saved && typeof saved.left === "number" && typeof saved.top === "number") {
+        clampAndPlace(saved.left, saved.top);
+      }
+    } catch (error) {
+      // 隐私模式、file:// 或坏 JSON：读不出来就用 CSS 的默认右上角，不抛错。
+    }
+
+    // 不在 pointerdown 时 setPointerCapture：指针捕获会把随后的 mouseup/click
+    // 重定向到本容器，按钮上的 click 监听器再也收不到事件（表现为开关点不动）。
+    // 改成把 move/up 挂到 window：拖出容器一样跟手，且不改事件目标。
+    function onDragMove(event) {
+      if (!drag) return;
+      var dx = event.clientX - drag.x;
+      var dy = event.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+      suppressClick = true;
+      clampAndPlace(drag.left + dx, drag.top + dy);
+    }
+
+    function stopDrag() {
+      window.removeEventListener("pointermove", onDragMove);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", cancelDrag);
+    }
+
+    function endDrag() {
+      if (!drag) {
+        stopDrag();
+        return;
+      }
+      drag = null;
+      if (suppressClick) {
+        try {
+          window.localStorage.setItem(
+            STORE_KEY,
+            JSON.stringify({ left: box.offsetLeft, top: box.offsetTop })
+          );
+        } catch (error) {
+          // 存不下只影响「下次打开还在原地」，不影响本轮拖动。
+        }
+      }
+      stopDrag();
+    }
+
+    function cancelDrag() {
+      drag = null;
+      stopDrag();
+    }
+
+    box.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0) return;
+      suppressClick = false;
+      drag = {
+        left: box.offsetLeft,
+        top: box.offsetTop,
+        x: event.clientX,
+        y: event.clientY
+      };
+      window.addEventListener("pointermove", onDragMove);
+      window.addEventListener("pointerup", endDrag);
+      window.addEventListener("pointercancel", cancelDrag);
+    });
+  }
+
+  // ==================== 徽标朝向 ====================
+  // 徽标画在元素左上外侧，元素贴视口边时会被推出可视区，或被 overflow 祖先裁掉。
+  // 这里按元素 rect 从 4 个角里挑一个「徽标仍完整落在视口内」的角，
+  // 写进 data-badge-pos，CSS 负责按角定位。
+  // GAP 是留给视口边的呼吸量，略大于徽标自身 8px 的外偏。
+  var GAP = 12;
+  var badges = document.querySelectorAll("[data-semantic-badge]");
+  function choosePos(rect) {
+    var top = rect.top >= GAP;
+    var bottom = window.innerHeight - rect.bottom >= GAP;
+    var left = rect.left >= GAP;
+    var right = window.innerWidth - rect.right >= GAP;
+    if (top && left) return "tl";
+    if (top && right) return "tr";
+    if (bottom && left) return "bl";
+    if (bottom && right) return "br";
+    // 元素贴边或撑满视口，四角都不「完全放得下」：选各边超出量之和最小的那个角。
+    // 旧实现这里 return null 退回默认左上，而默认左上同样可能在画外 —— 实测贴顶的
+    // resize 手柄整块徽标被视口切掉。宁可露出一部分，也不要露出零。
+    var corners = ["tl", "tr", "bl", "br"];
+    var cost = {
+      tl: Math.max(0, GAP - rect.top) + Math.max(0, GAP - rect.left),
+      tr: Math.max(0, GAP - rect.top) + Math.max(0, rect.right - window.innerWidth + GAP),
+      bl: Math.max(0, rect.bottom - window.innerHeight + GAP) + Math.max(0, GAP - rect.left),
+      br:
+        Math.max(0, rect.bottom - window.innerHeight + GAP) +
+        Math.max(0, rect.right - window.innerWidth + GAP)
+    };
+    var best = corners[0];
+    for (var i = 1; i < corners.length; i++) {
+      if (cost[corners[i]] < cost[best]) best = corners[i];
+    }
+    return best;
+  }
+  function placeBadges() {
+    for (var i = 0; i < badges.length; i++) {
+      var el = badges[i];
+      var pos = choosePos(el.getBoundingClientRect());
+      if (el.getAttribute("data-badge-pos") !== pos) el.setAttribute("data-badge-pos", pos);
+    }
+  }
+  // 判定读的是视口坐标，滚动与缩放都会改变结果；rAF 节流保证一帧最多算一次。
+  var frame = 0;
+  function schedulePlaces() {
+    if (frame) return;
+    frame = requestAnimationFrame(function () {
+      frame = 0;
+      placeBadges();
+    });
+  }
+  window.addEventListener("resize", schedulePlaces);
+  // capture：内层滚动容器的事件不冒泡到 window，得在捕获阶段才收得到。
+  window.addEventListener("scroll", schedulePlaces, true);
+  // 图片与字体后加载会挪动布局，靠 load 再收一次。
+  // ponytail: 元素表只快照一次；SPA 切页插入的新元素不在表内，需要时改成每次重查。
+  window.addEventListener("load", function () {
+    badges = document.querySelectorAll("[data-semantic-badge]");
+    schedulePlaces();
+  });
+  placeBadges();
+
+
+  // ==================== 悬停浮层 ====================
+  // 常显徽标画在元素边界外，会被祖先的 overflow 裁掉，密集时还会互相压。
+  // 浮层挂在 body 末尾、不在任何 overflow 容器内，一次只显示一个，
+  // 于是短码无论被裁还是被压，悬停/聚焦时都能读全。
+  var tip = document.querySelector(".badge-tip");
+  var TIP_GAP = 6;
+  function tipTarget(node) {
+    return node && node.closest ? node.closest("[data-semantic-badge]") : null;
+  }
+  function showTip(el) {
+    if (!tip) return;
+    var parts = [
+      el.getAttribute("data-semantic-badge"),
+      el.getAttribute("data-status"),
+      el.getAttribute("data-type")
+    ];
+    tip.textContent = parts.filter(Boolean).join(" · ");
+    tip.classList.add("on");
+    var rect = el.getBoundingClientRect();
+    var box = tip.getBoundingClientRect();
+    var left = Math.min(Math.max(TIP_GAP, rect.left), window.innerWidth - box.width - TIP_GAP);
+    var below = rect.bottom + TIP_GAP;
+    var top = below + box.height <= window.innerHeight ? below : rect.top - box.height - TIP_GAP;
+    tip.style.left = Math.max(TIP_GAP, left) + "px";
+    tip.style.top = Math.max(TIP_GAP, top) + "px";
+  }
+  function hideTip() {
+    if (tip) tip.classList.remove("on");
+  }
+  if (tip) {
+    document.addEventListener("mouseover", function (event) {
+      var el = tipTarget(event.target);
+      if (el) showTip(el);
+    });
+    document.addEventListener("mouseout", function (event) {
+      // 元素内部的子节点之间移动也会先 mouseout，别因此闪一下。
+      var from = tipTarget(event.target);
+      if (from && from !== tipTarget(event.relatedTarget)) hideTip();
+    });
+    document.addEventListener("focusin", function (event) {
+      var el = tipTarget(event.target);
+      if (el) showTip(el);
+    });
+    document.addEventListener("focusout", hideTip);
+    // fixed 定位在滚动后不再贴合元素，直接收起比错位更不误导。
+    window.addEventListener("scroll", hideTip, true);
+  }
+  apply();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "product": "usage-overview",
+  "version": 1,
+  "flow": ["overview"],
+  "pages": [
+    {
+      "id": "overview",
+      "name": "使用量总览",
+      "implementation": "prototype",
+      "fidelity": "wireframe",
+      "route": "screens/01-overview.html",
+      "prototypeEntry": "screens/01-overview.html"
+    }
+  ]
+}

@@ -53,7 +53,7 @@ describe("loadConfig", () => {
 
     const config = loadConfig();
 
-    expect(config.vendors).toHaveLength(3);
+    expect(config.vendors).toHaveLength(4);
     expect(config.vendors[0]).toMatchObject({
       endpoint: "https://api.openai.com/v1",
       model: "gpt-4o-mini",
@@ -169,6 +169,7 @@ describe("示例配置文件", () => {
       "OpenAI",
       "Anthropic",
       "9router",
+      "commandcode",
     ]);
     expect(config.retention).toEqual({
       rawRecords: 7,

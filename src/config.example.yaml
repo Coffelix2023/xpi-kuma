@@ -19,7 +19,7 @@ vendors:
 
     # 余额取数（可选）。三档降级：余额接口 → OAuth 授权 → 手动填写；段缺失即视为
     # 未配置，面板不会替你去猜任何接口路径。
-    # 探测结论：本样例的三家供应商目前都没有可用的公开余额接口
+    # 探测结论：本样例的四家供应商目前都没有可用的公开余额接口
     # （见 docs/probe-balance-and-oauth.md），所以这里只留注释样例。
     # balance:
     #   api_path: "/path/to/balance"   # 相对 endpoint；以 http 开头则按绝对地址请求
@@ -54,6 +54,18 @@ vendors:
       # 中转站限流较严时建议关闭探测
       enabled: false
       interval: "10m"
+      timeout: 30000
+
+  - name: "commandcode"
+    endpoint: "https://api.commandcode.ai/provider/v1"
+    model: "<your-commandcode-model>"   # 占位：公开仓库不披露默认 model，按你的订阅填写
+    api_key: "${COMMANDCODE_API_KEY}"
+    price:
+      input: 0                      # 无公开价目，按你的实际价目填写
+      output: 0
+    probe:
+      enabled: true
+      interval: "5m"
       timeout: 30000
 
 retention:

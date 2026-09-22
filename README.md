@@ -152,6 +152,8 @@ session; the same command reuses the running service instead of starting a secon
 - **Browser did not open?** The service stays up and Pi shows a notification with the same URL, ready to copy.
 - **Auto refresh.** A visible page polls every 5 seconds; a hidden tab pauses polling and refreshes
   immediately when you come back. Requests never overlap, and a failed refresh keeps the last rendered data.
+- **Zero external resources.** The panel loads no CDN scripts or stylesheets: the trend chart is inline
+  SVG, and every color, size and radius comes from the theme tokens in this repository. It works fully offline.
 - **Closed the page by mistake?** The service stays up for the whole Pi process, so run `/xpi-kuma` again to reopen the same dashboard with the same credential. No second service is started.
 - **Process-scoped, not session-scoped.** Quitting, reloading, starting, resuming, or forking a session
   leaves the service running; only `/xpi-kuma off` (or exiting Pi) shuts it down. `/xpi-kuma on` starts
@@ -185,9 +187,26 @@ available (85% to 130%); the choice is stored under `kuma.font` and applied befo
 Counts, costs and durations use thousands separators, and totals switch to `M` (millions) or `亿`
 (100 millions) so long numbers stay readable at a glance.
 
-The usage stats table on the main panel has ten column groups — **vendor / model / requests / input, output, cache-read and
-cache-write tokens with their cost / tool calls / token share / cost share** — with shares computed against the whole period.
-Body width is capped at `1280px`, and wider tables scroll horizontally inside the body instead of breaking the layout.
+The usage stats table on the main panel has twelve column groups — **vendor / model / requests / input, output, cache-read and
+cache-write tokens with their cost / tool calls / cost per request / cache hit rate / token share / cost share** — with shares
+computed against the whole period and cost per request defined as cost ÷ requests. The first screen shows at most 8 rows;
+the remaining combinations collapse into a single "N more combinations" row (values summed, shares and cost per request
+recomputed from the totals). Body width is capped at `1280px`, and wider tables scroll horizontally inside the body
+instead of breaking the layout.
+
+The usage overview tab leads with five metrics (spend, total tokens, requests, projects covered, cache hit rate), followed
+by **read-only suggestions**, **provider/model and project spend rankings**, and an **efficiency ranking**. The cache hit
+rate is `cacheRead / (input + cacheRead)`; when the denominator is zero it reads "unknown" instead of a fabricated `0%`.
+
+**Suggestions are an explanation layer, not a decision layer.** Each one states its target, evidence, sample size, time
+range and confidence; the panel never switches models, writes vendor config, or fires a probe because of one.
+
+**The efficiency ranking uses only real call timings.** Request start, first response token and completion are taken from
+direct observation of the Pi event chain; a provider/model combination needs at least 10 successful records with complete
+timings to enter the ranking (the threshold is fixed at 10, not configurable in this version). Combinations below it are
+marked "not enough samples", and history without reliable timings shows "no real call latency yet" — never substituted with
+neighbouring records, probe data or estimates. If suggestions or efficiency fail to compute, the base overview and stats
+still render and only that block is marked "suggestions unavailable".
 
 **Balances fall back through three tiers**, per vendor and in order. A tier that fails only adds a reason;
 it never aborts the row.
@@ -263,6 +282,7 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # live loop: /reload inside Pi
     ├── index.ts               # Extension entrypoint (register function)
     ├── config.ts              # global config.yaml loading and ${ENV_VAR} expansion
     ├── types.ts               # Shared domain types
+    ├── insights.ts            # Read-only cost / efficiency / cache insights (pure, no DB reads, no config writes)
     ├── collectors/            # Usage persistence and aggregate queries
     ├── monitors/              # Scheduled vendor probes
     ├── storage/               # SQLite persistence
@@ -284,9 +304,6 @@ This project adopts the [Google Labs DESIGN.md format](https://github.com/google
 ## Credits
 
 - [Pi Coding Agent](https://github.com/earendil-works/pi) by [earendil-works](https://github.com/earendil-works) — the host this extension plugs into. The extension API, the `ctx.ui` contract, and the package manifest format are theirs.
-- [Chart.js](https://www.chartjs.org/) — loaded at a pinned version (`4.4.1`) from the jsDelivr CDN to draw
-  the cost and token trend. When the CDN is unreachable the chart hides itself; the statistics table and
-  vendor cards keep working.
 
 ## License
 

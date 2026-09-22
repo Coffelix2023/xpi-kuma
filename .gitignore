@@ -16,3 +16,6 @@ coverage/
 **/fast-fixes/
 **/references/
 **/*trash
+
+# xpi-kuma 项目级运行时配置：可能写入明文密钥，绝不入库（模板见 src/config.example.yaml）
+.pi/xpi-kuma/config.yaml

@@ -122,8 +122,10 @@ retention:
 - `api_key` supports `${ENV_VAR}` placeholders and is expanded only in memory.
   An unset variable is left as-is so you notice it instead of silently probing with no key.
 - Probes send a fixed `"hi"` prompt with `max_tokens: 1`, so each one costs a few tokens.
+  A stream that carries data but no visible text (some models emit only empty deltas at this token
+  limit) still counts as reachable: the vendor reads `up` and TTFT shows unknown instead of a false
+  `down`.
   Set `probe.enabled: false` for vendors you do not want probed (rate-limited gateways).
-- Usage data is stored in `~/.pi/agent/data/xpi-kuma/usage.db`; the dashboard reads the same file.
 
 Data written by the extension:
 

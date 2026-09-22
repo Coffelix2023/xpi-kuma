@@ -200,6 +200,38 @@ export const MESSAGES = {
     en: "Updated at",
     zh: "更新于",
   },
+  "efficiency.insufficient": {
+    en: "Not enough samples",
+    zh: "样本不足",
+  },
+  "efficiency.noData": {
+    en: "No real call latency yet",
+    zh: "暂无真实效率数据",
+  },
+  "efficiency.p50Total": {
+    en: "p50 total",
+    zh: "p50 总耗时",
+  },
+  "efficiency.p50Ttft": {
+    en: "p50 first token",
+    zh: "p50 首字",
+  },
+  "efficiency.p95Total": {
+    en: "p95 total",
+    zh: "p95 总耗时",
+  },
+  "efficiency.p95Ttft": {
+    en: "p95 first token",
+    zh: "p95 首字",
+  },
+  "efficiency.samples": {
+    en: "Samples",
+    zh: "样本",
+  },
+  "efficiency.successRate": {
+    en: "Success rate",
+    zh: "成功率",
+  },
   "font.group": {
     en: "Font size",
     zh: "字号",
@@ -308,6 +340,54 @@ export const MESSAGES = {
     en: "Go back to the dashboard and open “Config diagnostics” to verify all six checks.",
     zh: "回到主面板进入「配置体检」，核对六项检查是否全部通过。",
   },
+  "insight.confidence.high": {
+    en: "High",
+    zh: "高",
+  },
+  "insight.confidence.low": {
+    en: "Low",
+    zh: "低",
+  },
+  "insight.confidence.medium": {
+    en: "Medium",
+    zh: "中",
+  },
+  "insight.confidenceLabel": {
+    en: "Confidence",
+    zh: "置信度",
+  },
+  "insight.dimension.cache": {
+    en: "Cache",
+    zh: "缓存",
+  },
+  "insight.dimension.cost": {
+    en: "Cost",
+    zh: "成本",
+  },
+  "insight.dimension.efficiency": {
+    en: "Efficiency",
+    zh: "效率",
+  },
+  "insight.empty": {
+    en: "No suggestion for this period yet",
+    zh: "本期暂无可给出的建议",
+  },
+  "insight.evidence": {
+    en: "Evidence",
+    zh: "依据",
+  },
+  "insight.period": {
+    en: "Time range",
+    zh: "时间范围",
+  },
+  "insight.sample": {
+    en: "Samples",
+    zh: "样本",
+  },
+  "insight.unavailable": {
+    en: "Suggestions unavailable",
+    zh: "洞察暂不可用",
+  },
   "lang.ariaSwitch": {
     en: "Switch language",
     zh: "切换界面语言",
@@ -336,6 +416,10 @@ export const MESSAGES = {
     en: "Config diagnostics",
     zh: "配置体检",
   },
+  "overview.cacheHitRate": {
+    en: "Cache hit rate",
+    zh: "缓存命中率",
+  },
   "overview.cost": {
     en: "Spend this period",
     zh: "本期花费",
@@ -344,9 +428,29 @@ export const MESSAGES = {
     en: "No usage recorded this period",
     zh: "本期还没有使用量记录",
   },
+  "overview.insightsTitle": {
+    en: "Suggestions · read-only, no config change",
+    zh: "解释型建议 · 只读，不改配置",
+  },
   "overview.projects": {
     en: "Projects covered",
     zh: "覆盖项目数",
+  },
+  "overview.rankEfficiency": {
+    en: "Efficiency (p95 first token)",
+    zh: "效率（p95 首字）",
+  },
+  "overview.rankModel": {
+    en: "provider/model spend",
+    zh: "provider/model 费用",
+  },
+  "overview.rankProject": {
+    en: "Project spend",
+    zh: "项目费用",
+  },
+  "overview.rankTitle": {
+    en: "Ranking summary · full detail in Stats",
+    zh: "排行摘要 · 完整口径见「统计」",
   },
   "overview.requests": {
     en: "Requests",
@@ -431,6 +535,18 @@ export const MESSAGES = {
   "range.30d": {
     en: "30 days",
     zh: "30天",
+  },
+  "rank.combination": {
+    en: "Combination",
+    zh: "组合",
+  },
+  "rank.cost": {
+    en: "Spend",
+    zh: "费用",
+  },
+  "rank.project": {
+    en: "Project",
+    zh: "项目",
   },
   "section.accountRows": {
     en: "Account details",
@@ -609,6 +725,10 @@ export const MESSAGES = {
     en: "OAuth (stale value)",
     zh: "OAuth 授权（旧值）",
   },
+  "stats.cacheHitRate": {
+    en: "Cache hit rate",
+    zh: "缓存命中率",
+  },
   "stats.cacheRead": {
     en: "Cache read",
     zh: "缓存读",
@@ -633,9 +753,21 @@ export const MESSAGES = {
     en: "Output cost",
     zh: "输出费用",
   },
+  "stats.costPerRequest": {
+    en: "Cost per request",
+    zh: "单请求成本",
+  },
   "stats.model": {
     en: "Model",
     zh: "模型",
+  },
+  "stats.otherPrefix": {
+    en: "Remaining ",
+    zh: "其余 ",
+  },
+  "stats.otherSuffix": {
+    en: " combinations aggregated",
+    zh: " 个组合已汇总",
   },
   "stats.provider": {
     en: "Vendor",

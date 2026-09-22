@@ -1,8 +1,10 @@
 /**
  * 概览片段。
  *
- * 主面板首屏的四个总数。渲染只用原生 DOM，数字格式复用 render 片段的
- * `money()` / `count()`，文案经 `t()` 取词。
+ * 主面板首屏的五个总数。渲染只用原生 DOM，数字格式复用 render 片段的
+ * `money()` / `count()` / `percent()`，文案经 `t()` 取词。
+ *
+ * 缓存命中率取自接口的 `cache.hitRate`：为 null 时显示「未知」，不显示 0%。
  */
 export function overviewFragment(): string {
   return `
@@ -21,8 +23,8 @@ export function overviewFragment(): string {
         wireNav();
       }
 
-      /** 花费概览：本期花费 / token 总量 / 请求次数 / 覆盖项目数。 */
-      function renderOverview(overview, currentPeriod) {
+      /** 花费概览：本期花费 / token 总量 / 请求次数 / 覆盖项目数 / 缓存命中率。 */
+      function renderOverview(overview, cache, currentPeriod) {
         var host = el("kuma-overview");
         if (!host) { return; }
         var data = overview || {};
@@ -33,7 +35,8 @@ export function overviewFragment(): string {
           [t("overview.cost"), money(data.costTotal)],
           [t("overview.tokens"), count(data.totalTokens || 0)],
           [t("overview.requests"), count(data.requestCount || 0)],
-          [t("overview.projects"), count(data.projectCount || 0)]
+          [t("overview.projects"), count(data.projectCount || 0)],
+          [t("overview.cacheHitRate"), percent(cache ? cache.hitRate : null)]
         ].forEach(function (pair) {
           var card = document.createElement("div");
           card.className = "kuma-metric";

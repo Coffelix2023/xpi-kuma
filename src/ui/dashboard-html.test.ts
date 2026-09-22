@@ -26,6 +26,18 @@ describe("generateDashboardHTML 结构", () => {
     expect(html).toContain('id="kuma-chart"');
   });
 
+  it("总览面板预留建议与三张排行表的容器", () => {
+    const html = generateDashboardHTML();
+    expect(html).toContain('id="kuma-insights"');
+    expect(html).toContain('id="kuma-rank-model"');
+    expect(html).toContain('id="kuma-rank-project"');
+    expect(html).toContain('id="kuma-rank-efficiency"');
+    // 分区标题走字典，语言切换后跟着换
+    expect(html).toContain('data-i18n="overview.insightsTitle"');
+    expect(html).toContain('data-i18n="overview.rankTitle"');
+    expect(html).toContain('role="region"');
+  });
+
   it("首帧默认图鉴亮色，四套主题选择器同表输出", () => {
     const html = generateDashboardHTML();
     expect(html).toContain('data-family="atlas"');
@@ -181,6 +193,24 @@ describe("响应式契约", () => {
     );
     expect(css).toContain(".kuma-scroll { overflow-x: auto;");
     expect(css).toContain(".kuma-chart-wrap svg { width: 100%;");
+  });
+
+  it("排行摘要是两列网格，效率表独占整行，窄视口降为单列", () => {
+    const css = dashboardCss();
+    expect(css).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
+    // 效率表五列，1/3 宽度会被裁切：整行铺满
+    expect(css).toContain(".kuma-rank-grid > :last-child { grid-column: 1 / -1; }");
+    expect(css).toContain(".kuma-rank-grid > * { min-width: 0; }");
+    expect(css).toContain(".kuma-rank-grid { grid-template-columns: 1fr; }");
+  });
+
+  it("排行与效率的数字列用等宽数字，状态用文字加弱化色表达", () => {
+    const css = dashboardCss();
+    expect(css).toContain(".kuma-num {");
+    expect(css).toContain("font-variant-numeric: tabular-nums;");
+    expect(css).toContain(".kuma-muted { margin: 0; color: var(--muted-foreground);");
+    // 建议卡片用既有 token：强调线取 --primary，边框取 --border
+    expect(css).toContain("border-left: 3px solid var(--primary);");
   });
 
   it("窄视口下减少卡片列数并压低图表高度", () => {
@@ -515,17 +545,59 @@ describe("中英双语结构", () => {
     }
   });
 
-  it("统计表词条齐备：14 个键，中英都非空且英文没有中文残留", () => {
+  it("统计表词条齐备：18 个键，中英都非空且英文没有中文残留", () => {
     const statsEntries = Object.entries(MESSAGES).filter(([key]) =>
       key.startsWith("stats."),
     );
-    // 供应商、模型、请求次数、四类 token 与各自费用、工具调用次数、两列占比
-    expect(statsEntries.map(([key]) => key)).toHaveLength(14);
+    // 供应商、模型、请求次数、四类 token 与各自费用、工具调用次数、两列占比、
+    // 单请求成本、缓存命中率，以及折叠行「其余 N 个组合」的前缀与后缀
+    expect(statsEntries.map(([key]) => key)).toHaveLength(18);
     for (const [key, entry] of statsEntries) {
       expect(entry.en, key).not.toBe("");
       expect(entry.zh, key).not.toBe("");
       // 切到英文后这一列不该出现中日韩字符
       expect(entry.en, key).not.toMatch(CJK);
     }
+  });
+
+  it("新增区块词条中英成对，英文没有中文残留", () => {
+    const prefixes = [
+      "efficiency.",
+      "insight.",
+      "rank.",
+      "overview.rank",
+    ];
+    const entries = Object.entries(MESSAGES).filter(([key]) =>
+      prefixes.some((prefix) => key.startsWith(prefix)),
+    );
+    expect(entries.length).toBeGreaterThan(20);
+    for (const [key, entry] of entries) {
+      expect(entry.en, key).not.toBe("");
+      expect(entry.zh, key).not.toBe("");
+      expect(entry.en, key).not.toMatch(CJK);
+    }
+  });
+
+  it("p50/p95、缓存命中率与未知状态都有文字标签", () => {
+    for (const key of [
+      "efficiency.p50Total",
+      "efficiency.p50Ttft",
+      "efficiency.p95Total",
+      "efficiency.p95Ttft",
+      "efficiency.insufficient",
+      "efficiency.noData",
+      "efficiency.samples",
+      "efficiency.successRate",
+      "overview.cacheHitRate",
+      "insight.unavailable",
+      "insight.empty",
+      "insight.confidenceLabel",
+      "common.unknown",
+    ]) {
+      expect(Object.keys(MESSAGES), key).toContain(key);
+    }
+    // 未知值用文字表达，颜色不是唯一通道
+    expect(MESSAGES["common.unknown"]?.zh).toBe("未知");
+    expect(MESSAGES["efficiency.insufficient"]?.zh).toBe("样本不足");
   });
 });

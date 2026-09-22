@@ -4,6 +4,7 @@ import { chartFragment } from "./client/chart.ts";
 import { DEFAULT_PERIOD, POLL_INTERVAL_MS } from "./client/constants.ts";
 import { fontScaleFragment } from "./client/font.ts";
 import { i18nFragment } from "./client/i18n.ts";
+import { insightsFragment } from "./client/insights.ts";
 import { navFragment } from "./client/nav.ts";
 import { overviewFragment } from "./client/overview.ts";
 import { accountsPageFragment } from "./client/pages/accounts.ts";
@@ -11,6 +12,7 @@ import { dashboardPageFragment } from "./client/pages/dashboard.ts";
 import { emptyPageFragment } from "./client/pages/empty.ts";
 import { settingsPageFragment } from "./client/pages/settings.ts";
 import { pollFragment } from "./client/poll.ts";
+import { rankingFragment } from "./client/ranking.ts";
 import { renderFragment } from "./client/render.ts";
 
 export { POLL_INTERVAL_MS, preferenceBootstrapScript };
@@ -48,6 +50,8 @@ export function dashboardClientScript(): string {
   return pageScript(
     [
       overviewFragment(),
+      rankingFragment(),
+      insightsFragment(),
       chartFragment(),
       dashboardPageFragment(),
     ].join("\n"),

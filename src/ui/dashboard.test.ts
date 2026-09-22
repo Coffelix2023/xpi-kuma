@@ -301,6 +301,14 @@ describe("服务启动与路由", () => {
     expect(data.stats).toEqual([]);
     expect(data.trend).toEqual([]);
     expect(data.vendors).toHaveLength(2);
+    // 新增字段在空数据下也给明确空态：命中率未知（null）而不是 0%
+    expect(data.cache).toEqual({
+      cacheReadTokens: 0,
+      hitRate: null,
+      inputTokens: 0,
+    });
+    expect(data.efficiency).toEqual([]);
+    expect(data.insights).toEqual([]);
   });
 
   it("概览四项与统计一致，归因随 dimension 参数分组", async () => {
@@ -352,6 +360,13 @@ describe("服务启动与路由", () => {
     expect(data.overview.costTotal).toBeCloseTo(sum("costTotal"), 10);
     expect(data.overview.totalTokens).toBe(sum("totalTokens"));
     expect(data.overview.requestCount).toBe(sum("requestCount"));
+    // 缓存结构与统计同源；样本不足（各 1 次请求）时不产生洞察
+    expect(data.cache).toEqual({
+      cacheReadTokens: 0,
+      hitRate: 0,
+      inputTokens: 20,
+    });
+    expect(data.insights).toEqual([]);
     expect(data.overview.projectCount).toBe(2);
     expect(data.dimension).toBe("project");
     expect(data.attribution).toHaveLength(2);
@@ -374,6 +389,161 @@ describe("服务启动与路由", () => {
     expect(bad.status).toBe(400);
   });
 
+  it("效率聚合失败时保留基础统计，洞察标记不可用", async () => {
+    const { collector, server } = await start();
+    collector.record({
+      costCacheRead: 0,
+      costCacheWrite: 0,
+      costInput: 0.03,
+      costOutput: 0,
+      costTotal: 0.03,
+      cwd: "/work/app",
+      model: "gpt-4o-mini",
+      provider: "openai",
+      sessionId: "s1",
+      source: "real_usage",
+      timestamp: Date.now(),
+      tokensCacheRead: 0,
+      tokensCacheWrite: 0,
+      tokensInput: 10,
+      tokensOutput: 5,
+      toolCalls: 0,
+    });
+    vi.spyOn(collector, "getEfficiency").mockImplementation(() => {
+      throw new Error("效率聚合失败");
+    });
+
+    const res = await call(server.port, "/api/dashboard?period=24h", {
+      headers: {
+        authorization: `Bearer ${server.token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const data = JSON.parse(res.body);
+    // 基础统计不受影响
+    expect(data.stats).toHaveLength(1);
+    expect(data.overview.costTotal).toBeCloseTo(0.03, 10);
+    expect(data.attribution).toHaveLength(1);
+    // 受影响的部分明确标记不可用 / 暂无数据
+    expect(data.efficiency).toEqual([]);
+    expect(data.insights).toBeNull();
+  });
+
+  it("洞察生成失败时效率排行保留，基础统计不受影响", async () => {
+    const { collector, server } = await start();
+    const now = Date.now();
+    for (let index = 0; index < 10; index += 1) {
+      collector.record({
+        completedAt: now + index + 500,
+        costCacheRead: 0,
+        costCacheWrite: 0,
+        costInput: 0.01,
+        costOutput: 0,
+        costTotal: 0.01,
+        cwd: "/work/app",
+        firstTokenAt: now + index + 100,
+        model: "gpt-4o-mini",
+        provider: "openai",
+        resultStatus: "stop",
+        sessionId: "s1",
+        source: "real_usage",
+        startedAt: now + index,
+        timestamp: now,
+        tokensCacheRead: 0,
+        tokensCacheWrite: 0,
+        tokensInput: 10,
+        tokensOutput: 5,
+        toolCalls: 0,
+      });
+    }
+    vi.spyOn(collector, "getInsights").mockImplementation(() => {
+      throw new Error("洞察生成失败");
+    });
+
+    const res = await call(server.port, "/api/dashboard?period=24h", {
+      headers: {
+        authorization: `Bearer ${server.token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const data = JSON.parse(res.body);
+    expect(data.stats).toHaveLength(1);
+    expect(data.efficiency).toHaveLength(1);
+    expect(data.efficiency[0]).toMatchObject({
+      provider: "openai",
+      sampleSize: 10,
+      sufficient: true,
+    });
+    expect(data.insights).toBeNull();
+  });
+
+  it("达标时返回效率排行、缓存结构与有界洞察", async () => {
+    const { collector, server } = await start();
+    const now = Date.now();
+    const seed = (
+      provider: string,
+      costPerRequest: number,
+      totalMs: number,
+      cacheReadTokens: number,
+    ): void => {
+      for (let index = 0; index < 10; index += 1) {
+        collector.record({
+          completedAt: now + index + totalMs,
+          costCacheRead: 0,
+          costCacheWrite: 0,
+          costInput: costPerRequest,
+          costOutput: 0,
+          costTotal: costPerRequest,
+          cwd: "/work/app",
+          firstTokenAt: now + index + 100,
+          model: "gpt-4o-mini",
+          provider,
+          resultStatus: "stop",
+          sessionId: "s1",
+          source: "real_usage",
+          startedAt: now + index,
+          timestamp: now,
+          tokensCacheRead: cacheReadTokens,
+          tokensCacheWrite: 0,
+          tokensInput: 10,
+          tokensOutput: 5,
+          toolCalls: 0,
+        });
+      }
+    };
+    seed("openai", 0.01, 500, 0);
+    seed("anthropic", 0.05, 2000, 30);
+
+    const res = await call(server.port, "/api/dashboard?period=24h", {
+      headers: {
+        authorization: `Bearer ${server.token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const data = JSON.parse(res.body);
+    expect(data.efficiency).toHaveLength(2);
+    expect(data.efficiency[0]).toMatchObject({
+      provider: "openai",
+      sampleSize: 10,
+      sufficient: true,
+    });
+    expect(data.cache).toEqual({
+      cacheReadTokens: 300,
+      hitRate: 0.6,
+      inputTokens: 200,
+    });
+    // 洞察有界（成本 / 效率 / 缓存各至多一条），且都带依据、样本数与时间范围
+    expect(data.insights).toHaveLength(3);
+    for (const insight of data.insights) {
+      expect(insight.evidence.length).toBeGreaterThan(0);
+      expect(insight.sampleSize).toBeGreaterThan(0);
+      expect(insight.period).toBe("24h");
+    }
+  });
+
   it("非法时间范围返回 400", async () => {
     const { server } = await start();
     const res = await call(server.port, "/api/dashboard?period=42y", {
@@ -383,6 +553,109 @@ describe("服务启动与路由", () => {
     });
 
     expect(res.status).toBe(400);
+  });
+
+  it("受控 fixture 下总览、排行、归因与效率口径一致", async () => {
+    const { collector, server } = await start();
+    const now = Date.now();
+    // 受控 fixture：两个 provider/model 组合、两个项目，各 12 条带真实时间点的成功记录
+    const combos = [
+      {
+        costPerRequest: 0.01,
+        cwd: "/work/a",
+        model: "gpt-4",
+        provider: "openai",
+        tokensCacheRead: 0,
+        tokensInput: 100,
+        tokensOutput: 50,
+        totalMs: 500,
+      },
+      {
+        costPerRequest: 0.05,
+        cwd: "/work/b",
+        model: "claude-3",
+        provider: "anthropic",
+        tokensCacheRead: 30,
+        tokensInput: 70,
+        tokensOutput: 20,
+        totalMs: 2000,
+      },
+    ];
+    for (const combo of combos) {
+      for (let index = 0; index < 12; index += 1) {
+        collector.record({
+          completedAt: now + index + combo.totalMs,
+          costCacheRead: 0,
+          costCacheWrite: 0,
+          costInput: combo.costPerRequest,
+          costOutput: 0,
+          costTotal: combo.costPerRequest,
+          cwd: combo.cwd,
+          firstTokenAt: now + index + 50,
+          model: combo.model,
+          provider: combo.provider,
+          resultStatus: "stop",
+          sessionId: "s1",
+          source: "real_usage",
+          startedAt: now + index,
+          timestamp: now,
+          tokensCacheRead: combo.tokensCacheRead,
+          tokensCacheWrite: 0,
+          tokensInput: combo.tokensInput,
+          tokensOutput: combo.tokensOutput,
+          toolCalls: 0,
+        });
+      }
+    }
+
+    const res = await call(server.port, "/api/dashboard?period=24h&dimension=project", {
+      headers: {
+        authorization: `Bearer ${server.token}`,
+      },
+    });
+    expect(res.status).toBe(200);
+    const data = JSON.parse(res.body);
+    const sum = (rows: Record<string, number>[], key: string): number =>
+      rows.reduce((total, row) => total + row[key], 0);
+
+    // 同一时间范围内：总览 = 排行（stats） = 项目归因，三个口径互相一致
+    expect(data.overview.costTotal).toBeCloseTo(sum(data.stats, "costTotal"), 10);
+    expect(data.overview.costTotal).toBeCloseTo(sum(data.attribution, "costTotal"), 10);
+    expect(data.overview.totalTokens).toBe(sum(data.stats, "totalTokens"));
+    expect(data.overview.totalTokens).toBe(sum(data.attribution, "tokens"));
+    expect(data.overview.requestCount).toBe(sum(data.stats, "requestCount"));
+    expect(data.overview.requestCount).toBe(sum(data.attribution, "requestCount"));
+    expect(data.overview.projectCount).toBe(2);
+
+    // 排行内的占比与单请求成本也按同一份合计算
+    expect(sum(data.stats, "costShare")).toBeCloseTo(1, 10);
+    const openai = data.stats.find(
+      (row: Record<string, unknown>) => row.provider === "openai",
+    );
+    expect(openai.costPerRequest).toBeCloseTo(0.01, 10);
+
+    // 缓存结构与统计同源：命中率 = cacheRead / (input + cacheRead)
+    const cacheRead = sum(data.stats, "tokensCacheRead");
+    const input = sum(data.stats, "tokensInput");
+    expect(data.cache.cacheReadTokens).toBe(cacheRead);
+    expect(data.cache.inputTokens).toBe(input);
+    expect(data.cache.hitRate).toBeCloseTo(cacheRead / (input + cacheRead), 10);
+
+    // 效率排行只统计带真实时间点的成功样本：两个组合各 12 条
+    expect(data.efficiency).toHaveLength(2);
+    expect(sum(data.efficiency, "sampleSize")).toBe(24);
+    expect(
+      data.efficiency.every(
+        (row: Record<string, unknown>) =>
+          row.sufficient === true && row.successRate === 1,
+      ),
+    ).toBe(true);
+
+    // 洞察的样本数不超过本期请求数，时间范围与总览一致
+    for (const insight of data.insights) {
+      expect(insight.sampleSize).toBeLessThanOrEqual(data.overview.requestCount);
+      expect(insight.period).toBe("24h");
+    }
   });
 
   it("未知路由返回 404", async () => {
@@ -432,6 +705,9 @@ describe("服务启动与路由", () => {
     expect(data.dimension).toBe("project");
     expect(data.rows).toEqual([
       {
+        cacheHitRate: 0,
+        costPerRequest: 0.03,
+        costShare: 1,
         costTotal: 0.03,
         key: "/work/app",
         requestCount: 1,

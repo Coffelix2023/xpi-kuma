@@ -315,12 +315,89 @@ ${fonts}
       border-radius: ${radius(-4)};
     }
 
+    /*
+     * 分区标题：总览面板内 P1 / P2 区块的小标题，视觉弱于 h1、强于正文标签。
+     */
+    .kuma-block-title {
+      margin: var(--kuma-space-3) 0 var(--kuma-space-1);
+      font-size: var(--kuma-font-sm);
+      font-weight: 700;
+      color: var(--muted-foreground);
+    }
+
+    /*
+     * 排行摘要：模型费用与项目费用并排两列，效率排行独占整行。
+     *
+     * 效率表有五列（p50 总耗时 / p95 首字 / 样本 / 成功率），1/3 宽度下会被裁切；
+     * 三列并排因此改为 2 + 1：两张三列表并排，效率表整行铺满。
+     *
+     * 网格子项默认 min-width:auto，表内 nowrap 单元格的最小内容宽度会把列撑破容器，
+     * 归零后由 .kuma-scroll 接管溢出。
+     */
+    .kuma-rank-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--kuma-space-3);
+    }
+    .kuma-rank-grid > * { min-width: 0; }
+    .kuma-rank-grid > :last-child { grid-column: 1 / -1; }
+    .kuma-rank-title {
+      margin: 0 0 var(--kuma-space-1);
+      font-size: var(--kuma-font-sm);
+      font-weight: 600;
+      color: var(--muted-foreground);
+    }
+
+    /* 排行小表：数字列右对齐并用等宽数字，超出宽度由 .kuma-scroll 横向滚动 */
+    .kuma-table { width: 100%; border-collapse: collapse; font-size: var(--kuma-font-sm); }
+    .kuma-table th,
+    .kuma-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      white-space: nowrap;
+    }
+    .kuma-table th { color: var(--muted-foreground); font-weight: 600; }
+    .kuma-table tr:last-child td { border-bottom: 0; }
+    .kuma-num {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 空态与状态文字：文字即状态，颜色只是辅助通道 */
+    .kuma-muted { margin: 0; color: var(--muted-foreground); font-size: var(--kuma-font-sm); }
+
+    /* 解释型建议卡片：纵向堆叠，结论在上，依据 / 样本 / 时间范围 / 置信度在下 */
+    .kuma-insight-list { display: flex; flex-direction: column; gap: var(--kuma-space-2); }
+    .kuma-insight-card {
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--primary);
+      border-radius: ${radius()};
+      padding: var(--kuma-space-2);
+    }
+    .kuma-insight-conclusion { margin: 0; font-size: var(--kuma-font-md); font-weight: 600; }
+    .kuma-insight-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px var(--kuma-space-2);
+      margin: var(--kuma-space-1) 0 0;
+      font-size: var(--kuma-font-sm);
+    }
+    .kuma-insight-meta dt { color: var(--muted-foreground); }
+    .kuma-insight-meta dd {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
     /* 窄视口：卡片换更多列，表格继续横向滚动，图表压低高度 */
 
     @media (max-width: 800px) {
       body { padding: var(--kuma-space-2); }
       .kuma-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
       .kuma-chart-wrap svg { height: 200px; }
+      .kuma-rank-grid { grid-template-columns: 1fr; }
     }
   `;
 }

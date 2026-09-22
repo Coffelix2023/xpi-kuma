@@ -1,11 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { UsageCollector } from "../../collectors/usage-collector.ts";
-import type { VendorMonitor } from "../../monitors/vendor-monitor.ts";
-import type { TrendSeries } from "../../storage/database.ts";
+import { computeCacheHitRate, type TrendSeries } from "../../storage/database.ts";
 import type {
   AggregatedStats,
   AttributionDimension,
   AttributionRow,
+  CacheStats,
+  EfficiencyRow,
+  Insight,
   StatsPeriod,
   VendorStatus,
 } from "../../types.ts";
@@ -46,9 +48,15 @@ export interface DashboardOverview {
 export interface DashboardData {
   /** 归因明细；维度由请求参数决定，与统计、趋势共用同一个时间范围 */
   attribution: AttributionRow[];
+  /** 缓存结构；与 stats 同源，命中率分母为零时为 null（未知） */
+  cache: CacheStats;
   dimension: AttributionDimension;
+  /** 真实调用效率排行；效率聚合失败时为 []（界面按「暂无真实效率数据」处理） */
+  efficiency: EfficiencyRow[];
   /** 数据生成时间（毫秒时间戳） */
   generatedAt: number;
+  /** 解释型建议；null 表示洞察不可用（效率聚合或洞察生成失败），基础统计不受影响 */
+  insights: Insight[] | null;
   /** 首屏花费概览 */
   overview: DashboardOverview;
   period: StatsPeriod;
@@ -84,18 +92,49 @@ function buildOverview(
   return overview;
 }
 
-/** 汇总面板当前需要的全部数据。 */
+/** 汇总缓存结构：与 stats 同源，分母为零时 hitRate 为 null（未知）。 */
+function buildCache(stats: AggregatedStats[]): CacheStats {
+  let cacheReadTokens = 0;
+  let inputTokens = 0;
+  for (const row of stats) {
+    cacheReadTokens += row.tokensCacheRead;
+    inputTokens += row.tokensInput;
+  }
+  return {
+    cacheReadTokens,
+    hitRate: computeCacheHitRate(inputTokens, cacheReadTokens),
+    inputTokens,
+  };
+}
+
+/** 汇总面板当前需要的全部数据；效率与洞察失败只降级自身。 */
 function collectData(
-  usageCollector: UsageCollector,
-  vendorMonitor: VendorMonitor,
+  ctx: ApiContext,
   period: StatsPeriod,
   dimension: AttributionDimension,
 ): DashboardData {
+  const { logger, usageCollector, vendorMonitor } = ctx;
   const stats = usageCollector.getStats(period);
+  // 效率与洞察是加值区块：任一失败都只标记洞察不可用，基础总览与统计照常返回
+  let efficiency: EfficiencyRow[] = [];
+  let insights: Insight[] | null = null;
+  try {
+    efficiency = usageCollector.getEfficiency(period);
+    insights = usageCollector.getInsights({
+      efficiency,
+      period,
+      stats,
+    });
+  } catch (error) {
+    logger.error("效率或洞察计算失败", error);
+  }
   return {
     attribution: usageCollector.getAttribution(period, dimension),
+    cache: buildCache(stats),
     dimension,
+    efficiency,
     generatedAt: Date.now(),
+    insights,
     overview: buildOverview(stats, usageCollector, period),
     period,
     stats,
@@ -121,7 +160,7 @@ function handleDashboard(
     respond(res, 400, "text/plain; charset=utf-8", "非法的归因维度", null);
     return;
   }
-  const data = collectData(ctx.usageCollector, ctx.vendorMonitor, period, dimension);
+  const data = collectData(ctx, period, dimension);
   respond(res, 200, "application/json; charset=utf-8", JSON.stringify(data), null);
 }
 

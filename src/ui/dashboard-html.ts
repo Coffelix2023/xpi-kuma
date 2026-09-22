@@ -111,6 +111,14 @@ ${tabs}
     <section role="tabpanel" id="kuma-panel-overview" aria-labelledby="kuma-tab-overview" data-tab-panel="overview">
       <div id="kuma-overview"></div>
       <div id="kuma-overview-notice" hidden></div>
+      <h2 class="kuma-block-title"${i18nAttr("overview.insightsTitle")}>${zh("overview.insightsTitle")}</h2>
+      <div id="kuma-insights" role="region"${i18nAria("overview.insightsTitle")}></div>
+      <h2 class="kuma-block-title"${i18nAttr("overview.rankTitle")}>${zh("overview.rankTitle")}</h2>
+      <div class="kuma-rank-grid">
+        <div id="kuma-rank-model"></div>
+        <div id="kuma-rank-project"></div>
+        <div id="kuma-rank-efficiency"></div>
+      </div>
     </section>
 
     <section role="tabpanel" id="kuma-panel-stats" aria-labelledby="kuma-tab-stats" data-tab-panel="stats" hidden>

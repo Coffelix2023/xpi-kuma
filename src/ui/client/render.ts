@@ -74,6 +74,64 @@ export function renderFragment(): string {
         return group(Math.round(n), 0) + " ms";
       }
 
+      /**
+       * 百分比：未知（null / 非数）显示「未知」文本，不用 0% 顶替 —— 0 是已知值。
+       */
+      function percent(rate) {
+        if (typeof rate !== "number" || !isFinite(rate)) { return t("common.unknown"); }
+        return (rate * 100).toFixed(1) + "%";
+      }
+
+      /** 缓存命中率 = cacheRead / (input + cacheRead)；分母为 0 时为 null（未知）。 */
+      function cacheRate(cacheReadTokens, inputTokens) {
+        var denominator = (cacheReadTokens || 0) + (inputTokens || 0);
+        if (!denominator) { return null; }
+        return cacheReadTokens / denominator;
+      }
+
+      /** 时间范围词条：与页头四档按钮共用一套键。 */
+      function periodLabel(value) {
+        if (value === "1h") { return t("range.1h"); }
+        if (value === "7d") { return t("range.7d"); }
+        if (value === "30d") { return t("range.30d"); }
+        return t("range.24h");
+      }
+
+      /** 空态行：文字即状态，不依赖颜色传达。 */
+      function mutedLine(message) {
+        return text("p", "kuma-muted", message);
+      }
+
+      /**
+       * 排行小表：headers 为 [词条键, 是否数字列]，rows 为字符串二维数组。
+       *
+       * 数字列右对齐并用等宽数字，窄视口由 .kuma-scroll 横向滚动而不是压扁列宽。
+       */
+      function dataTable(headers, rows) {
+        var box = document.createElement("div");
+        box.className = "kuma-scroll";
+        var table = document.createElement("table");
+        table.className = "kuma-table";
+        var thead = document.createElement("thead");
+        var headRow = document.createElement("tr");
+        headers.forEach(function (head) {
+          headRow.appendChild(text("th", head[1] ? "kuma-num" : "", t(head[0])));
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+        var tbody = document.createElement("tbody");
+        rows.forEach(function (row) {
+          var tr = document.createElement("tr");
+          row.forEach(function (cell, index) {
+            tr.appendChild(text("td", headers[index][1] ? "kuma-num" : "", cell));
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        box.appendChild(table);
+        return box;
+      }
+
       function price(p) {
         if (!p) { return t("chart.missingPrice"); }
         return "¥" + p.input + " / ¥" + p.output;
@@ -161,7 +219,8 @@ export function renderFragment(): string {
        * 统计表列：表头词条键 + 取值函数。
        *
        * 每个 token 类目拆成两列（tokens 与对应费用），与既有的「数量 + 费用」扫读习惯
-       * 一致；列序即需求给定的顺序，占比两列由 renderStats 追加（要先有全表合计）。
+       * 一致；末尾追加占比两列与费用占比 / 单请求成本 / 缓存命中率三列（都要先有全表
+       * 合计，见 renderStats），超出首屏的行由 foldStats 折叠成一行汇总。
        */
       var COLUMNS = [
         ["stats.provider", function (r) { return r.provider; }],
@@ -175,8 +234,49 @@ export function renderFragment(): string {
         ["stats.costCacheRead", function (r) { return money(r.costCacheRead); }],
         ["stats.cacheWrite", function (r) { return count(r.tokensCacheWrite); }],
         ["stats.costCacheWrite", function (r) { return money(r.costCacheWrite); }],
-        ["stats.toolCalls", function (r) { return count(r.toolCalls); }]
+        ["stats.toolCalls", function (r) { return count(r.toolCalls); }],
+        ["stats.costPerRequest", function (r) {
+          if (r.requestCount > 0) { return money(r.costTotal / r.requestCount); }
+          return t("common.unknown");
+        }],
+        ["stats.cacheHitRate", function (r) {
+          return percent(cacheRate(r.tokensCacheRead, r.tokensInput));
+        }]
       ];
+
+      /** 首屏最多展示的统计行；其余组合折叠成一行汇总。 */
+      var STATS_TOP = 8;
+
+      /**
+       * 折叠行：溢出组合的数值相加，占比与单请求成本按汇总值重算。
+       *
+       * 汇总行的第一列写明「其余 N 个组合」，与真实组合区分，避免误读成某个组合。
+       */
+      function foldStats(rows) {
+        var visible = rows.slice(0, STATS_TOP);
+        var rest = rows.slice(STATS_TOP);
+        if (rest.length === 0) { return visible; }
+        var sum = { provider: t("stats.otherPrefix") + rest.length + t("stats.otherSuffix"), model: "" };
+        [
+          "requestCount",
+          "tokensInput",
+          "tokensOutput",
+          "tokensCacheRead",
+          "tokensCacheWrite",
+          "costInput",
+          "costOutput",
+          "costCacheRead",
+          "costCacheWrite",
+          "costTotal",
+          "toolCalls",
+          "totalTokens"
+        ].forEach(function (field) {
+          sum[field] = 0;
+          rest.forEach(function (r) { sum[field] += r[field] || 0; });
+        });
+        visible.push(sum);
+        return visible;
+      }
 
       function renderStats(rows, currentPeriod) {
         var host = el("kuma-stats");
@@ -217,7 +317,7 @@ export function renderFragment(): string {
           emptyRow.appendChild(cell);
           tbody.appendChild(emptyRow);
         }
-        rows.forEach(function (r) {
+        foldStats(rows).forEach(function (r) {
           var tr = document.createElement("tr");
           COLUMNS.forEach(function (col) {
             tr.appendChild(text("td", "", col[1](r)));

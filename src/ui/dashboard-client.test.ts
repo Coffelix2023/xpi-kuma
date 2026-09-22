@@ -287,6 +287,10 @@ function shell(): FakeDocument {
   doc.add("div", "kuma-vendors");
   doc.add("div", "kuma-notice");
   doc.add("div", "kuma-stats");
+  doc.add("div", "kuma-insights");
+  doc.add("div", "kuma-rank-model");
+  doc.add("div", "kuma-rank-project");
+  doc.add("div", "kuma-rank-efficiency");
   doc.add("div", "kuma-chart");
   doc.add("button", "kuma-refresh-all");
   for (const id of [
@@ -640,6 +644,8 @@ describe("使用量总览与统计表", () => {
       "缓存写",
       "缓存写费用",
       "工具调用次数",
+      "单请求成本",
+      "缓存命中率",
       "tokens 占比",
       "费用占比",
     ]);
@@ -660,6 +666,8 @@ describe("使用量总览与统计表", () => {
       "20",
       "¥0.20",
       "7",
+      "¥0.00",
+      "9.1%",
       "35.5%",
       "25.0%",
     ]);
@@ -724,6 +732,339 @@ describe("使用量总览与统计表", () => {
       .find((link) => link.getAttribute("data-kuma-nav") === "/empty");
     // 站内链接同样带上本次凭据 fragment
     expect(guide?.getAttribute("href")).toBe("/empty#token-abc");
+  });
+});
+
+describe("总览排行、效率与建议", () => {
+  /** 只读区块：断言脚本没有对任何写接口发请求。 */
+  function onlyReads(h: Harness): boolean {
+    return h.fetchMock.mock.calls.every(
+      ([, init]) =>
+        (
+          init as
+            | {
+                method?: string;
+              }
+            | undefined
+        )?.method === "GET",
+    );
+  }
+
+  it("概览第五项是缓存命中率，未知时显示未知而不是 0%", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          cache: {
+            cacheReadTokens: 0,
+            hitRate: null,
+            inputTokens: 0,
+          },
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    const text = h.doc.getElementById("kuma-overview")?.textContent ?? "";
+    expect(text).toContain("缓存命中率");
+    expect(text).toContain("未知");
+    expect(text).not.toContain("0.0%");
+  });
+
+  it("有缓存命中率时按百分比显示", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          cache: {
+            cacheReadTokens: 648,
+            hitRate: 0.648,
+            inputTokens: 352,
+          },
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    expect(h.doc.getElementById("kuma-overview")?.textContent).toContain("64.8%");
+  });
+
+  it("排行摘要：provider/model 与项目费用，超出首屏的组合折叠成一行", async () => {
+    const h = harness();
+    const stats = Array.from(
+      {
+        length: 6,
+      },
+      (_, index) => ({
+        costCacheRead: 0,
+        costCacheWrite: 0,
+        costInput: 0,
+        costOutput: 0,
+        costPerRequest: 0.1,
+        costShare: 0.1,
+        costTotal: 6 - index,
+        model: `m${index}`,
+        period: "24h",
+        provider: `p${index}`,
+        requestCount: 12,
+        tokensCacheRead: 0,
+        tokensCacheWrite: 0,
+        tokensInput: 0,
+        tokensOutput: 0,
+        toolCalls: 0,
+        totalTokens: 0,
+      }),
+    );
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          attribution: [
+            {
+              cacheHitRate: 0.5,
+              costPerRequest: 0.5,
+              costShare: 0.6,
+              costTotal: 6,
+              key: "/work/app",
+              requestCount: 12,
+              tokens: 10,
+            },
+            {
+              cacheHitRate: null,
+              costPerRequest: 0.4,
+              costShare: 0.4,
+              costTotal: 4,
+              key: "",
+              requestCount: 10,
+              tokens: 8,
+            },
+          ],
+          stats,
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    const models = h.doc.getElementById("kuma-rank-model")?.textContent ?? "";
+    expect(models).toContain("provider/model 费用");
+    expect(models).toContain("p0 · m0");
+    // 6 行只展示前 5 行，第 6 行折叠成汇总行
+    expect(models).not.toContain("p5 · m5");
+    expect(models).toContain("其余 1 个组合已汇总");
+
+    const projects = h.doc.getElementById("kuma-rank-project")?.textContent ?? "";
+    expect(projects).toContain("/work/app");
+    expect(projects).toContain("未知");
+    expect(projects).toContain("60.0%");
+    expect(onlyReads(h)).toBe(true);
+  });
+
+  it("建议卡片给出依据、样本数、时间范围与置信度，且没有写操作入口", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          insights: [
+            {
+              confidence: "medium",
+              dimension: "cost",
+              evidence: "单请求成本 ¥0.126 vs ¥0.187",
+              period: "24h",
+              sampleSize: 318,
+              statement: "openai · gpt-4 的单请求成本最低",
+              target: "openai · gpt-4",
+            },
+          ],
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    const host = h.doc.getElementById("kuma-insights");
+    const text = host?.textContent ?? "";
+    expect(text).toContain("成本：openai · gpt-4 的单请求成本最低");
+    expect(text).toContain("¥0.126 vs ¥0.187");
+    expect(text).toContain("318");
+    expect(text).toContain("24小时");
+    expect(text).toContain("中");
+    // 建议只读：卡片里没有按钮，全程也只发 GET
+    const buttons = (host?.descendants() ?? []).filter(
+      (node) => node.tagName === "BUTTON",
+    );
+    expect(buttons).toHaveLength(0);
+    expect(onlyReads(h)).toBe(true);
+  });
+
+  it("洞察不可用时显示不可用，基础统计照常渲染", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          efficiency: [],
+          insights: null,
+          stats: [
+            {
+              costCacheRead: 0,
+              costCacheWrite: 0,
+              costInput: 1,
+              costOutput: 0,
+              costPerRequest: 1,
+              costShare: 1,
+              costTotal: 1,
+              model: "m1",
+              period: "24h",
+              provider: "p1",
+              requestCount: 1,
+              tokensCacheRead: 0,
+              tokensCacheWrite: 0,
+              tokensInput: 10,
+              tokensOutput: 5,
+              toolCalls: 0,
+              totalTokens: 15,
+            },
+          ],
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    expect(h.doc.getElementById("kuma-insights")?.textContent).toContain(
+      "洞察暂不可用",
+    );
+    expect(h.doc.getElementById("kuma-rank-efficiency")?.textContent).toContain(
+      "洞察暂不可用",
+    );
+    // 基础统计不受影响
+    expect(h.doc.getElementById("kuma-stats")?.textContent).toContain("p1");
+    // 概览照常渲染（数值来自接口的 overview，不因洞察不可用而清空）
+    expect(h.doc.getElementById("kuma-overview")?.textContent).toContain("缓存命中率");
+    expect(h.doc.getElementById("kuma-stats")?.textContent).toContain("¥1.00");
+  });
+
+  it("效率排行区分暂无真实数据与样本不足", async () => {
+    const empty = harness();
+    empty.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          efficiency: [],
+          insights: [],
+        }),
+      ),
+    );
+    empty.start();
+    await flush();
+    expect(empty.doc.getElementById("kuma-rank-efficiency")?.textContent).toContain(
+      "暂无真实效率数据",
+    );
+    expect(empty.doc.getElementById("kuma-insights")?.textContent).toContain(
+      "本期暂无可给出的建议",
+    );
+
+    const thin = harness();
+    thin.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          insights: [],
+          efficiency: [
+            {
+              model: "gpt-4",
+              p50TotalMs: 1200,
+              p50TtftMs: 120,
+              p95TotalMs: 2400,
+              p95TtftMs: 240,
+              provider: "openai",
+              sampleSize: 5,
+              successRate: 0.8,
+              sufficient: false,
+            },
+          ],
+        }),
+      ),
+    );
+    thin.start();
+    await flush();
+    const text = thin.doc.getElementById("kuma-rank-efficiency")?.textContent ?? "";
+    expect(text).toContain("openai · gpt-4");
+    expect(text).toContain("样本不足");
+    expect(text).toContain("1,200 ms");
+    expect(text).toContain("80.0%");
+  });
+
+  it("切换时间范围后排行与效率按新范围重查", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          efficiency: [],
+          insights: [],
+        }),
+      ),
+    );
+    h.start();
+    await flush();
+
+    const week = h.doc
+      .querySelectorAll("[data-range]")
+      .find((btn) => btn.getAttribute("data-range") === "7d");
+    week?.click();
+    await flush();
+
+    expect(h.fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/dashboard?period=7d");
+    expect(onlyReads(h)).toBe(true);
+  });
+});
+
+describe("空数据引导", () => {
+  it("无记录时概览给出引导链接，各区块显示空态而不是零值行", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(
+      respond(
+        dashboard({
+          attribution: [],
+          efficiency: [],
+          insights: [],
+          stats: [],
+          cache: {
+            cacheReadTokens: 0,
+            hitRate: null,
+            inputTokens: 0,
+          },
+        }),
+      ),
+    );
+
+    h.start();
+    await flush();
+
+    const notice = h.doc.getElementById("kuma-overview-notice");
+    expect(notice?.hidden).toBe(false);
+    expect(notice?.textContent).toContain("本期还没有使用量记录");
+    const guide = (notice?.descendants() ?? []).find(
+      (node) => node.getAttribute("data-kuma-nav") === "/empty",
+    );
+    expect(guide).toBeDefined();
+
+    for (const id of [
+      "kuma-rank-model",
+      "kuma-rank-project",
+    ]) {
+      expect(h.doc.getElementById(id)?.textContent, id).toContain("暂无数据");
+    }
+    expect(h.doc.getElementById("kuma-rank-efficiency")?.textContent).toContain(
+      "暂无真实效率数据",
+    );
+    expect(h.doc.getElementById("kuma-insights")?.textContent).toContain(
+      "本期暂无可给出的建议",
+    );
   });
 });
 

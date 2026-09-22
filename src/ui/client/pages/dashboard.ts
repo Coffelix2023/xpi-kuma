@@ -26,7 +26,14 @@ export function dashboardPageFragment(): string {
         if (data.period) { period = data.period; }
         markRangeButtons(period);
         var overview = data.overview || {};
-        renderOverview(overview, period);
+        // 洞察与效率同源：insights 为 null 表示服务端那一段计算失败（不可用），
+        // 与「暂无数据」的空数组是两种状态
+        var insights = data.insights === undefined ? null : data.insights;
+        renderOverview(overview, data.cache, period);
+        renderInsights(insights);
+        renderModelRank(data.stats || []);
+        renderProjectRank(data.attribution || []);
+        renderEfficiencyRank(data.efficiency || [], insights);
         renderVendors(vendors);
         renderNotice(vendors);
         renderStats(data.stats || [], period);

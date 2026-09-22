@@ -146,12 +146,14 @@ session; the same command reuses the running service instead of starting a secon
   can reach it. Access is protected by a 256-bit credential that is persisted for reuse.
 - **The credential lives in the URL fragment** (`http://127.0.0.1:<port>/#<token>`). Fragments are
   never sent in HTTP requests, written to access logs, or leaked through the `Referer` header of
-  third-party resources. The page clears it from the address bar as soon as it loads.
+  third-party resources. The page clears it from the address bar as soon as it loads and keeps a copy
+  in this tab's `sessionStorage`, so reloading the page keeps working (the copy is gone once the tab closes).
 - **The credential is persisted** in `~/.pi/agent/data/xpi-kuma/dashboard.json` with `0600` permissions,
   so bookmarks and a pinned page keep working after a restart. Delete that file to rotate it.
 - **Browser did not open?** The service stays up and Pi shows a notification with the same URL, ready to copy.
 - **Auto refresh.** A visible page polls every 5 seconds; a hidden tab pauses polling and refreshes
   immediately when you come back. Requests never overlap, and a failed refresh keeps the last rendered data.
+  Reloading the tab (`F5`) is safe too: the tab keeps its own copy of the credential.
 - **Zero external resources.** The panel loads no CDN scripts or stylesheets: the trend chart is inline
   SVG, and every color, size and radius comes from the theme tokens in this repository. It works fully offline.
 - **Closed the page by mistake?** The service stays up for the whole Pi process, so run `/xpi-kuma` again to reopen the same dashboard with the same credential. No second service is started.

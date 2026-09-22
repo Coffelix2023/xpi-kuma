@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { bootstrapFragment, preferenceBootstrapScript } from "./bootstrap.ts";
 
 /** 最简根元素：首帧脚本只碰 documentElement 的 data-theme / data-family。 */
@@ -59,6 +59,11 @@ function runBootstrapFragment(
   );
   return factory(windowObj, documentObj);
 }
+
+/** sessionStorage 是流程里唯一的全局桩，逐个测试后清掉，避免跨用例串联。 */
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("preferenceBootstrapScript", () => {
   it("按已保存偏好设置属性", () => {
@@ -200,6 +205,57 @@ describe("bootstrapFragment", () => {
       "return token;",
     );
     expect(token).toBe("");
+  });
+
+  it("读到 fragment 凭据后按标签页缓存到 sessionStorage", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    });
+    runBootstrapFragment(
+      {
+        history: {
+          replaceState: vi.fn(),
+        },
+        location: {
+          hash: "#secret-token",
+          pathname: "/",
+        },
+      },
+      {
+        getElementById: () => null,
+      },
+    );
+    expect(store.get("kuma.token")).toBe("secret-token");
+  });
+
+  it("地址栏没有 fragment 时回退到 sessionStorage 的缓存", () => {
+    vi.stubGlobal("sessionStorage", {
+      setItem: vi.fn(),
+      getItem: () => "cached-token",
+    });
+    const replaceState = vi.fn();
+    const token = runBootstrapFragment(
+      {
+        history: {
+          replaceState,
+        },
+        location: {
+          hash: "",
+          pathname: "/",
+        },
+      },
+      {
+        getElementById: () => null,
+      },
+      "return token;",
+    );
+    // 刷新（fragment 已抹掉）后凭据仍在，且地址栏照旧被清理
+    expect(token).toBe("cached-token");
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/");
   });
 
   it("setStatus 更新状态文案", () => {

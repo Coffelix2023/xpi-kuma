@@ -11,6 +11,7 @@ import {
   FONT_MAX_LEVEL,
   FONT_MIN_LEVEL,
   THEME_KEY,
+  TOKEN_KEY,
 } from "./constants.ts";
 import { LANGUAGE_KEY } from "./i18n.ts";
 
@@ -63,10 +64,21 @@ export function bootstrapFragment(): string {
 
       function el(id) { return document.getElementById(id); }
 
-      /** 读取凭据并立刻抹掉地址栏 fragment：不留在历史记录，也不进 Referer。 */
+      /**
+       * 读取凭据：优先地址栏 fragment，其次本标签页的 sessionStorage。
+       *
+       * fragment 读完立刻抹掉（不留在历史记录，也不进 Referer），代价是刷新后地址栏
+       * 已无凭据 —— 因此把它按标签页缓存在 sessionStorage 里兜底：刷新、站内前进后退
+       * 都还在，标签页关掉即失效。存储不可用（隐私模式）时按无凭据处理，不抛错。
+       */
       function readToken() {
         var hash = window.location.hash || "";
         var value = hash.charAt(0) === "#" ? hash.slice(1) : hash;
+        if (value) {
+          try { sessionStorage.setItem("${TOKEN_KEY}", value); } catch (error) { /* 本次加载仍可用 */ }
+        } else {
+          try { value = sessionStorage.getItem("${TOKEN_KEY}") || ""; } catch (error) { value = ""; }
+        }
         window.history.replaceState(null, "", window.location.pathname);
         return value;
       }

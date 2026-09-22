@@ -18,6 +18,14 @@ export const FAMILY_KEY = "kuma.family";
 export const THEME_KEY = "kuma.theme";
 
 /**
+ * 访问凭据的标签页缓存键（sessionStorage）。
+ *
+ * 凭据读完立即从地址栏 fragment 抹掉，刷新后地址栏已无凭据；按标签页缓存一份兜底，
+ * 标签页关闭即失效，且不写进 localStorage（不跨标签页长期留存）。
+ */
+export const TOKEN_KEY = "kuma.token";
+
+/**
  * 面板字号档位偏好。
  *
  * 档位与 `dashboard-css.ts` 的 `data-font` 规则一一对应：每档只改 `--kuma-font-scale`，

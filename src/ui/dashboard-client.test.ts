@@ -451,6 +451,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  // sessionStorage 是流程里唯一的全局桩，逐个测试后清掉，避免跨用例串联
+  vi.unstubAllGlobals();
 });
 
 describe("凭据引导", () => {
@@ -483,6 +485,30 @@ describe("凭据引导", () => {
 
     expect(h.fetchMock).not.toHaveBeenCalled();
     expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("缺少访问凭据");
+  });
+
+  it("刷新后地址栏已无 fragment，仍用 tab 缓存取数据渲染", async () => {
+    // 模拟刷新：URL 里没有 fragment，只剩上一轮加载写下的 sessionStorage 缓存
+    const store = new Map([
+      [
+        "kuma.token",
+        "token-abc",
+      ],
+    ]);
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    });
+    const h = harness("");
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+
+    h.start();
+    await flush();
+
+    expect(h.fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer token-abc");
+    expect(h.doc.getElementById("kuma-updated")?.textContent).toContain("更新于");
   });
 });
 

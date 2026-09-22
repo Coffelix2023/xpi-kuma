@@ -7,10 +7,12 @@ import type {
   AggregatedStats,
   AttributionDimension,
   AttributionRow,
+  EfficiencyRow,
   ProbeResult,
   StatsPeriod,
   UsageRecord,
 } from "../types.ts";
+import { MIN_EFFICIENCY_SAMPLES } from "../types.ts";
 
 /** 数据库文件默认位置：`~/.pi/agent/data/xpi-kuma/usage.db` */
 export function defaultDatabasePath(): string {
@@ -40,6 +42,61 @@ function defaultBucketMs(period: StatsPeriod): number {
   return PERIOD_BUCKET_MS[period];
 }
 
+/**
+ * 缓存命中率 = cacheRead / (input + cacheRead)。
+ *
+ * 分母为 0 时返回 null：没有输入类 token 就无从计算命中率，用 0 顶替会把
+ * 「未知」显示成「0% 命中」。
+ */
+export function computeCacheHitRate(
+  inputTokens: number,
+  cacheReadTokens: number,
+): number | null {
+  const denominator = inputTokens + cacheReadTokens;
+  return denominator > 0 ? cacheReadTokens / denominator : null;
+}
+
+/** 结果状态里算「成功完成」的集合：错误与中止不算；NULL（未知）也不进分子。 */
+const SUCCESS_RESULT_STATUSES: ReadonlySet<string> = new Set([
+  "length",
+  "stop",
+  "toolUse",
+]);
+
+/** 最近秩百分位：排序后取第 ceil(p/100 · n) 个值（1 起算）；空数组返回 null。 */
+function percentile(sortedAscending: number[], p: number): number | null {
+  if (sortedAscending.length === 0) {
+    return null;
+  }
+  const rank = Math.ceil((p / 100) * sortedAscending.length);
+  const index = Math.max(0, Math.min(sortedAscending.length - 1, rank - 1));
+  return sortedAscending[index] ?? null;
+}
+
+/** 效率聚合的中间分组：先按 provider × model 累加，最后一次性换算成 EfficiencyRow。 */
+interface EfficiencyGroup {
+  model: string;
+  provider: string;
+  sampleSize: number;
+  statusKnownCount: number;
+  successCount: number;
+  total: number[];
+  ttft: number[];
+}
+
+/** 效率排行顺序：达标组在前，再按 p50 总耗时升序（未知垫底），最后按 key 稳定。 */
+function compareEfficiency(a: EfficiencyRow, b: EfficiencyRow): number {
+  if (a.sufficient !== b.sufficient) {
+    return a.sufficient ? -1 : 1;
+  }
+  const left = a.p50TotalMs ?? Number.POSITIVE_INFINITY;
+  const right = b.p50TotalMs ?? Number.POSITIVE_INFINITY;
+  if (left !== right) {
+    return left - right;
+  }
+  return a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model);
+}
+
 /** 聚合查询返回的原始行（SQLite 列名为 snake_case）。 */
 /** 归因查询返回的原始行（SQLite 列名为 snake_case）。 */
 interface AttributionDbRow {
@@ -47,6 +104,18 @@ interface AttributionDbRow {
   cost_total: number;
   request_count: number;
   tokens: number;
+  tokens_cache_read: number;
+  tokens_input: number;
+}
+
+/** 效率聚合查询的原始行（只取时间点与结果状态）。 */
+interface EfficiencyDbRow {
+  completed_at: number | null;
+  first_token_at: number | null;
+  model: string;
+  provider: string;
+  result_status: string | null;
+  started_at: number | null;
 }
 
 interface StatsRow {
@@ -191,7 +260,11 @@ export class Database {
         cost_total REAL NOT NULL DEFAULT 0,
         source TEXT NOT NULL DEFAULT 'real_usage',
         cwd TEXT NOT NULL DEFAULT '',
-        session_id TEXT NOT NULL DEFAULT ''
+        session_id TEXT NOT NULL DEFAULT '',
+        started_at INTEGER,
+        first_token_at INTEGER,
+        completed_at INTEGER,
+        result_status TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_provider_model ON usage_records (provider, model);
@@ -260,6 +333,21 @@ export class Database {
         "ALTER TABLE usage_records ADD COLUMN tool_calls INTEGER NOT NULL DEFAULT 0",
       );
     }
+
+    // 真实调用时间点（INTEGER 毫秒）与结果状态（TEXT）：可空列，旧库补列后
+    // 既有记录保持 NULL —— 不用 0 或空串顶替「未知」（spec：存量记录新列为空）
+    if (!columns.has("completed_at")) {
+      this.db.exec("ALTER TABLE usage_records ADD COLUMN completed_at INTEGER");
+    }
+    if (!columns.has("first_token_at")) {
+      this.db.exec("ALTER TABLE usage_records ADD COLUMN first_token_at INTEGER");
+    }
+    if (!columns.has("result_status")) {
+      this.db.exec("ALTER TABLE usage_records ADD COLUMN result_status TEXT");
+    }
+    if (!columns.has("started_at")) {
+      this.db.exec("ALTER TABLE usage_records ADD COLUMN started_at INTEGER");
+    }
     // 索引必须在列存在之后建：老库上先建索引会因缺列直接报错
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_cwd_timestamp ON usage_records (cwd, timestamp);
@@ -275,8 +363,8 @@ export class Database {
           timestamp, provider, model,
           tokens_input, tokens_output, tokens_cache_read, tokens_cache_write,
           cost_input, cost_output, cost_cache_read, cost_cache_write, cost_total, source,
-          cwd, session_id, tool_calls
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          cwd, session_id, tool_calls, started_at, first_token_at, completed_at, result_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.timestamp,
@@ -295,6 +383,10 @@ export class Database {
         record.cwd,
         record.sessionId,
         record.toolCalls,
+        record.startedAt ?? null,
+        record.firstTokenAt ?? null,
+        record.completedAt ?? null,
+        record.resultStatus ?? null,
       );
     return Number(result.lastInsertRowid);
   }
@@ -404,12 +496,18 @@ export class Database {
       )
       .all(since) as StatsRow[];
 
+    // 占比的分母是同一时间范围的全部花费；分组数天然有界（provider × model），
+    // 不截断行数，保证各行占比之和为 1
+    const totalCost = rows.reduce((sum, row) => sum + row.cost_total, 0);
     return rows.map((row) => ({
       period,
+      cacheHitRate: computeCacheHitRate(row.tokens_input, row.tokens_cache_read),
       costCacheRead: row.cost_cache_read,
       costCacheWrite: row.cost_cache_write,
       costInput: row.cost_input,
       costOutput: row.cost_output,
+      costPerRequest: row.request_count > 0 ? row.cost_total / row.request_count : null,
+      costShare: totalCost > 0 ? row.cost_total / totalCost : null,
       costTotal: row.cost_total,
       model: row.model,
       provider: row.provider,
@@ -453,6 +551,8 @@ export class Database {
            END AS bucket_key,
            SUM(cost_total) AS cost_total,
            SUM(tokens_input + tokens_output + tokens_cache_read + tokens_cache_write) AS tokens,
+           SUM(tokens_input) AS tokens_input,
+           SUM(tokens_cache_read) AS tokens_cache_read,
            COUNT(*) AS request_count
          FROM usage_records
          WHERE timestamp >= ?
@@ -461,13 +561,116 @@ export class Database {
       )
       .all(dimension, now - PERIOD_MS[period]) as AttributionDbRow[];
 
+    // ponytail: 不截断行数 —— 分组数天然有界（项目 / 会话 / provider · model），
+    // 截断会打破「归因总和 = 统计总量」；若会话维度膨胀到拖慢响应，再升级为
+    // top-N + 「其他」汇总桶
+    const totalCost = rows.reduce((sum, row) => sum + row.cost_total, 0);
     return rows.map((row) => ({
+      cacheHitRate: computeCacheHitRate(row.tokens_input, row.tokens_cache_read),
+      costPerRequest: row.request_count > 0 ? row.cost_total / row.request_count : null,
+      costShare: totalCost > 0 ? row.cost_total / totalCost : null,
       costTotal: row.cost_total,
       key: row.bucket_key ?? "",
       requestCount: row.request_count,
       tokens: row.tokens,
     }));
   }
+
+  /**
+   * 按 `provider × model` 聚合真实调用效率。
+   *
+   * 合格样本 = 请求开始 / 首字 / 完成三个时间点齐全、差值非负，且结果状态成功；
+   * 失败与中止的耗时代表不了典型体验，只进成功率分母。成功率的分母是「结果状态
+   * 已知的请求数」：存量记录状态为 NULL（未知），计入分母等于把未知当失败。
+   *
+   * 未达 MIN_EFFICIENCY_SAMPLES 的分组照样返回，由界面标注「样本不足」；一条合格
+   * 样本都没有的分组不进排行（界面按「暂无真实效率数据」处理）。
+   *
+   * ponytail: 百分位在 JS 里算（SQLite 无内置 percentile），一次拉取时间范围内
+   * 的全部行；若单期行数增长到拖慢面板，再把百分位下推到 SQL 或改为抽样。
+   */
+  getEfficiency(period: StatsPeriod, now: number = Date.now()): EfficiencyRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT provider, model, started_at, first_token_at, completed_at, result_status
+         FROM usage_records
+         WHERE timestamp >= ?`,
+      )
+      .all(now - PERIOD_MS[period]) as EfficiencyDbRow[];
+
+    const groups = new Map<string, EfficiencyGroup>();
+    for (const row of rows) {
+      const key = `${row.provider}\u0000${row.model}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          model: row.model,
+          provider: row.provider,
+          sampleSize: 0,
+          statusKnownCount: 0,
+          successCount: 0,
+          total: [],
+          ttft: [],
+        };
+        groups.set(key, group);
+      }
+      const succeeded =
+        row.result_status !== null && SUCCESS_RESULT_STATUSES.has(row.result_status);
+      if (row.result_status !== null) {
+        group.statusKnownCount += 1;
+        if (succeeded) {
+          group.successCount += 1;
+        }
+      }
+      if (
+        !succeeded ||
+        row.started_at === null ||
+        row.first_token_at === null ||
+        row.completed_at === null
+      ) {
+        continue;
+      }
+      const ttft = row.first_token_at - row.started_at;
+      const total = row.completed_at - row.started_at;
+      if (ttft < 0 || total < 0) {
+        // 时钟乱序导致的负耗时不可信：不当样本，也不改成功率分子
+        continue;
+      }
+      group.sampleSize += 1;
+      group.ttft.push(ttft);
+      group.total.push(total);
+    }
+
+    const result: EfficiencyRow[] = [];
+    for (const group of groups.values()) {
+      if (group.sampleSize === 0) {
+        continue;
+      }
+      const ttft = [
+        ...group.ttft,
+      ].sort((a, b) => a - b);
+      const total = [
+        ...group.total,
+      ].sort((a, b) => a - b);
+      result.push({
+        model: group.model,
+        p50TotalMs: percentile(total, 50),
+        p50TtftMs: percentile(ttft, 50),
+        p95TotalMs: percentile(total, 95),
+        p95TtftMs: percentile(ttft, 95),
+        provider: group.provider,
+        sampleSize: group.sampleSize,
+        successRate:
+          group.statusKnownCount > 0
+            ? group.successCount / group.statusKnownCount
+            : null,
+        sufficient: group.sampleSize >= MIN_EFFICIENCY_SAMPLES,
+      });
+    }
+
+    return result.sort(compareEfficiency);
+  }
+
   /** 查询指定供应商最近 N 条探测记录，按时间倒序；可按状态过滤。 */
   getProbeHistory(vendor: string, limit: number, status?: string): ProbeHistoryRow[] {
     // 两条查询各写成字面量：带不带状态过滤的占位符个数不同，SQLite 的可选子句

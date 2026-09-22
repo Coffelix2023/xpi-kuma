@@ -8,8 +8,20 @@
 /** 使用量记录来源标记。MVP 仅采集真实调用，不写入估算值。 */
 export type UsageSource = "real_usage";
 
+/** 单次调用的结果状态，对齐 Pi 的 `StopReason` 全集；事件不可得时不写入（NULL）。 */
+export type CallResultStatus =
+  | "aborted"
+  | "deferred"
+  | "error"
+  | "length"
+  | "pending"
+  | "stop"
+  | "toolUse";
+
 /** 一次 LLM 调用的真实使用量（来自 Pi 的 `message_end` 事件）。 */
 export interface UsageRecord {
+  /** 完成时刻（毫秒，来自 message_end 到达观测）；不可得时缺省 → 列为 NULL */
+  completedAt?: number;
   costCacheRead: number;
   costCacheWrite: number;
   costInput: number;
@@ -17,11 +29,17 @@ export interface UsageRecord {
   costTotal: number;
   /** 调用所属项目路径；宿主未提供时为空串，归因查询把它归入「未知」 */
   cwd: string;
+  /** 首个响应 token 时刻（毫秒，首个 message_update 到达观测）；无流事件时缺省 */
+  firstTokenAt?: number;
   model: string;
   provider: string;
+  /** 结果状态（message_end.message.stopReason）；不可得时缺省 */
+  resultStatus?: CallResultStatus;
   /** 调用所属会话标识；宿主未提供时为空串，归因查询把它归入「未知」 */
   sessionId: string;
   source: UsageSource;
+  /** 请求开始时刻（毫秒，before_provider_request 到达观测）；不可得时缺省 */
+  startedAt?: number;
   /** 毫秒时间戳 */
   timestamp: number;
   tokensCacheRead: number;
@@ -57,10 +75,16 @@ export type StatsPeriod = "1h" | "24h" | "7d" | "30d";
 
 /** 每个 `provider × model` 组合在指定时间范围内的聚合结果。 */
 export interface AggregatedStats {
+  /** 可计算的缓存命中率 = cacheRead / (input + cacheRead)；分母为 0 时为 null（未知） */
+  cacheHitRate?: number | null;
   costCacheRead: number;
   costCacheWrite: number;
   costInput: number;
   costOutput: number;
+  /** 单请求成本 = costTotal / requestCount；请求数为 0 时为 null（3.1 聚合填充） */
+  costPerRequest?: number | null;
+  /** 费用占比 0..1，按同时间范围总花费计算；总花费为 0 时为 null（3.1 聚合填充） */
+  costShare?: number | null;
   costTotal: number;
   model: string;
   period: StatsPeriod;
@@ -85,6 +109,12 @@ export type AttributionDimension = "project" | "session" | "vendorModel";
 
 /** 归因结果的一行：某个维度取值在指定时间范围内的聚合。 */
 export interface AttributionRow {
+  /** 可计算的缓存命中率；分母为 0 时为 null（3.1 聚合填充） */
+  cacheHitRate?: number | null;
+  /** 单请求成本 = costTotal / requestCount；请求数为 0 时为 null（3.1 聚合填充） */
+  costPerRequest?: number | null;
+  /** 费用占比 0..1；总花费为 0 时为 null（3.1 聚合填充） */
+  costShare?: number | null;
   /** 花费合计 */
   costTotal: number;
   /**
@@ -96,6 +126,61 @@ export interface AttributionRow {
   requestCount: number;
   /** 四类 token 之和 */
   tokens: number;
+}
+
+/** 效率聚合的最低样本门槛：低于该值的组合不进效率排行与最佳建议（design 决策 3，第一版不配置化）。 */
+export const MIN_EFFICIENCY_SAMPLES = 10;
+
+/**
+ * 某 provider/model 的真实调用效率聚合。
+ * 时间点来自 Pi 事件链直接观测（见 src/pi-event-timing.test.ts 的 2.1 结论）；
+ * 返回的排行数组由聚合查询限长（有界），样本不足时 `sufficient` 为 false。
+ */
+export interface EfficiencyRow {
+  model: string;
+  /** 总耗时 p50（毫秒）；无合格样本时为 null，不以 0 顶替 */
+  p50TotalMs: number | null;
+  /** 首字延迟 p50（毫秒）；同上 */
+  p50TtftMs: number | null;
+  /** 总耗时 p95（毫秒）；同上 */
+  p95TotalMs: number | null;
+  /** 首字延迟 p95（毫秒）；同上 */
+  p95TtftMs: number | null;
+  provider: string;
+  /** 带完整真实时间点的样本数 */
+  sampleSize: number;
+  /** 成功样本 / 该组合请求总数；分母为 0 时为 null */
+  successRate: number | null;
+  /** 是否达到 MIN_EFFICIENCY_SAMPLES；false 时界面显示「样本不足」 */
+  sufficient: boolean;
+}
+
+/** 解释型建议（只读）：输出对象、依据、样本数、时间范围与置信度（spec usage-overview-insights）。 */
+export interface Insight {
+  confidence: InsightConfidence;
+  dimension: InsightKind;
+  /** 比较依据，例如「单请求成本 ¥0.126 vs ¥0.187」 */
+  evidence: string;
+  /** 时间范围（口径与总览/统计一致） */
+  period: StatsPeriod;
+  /** 参与比较的样本数 */
+  sampleSize: number;
+  /** 结论文案；只述成本/延迟/缓存，不作无依据的综合最佳表述 */
+  statement: string;
+  /** 建议对象，例如 provider/model 组合或项目 */
+  target: string;
+}
+
+export type InsightConfidence = "high" | "low" | "medium";
+
+export type InsightKind = "cache" | "cost" | "efficiency";
+
+/** 缓存分析摘要；分母为零时 hitRate 为 null，界面显示「未知」而非 0%。 */
+export interface CacheStats {
+  cacheReadTokens: number;
+  /** cacheRead / (input + cacheRead)；分母为 0 时为 null */
+  hitRate: number | null;
+  inputTokens: number;
 }
 
 /** 余额数值的来源；三档降级里各自对应一档。 */

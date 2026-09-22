@@ -40,6 +40,11 @@ interface Runtime {
 /** 在途的服务启动 Promise；同一时刻只允许一个，成功后清空。 */
 let dashboardStart: Promise<DashboardServer> | null = null;
 let runtime: Runtime | null = null;
+/** 在调用链上被事件直接观测、但尚未被 assistant message_end 消费的真实时间点。 */
+let pendingTiming: {
+  firstTokenAt?: number;
+  startedAt: number;
+} | null = null;
 const logger = new FileLogger(join(getAgentDir(), "data", "xpi-kuma", "xpi-kuma.log"));
 
 export default function xpiKuma(pi: ExtensionAPI): void {
@@ -47,6 +52,24 @@ export default function xpiKuma(pi: ExtensionAPI): void {
 
   pi.on("message_end", (event, ctx) => {
     handleMessageEnd(event, ctx);
+  });
+
+  pi.on("before_provider_request", () => {
+    // 请求发出前一刻的直接观测；可得性核对见 src/pi-event-timing.test.ts（2.1）
+    pendingTiming = {
+      startedAt: Date.now(),
+    };
+  });
+
+  pi.on("message_update", (event) => {
+    // 首个流事件到达即首个响应 token 的直接观测；只取第一次
+    if (
+      event.message.role === "assistant" &&
+      pendingTiming &&
+      pendingTiming.firstTokenAt === undefined
+    ) {
+      pendingTiming.firstTokenAt = Date.now();
+    }
   });
 
   pi.registerCommand("xpi-kuma", {
@@ -207,6 +230,7 @@ async function stopRuntime(ctx: ExtensionContext): Promise<void> {
   }
   runtime = null;
   dashboardStart = null;
+  pendingTiming = null;
   await quietly(() => current.dashboardServer?.close());
   await quietly(() => current.vendorMonitor.stop());
   await quietly(() => current.database.close());
@@ -276,30 +300,40 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
  * `message_end` 的 handler 因此接第二个参数 `ctx` —— `ExtensionHandler<E, R>` 的签名是
  * `(event, ctx) => ...`，`message_end` 同样能拿到上下文。
  *
- * 类型核对与探测结论见 `docs/probe-balance-and-oauth.md`。
+ * 事件时间点可得性核对见 `src/pi-event-timing.test.ts`（2.1 结论）；
+ * 探测结论见 `docs/probe-balance-and-oauth.md`。时间点只取事件链直接观测，
+ * 不用 probe、相邻记录或固定值估算。
  */
 
 function handleMessageEnd(event: MessageEndEvent, ctx: ExtensionContext): void {
   if (!runtime || event.message.role !== "assistant") {
     return;
   }
-  const { provider, model, usage } = event.message;
+  // 调用链结束：取走在途时间点并清空（无论是否写记录，链已终止）
+  const timing = pendingTiming;
+  pendingTiming = null;
+  const { provider, model, stopReason, usage } = event.message;
   if (!usage) {
     return;
   }
   const origin = resolveUsageOrigin(ctx);
+  const completedAt = Date.now();
   const record: UsageRecord = {
+    completedAt,
     costCacheRead: usage.cost?.cacheRead ?? 0,
     costCacheWrite: usage.cost?.cacheWrite ?? 0,
     costInput: usage.cost?.input ?? 0,
     costOutput: usage.cost?.output ?? 0,
     costTotal: usage.cost?.total ?? 0,
     cwd: origin.cwd,
+    firstTokenAt: timing?.firstTokenAt,
     model,
     provider,
+    resultStatus: stopReason,
     sessionId: origin.sessionId,
     source: "real_usage",
-    timestamp: Date.now(),
+    startedAt: timing?.startedAt,
+    timestamp: completedAt,
     tokensCacheRead: usage.cacheRead ?? 0,
     tokensCacheWrite: usage.cacheWrite ?? 0,
     tokensInput: usage.input ?? 0,

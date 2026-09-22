@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  BeforeProviderRequestEvent,
   ExtensionAPI,
   ExtensionContext,
   MessageEndEvent,
+  MessageUpdateEvent,
   SessionShutdownEvent,
   SessionStartEvent,
 } from "@earendil-works/pi-coding-agent";
+import Sqlite from "better-sqlite3";
 import {
   afterAll,
   afterEach,
@@ -149,6 +152,7 @@ function messageEnd(
   usage: unknown,
   ctx: ExtensionContext,
   content: unknown[] = [],
+  stopReason = "stop",
 ) {
   handlers.get("message_end")?.(
     {
@@ -158,6 +162,7 @@ function messageEnd(
         model: "gpt-4o-mini",
         provider: "openai",
         role: "assistant",
+        stopReason,
         usage,
       },
     } as unknown as MessageEndEvent,
@@ -194,6 +199,151 @@ function readToolCalls(): number {
   }
 }
 
+/** usage.db 当前的使用量总条数（跨时间范围求和）。 */
+function readUsageCount(): number {
+  const db = new Database({
+    dbPath: defaultDatabasePath(),
+  });
+  try {
+    return db.getUsageStats("30d").reduce((sum, row) => sum + row.requestCount, 0);
+  } finally {
+    db.close();
+  }
+}
+
+/** 读最新一条使用量记录的四个时间/状态列，用于 NULL 语义断言。 */
+function readLatestTiming(): {
+  completed_at: number | null;
+  first_token_at: number | null;
+  result_status: string | null;
+  started_at: number | null;
+} {
+  const db = new Sqlite(defaultDatabasePath(), {
+    readonly: true,
+  });
+  try {
+    const row = db
+      .prepare(
+        "SELECT started_at, first_token_at, completed_at, result_status FROM usage_records ORDER BY id DESC LIMIT 1",
+      )
+      .get() as
+      | {
+          completed_at: number | null;
+          first_token_at: number | null;
+          result_status: string | null;
+          started_at: number | null;
+        }
+      | undefined;
+    return (
+      row ?? {
+        completed_at: null,
+        first_token_at: null,
+        result_status: null,
+        started_at: null,
+      }
+    );
+  } finally {
+    db.close();
+  }
+}
+
+describe("真实时间点采集", () => {
+  const usage = {
+    cacheRead: 10,
+    cacheWrite: 5,
+    input: 100,
+    output: 50,
+    cost: {
+      cacheRead: 0,
+      cacheWrite: 0,
+      input: 0.001,
+      output: 0.002,
+      total: 0.003,
+    },
+  };
+
+  it("事件链完整：开始/首字/完成时间与结果状态入库", async () => {
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    handlers.get("before_provider_request")?.(
+      {
+        payload: {},
+        type: "before_provider_request",
+      } as unknown as BeforeProviderRequestEvent,
+      ctx,
+    );
+    handlers.get("message_update")?.(
+      {
+        type: "message_update",
+        assistantMessageEvent: {
+          type: "text_delta",
+        },
+        message: {
+          role: "assistant",
+        },
+      } as unknown as MessageUpdateEvent,
+      ctx,
+    );
+    messageEnd(handlers, usage, ctx);
+
+    const timing = readLatestTiming();
+    expect(timing.started_at).toEqual(expect.any(Number));
+    expect(timing.first_token_at).toEqual(expect.any(Number));
+    expect(timing.completed_at).toEqual(expect.any(Number));
+    expect(timing.result_status).toBe("stop");
+  });
+
+  it("缺失时间点：只收到 message_end 时开始/首字为 NULL，完成与状态照常", async () => {
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    messageEnd(handlers, usage, ctx);
+
+    const timing = readLatestTiming();
+    expect(timing.started_at).toBeNull();
+    expect(timing.first_token_at).toBeNull();
+    expect(timing.completed_at).toEqual(expect.any(Number));
+    expect(timing.result_status).toBe("stop");
+  });
+
+  it("非 assistant 消息不写记录，也不消费在途时间点", async () => {
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+    const before = readUsageCount();
+
+    handlers.get("before_provider_request")?.(
+      {
+        payload: {},
+        type: "before_provider_request",
+      } as unknown as BeforeProviderRequestEvent,
+      ctx,
+    );
+    handlers.get("message_end")?.(
+      {
+        type: "message_end",
+        message: {
+          content: "hi",
+          role: "user",
+        },
+      } as unknown as MessageEndEvent,
+      ctx,
+    );
+    expect(readUsageCount()).toBe(before);
+
+    messageEnd(handlers, usage, ctx);
+    expect(readUsageCount()).toBe(before + 1);
+    // 在途时间点未被非 assistant 消息消费
+    expect(readLatestTiming().started_at).toEqual(expect.any(Number));
+  });
+});
+
 /** 每次新建连接，避免连接池掩盖端口是否真的释放。 */
 function rawStatus(url: string, headers: Record<string, string> = {}): Promise<number> {
   const parsed = new URL(url);
@@ -219,6 +369,18 @@ function rawStatus(url: string, headers: Record<string, string> = {}): Promise<n
 
 function lastUrl(): string {
   return String(openBrowser.mock.calls.at(-1)?.[0] ?? "");
+}
+
+/** 自选当前空闲端口：本机默认 5180 常被常驻面板占用，回退随机端口会让同端口复用断言失真。 */
+function freePort(): Promise<number> {
+  const probe = createServer();
+  return new Promise<number>((resolve) => {
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      const port = typeof address === "object" && address !== null ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+  });
 }
 
 beforeAll(async () => {
@@ -253,7 +415,7 @@ afterAll(() => {
 });
 
 describe("扩展注册", () => {
-  it("注册两个事件监听器与 /xpi-kuma 命令", () => {
+  it("注册四个事件监听器与 /xpi-kuma 命令", () => {
     const { api, commands, handlers } = fakePi();
     extensionFactory(api);
 
@@ -262,7 +424,9 @@ describe("扩展注册", () => {
         ...handlers.keys(),
       ].sort(),
     ).toEqual([
+      "before_provider_request",
       "message_end",
+      "message_update",
       "session_start",
     ]);
     expect(commands.has("xpi-kuma")).toBe(true);
@@ -587,6 +751,11 @@ describe("常驻与 on/off 开关", () => {
     const { api, commands, handlers } = fakePi();
     extensionFactory(api);
     const { ctx } = fakeCtx(setupCwd());
+    // 本机默认端口可能被常驻面板占用而回退随机端口：写入自选空闲端口，让断言聚焦复用语义
+    writeFileSync(
+      resolveConfigPath(),
+      `dashboard:\n  port: ${await freePort()}\nvendors: []\n`,
+    );
     await sessionStart(handlers, ctx);
     await runCommand(commands, ctx);
     const first = lastUrl();

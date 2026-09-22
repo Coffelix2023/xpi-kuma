@@ -62,6 +62,33 @@ function usageColumns(dbPath: string): string[] {
   return rows.map((row) => row.name);
 }
 
+/** 读回单条 usage 行的真实时间点与结果状态，用于 NULL 语义断言。 */
+function timingOf(
+  dbPath: string,
+  id: number,
+): {
+  completed_at: number | null;
+  first_token_at: number | null;
+  result_status: string | null;
+  started_at: number | null;
+} {
+  const probe = new Sqlite(dbPath, {
+    readonly: true,
+  });
+  const row = probe
+    .prepare(
+      "SELECT started_at, first_token_at, completed_at, result_status FROM usage_records WHERE id = ?",
+    )
+    .get(id) as unknown;
+  probe.close();
+  return row as {
+    completed_at: number | null;
+    first_token_at: number | null;
+    result_status: string | null;
+    started_at: number | null;
+  };
+}
+
 /** 对任意行集按取值函数求和，用于断言各维度的总量一致。 */
 function sumOf<T>(rows: T[], pick: (row: T) => number): number {
   return rows.reduce((sum, row) => sum + pick(row), 0);
@@ -240,6 +267,67 @@ describe("getUsageStats", () => {
       "anthropic",
       "openai",
     ]);
+  });
+
+  it("费用占比之和为 1，单请求成本与缓存命中率按同一口径计算", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    db.insertUsageRecord(
+      usageRecord({
+        costTotal: 0.1,
+        timestamp: now - 1000,
+        tokensCacheRead: 25,
+        tokensInput: 75,
+      }),
+    );
+    db.insertUsageRecord(
+      usageRecord({
+        costTotal: 0.3,
+        model: "claude",
+        provider: "anthropic",
+        timestamp: now - 2000,
+        tokensCacheRead: 50,
+        tokensInput: 50,
+      }),
+    );
+
+    const stats = db.getUsageStats("24h", now);
+    expect(sumOf(stats, (row) => row.costShare ?? 0)).toBeCloseTo(1, 10);
+
+    const openai = stats.find((row) => row.provider === "openai");
+    expect(openai?.costShare).toBeCloseTo(0.25, 10);
+    expect(openai?.costPerRequest).toBeCloseTo(0.1, 10);
+    expect(openai?.cacheHitRate).toBeCloseTo(0.25, 10);
+
+    const anthropic = stats.find((row) => row.provider === "anthropic");
+    expect(anthropic?.cacheHitRate).toBeCloseTo(0.5, 10);
+  });
+
+  it("分母为零时费用占比与缓存命中率为 null，不用 0 顶替未知", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    for (const timestamp of [
+      now - 1000,
+      now - 2000,
+    ]) {
+      db.insertUsageRecord(
+        usageRecord({
+          costInput: 0,
+          costOutput: 0,
+          costTotal: 0,
+          timestamp,
+          tokensCacheRead: 0,
+          tokensInput: 0,
+        }),
+      );
+    }
+
+    const stats = db.getUsageStats("24h", now);
+    expect(stats).toHaveLength(1);
+    expect(stats[0]?.costShare).toBeNull();
+    expect(stats[0]?.cacheHitRate).toBeNull();
+    // 请求数非零，单请求成本仍是可计算的 0（真实值，不是未知）
+    expect(stats[0]?.costPerRequest).toBe(0);
   });
 
   it("无数据时返回空数组", () => {
@@ -429,6 +517,332 @@ describe("schema 迁移", () => {
   });
 });
 
+describe("真实时间点与结果状态", () => {
+  it("新库建出四列：缺省写入存 NULL，提供时原样保存，统计不受影响", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-timing-"));
+    cleanups.push(() =>
+      rmSync(dir, {
+        force: true,
+        recursive: true,
+      }),
+    );
+    const dbPath = join(dir, "usage.db");
+    const db = new Database({
+      dbPath,
+    });
+    cleanups.push(() => db.close());
+
+    for (const column of [
+      "started_at",
+      "first_token_at",
+      "completed_at",
+      "result_status",
+    ]) {
+      expect(usageColumns(dbPath)).toContain(column);
+    }
+
+    const plain = db.insertUsageRecord(usageRecord());
+    expect(timingOf(dbPath, plain)).toEqual({
+      completed_at: null,
+      first_token_at: null,
+      result_status: null,
+      started_at: null,
+    });
+
+    const timed = db.insertUsageRecord(
+      usageRecord({
+        completedAt: 1_727_000_003,
+        firstTokenAt: 1_727_000_001,
+        resultStatus: "stop",
+        startedAt: 1_727_000_000,
+      }),
+    );
+    expect(timingOf(dbPath, timed)).toEqual({
+      completed_at: 1_727_000_003,
+      first_token_at: 1_727_000_001,
+      result_status: "stop",
+      started_at: 1_727_000_000,
+    });
+
+    // 时间点与结果状态不影响费用与 token 统计口径
+    expect(totalRequests(db)).toBe(2);
+    expect(db.getUsageStats("30d")[0]?.costTotal).toBeCloseTo(0.006, 6);
+  });
+
+  it("旧库迁移补齐四列：存量记录为 NULL，重复打开幂等", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-migrate-timing-"));
+    cleanups.push(() =>
+      rmSync(dir, {
+        force: true,
+        recursive: true,
+      }),
+    );
+    const dbPath = join(dir, "usage.db");
+
+    // 旧版本：没有真实时间点四列，也没有 cwd / session_id / tool_calls
+    const legacy = new Sqlite(dbPath);
+    legacy.exec(`
+      CREATE TABLE usage_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        tokens_input INTEGER NOT NULL DEFAULT 0,
+        tokens_output INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_write INTEGER NOT NULL DEFAULT 0,
+        cost_input REAL NOT NULL DEFAULT 0,
+        cost_output REAL NOT NULL DEFAULT 0,
+        cost_cache_read REAL NOT NULL DEFAULT 0,
+        cost_cache_write REAL NOT NULL DEFAULT 0,
+        cost_total REAL NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'real_usage'
+      );
+    `);
+    legacy
+      .prepare(
+        `INSERT INTO usage_records (timestamp, provider, model, cost_total)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(Date.now(), "openai", "gpt-4", 0.5);
+    legacy.close();
+
+    const db = new Database({
+      dbPath,
+    });
+    cleanups.push(() => db.close());
+    for (const column of [
+      "started_at",
+      "first_token_at",
+      "completed_at",
+      "result_status",
+    ]) {
+      expect(usageColumns(dbPath)).toContain(column);
+    }
+
+    // 存量记录的新列为 NULL，且费用统计照常
+    const legacyId = 1;
+    expect(timingOf(dbPath, legacyId)).toEqual({
+      completed_at: null,
+      first_token_at: null,
+      result_status: null,
+      started_at: null,
+    });
+    expect(totalRequests(db)).toBe(1);
+    expect(db.getUsageStats("30d")[0]?.costTotal).toBeCloseTo(0.5, 6);
+
+    // 重复迁移幂等：再开一次不报错，数据与列不变
+    db.close();
+    const again = new Database({
+      dbPath,
+    });
+    cleanups.push(() => again.close());
+    expect(totalRequests(again)).toBe(1);
+    expect(timingOf(dbPath, legacyId)).toEqual({
+      completed_at: null,
+      first_token_at: null,
+      result_status: null,
+      started_at: null,
+    });
+  });
+});
+
+describe("getEfficiency", () => {
+  const SUCCESS_CYCLE = [
+    "stop",
+    "toolUse",
+    "length",
+  ] as const;
+
+  it("样本达到门槛时给出 p50/p95、样本数与成功率", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    const started = now - 10_000;
+    for (let index = 1; index <= 10; index += 1) {
+      db.insertUsageRecord(
+        usageRecord({
+          completedAt: started + index * 100,
+          firstTokenAt: started + index * 10,
+          resultStatus: SUCCESS_CYCLE[index % SUCCESS_CYCLE.length],
+          startedAt: started,
+          timestamp: now - 1000,
+        }),
+      );
+    }
+
+    const rows = db.getEfficiency("24h", now);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      model: "gpt-4",
+      p50TotalMs: 500,
+      p50TtftMs: 50,
+      p95TotalMs: 1000,
+      p95TtftMs: 100,
+      provider: "openai",
+      sampleSize: 10,
+      successRate: 1,
+      sufficient: true,
+    });
+  });
+
+  it("离群值只抬高 p95，不改变 p50", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    const started = now - 1_000_000;
+    for (let index = 0; index < 9; index += 1) {
+      db.insertUsageRecord(
+        usageRecord({
+          completedAt: started + 1000,
+          firstTokenAt: started + 100,
+          resultStatus: "stop",
+          startedAt: started,
+          timestamp: now - 1000,
+        }),
+      );
+    }
+    db.insertUsageRecord(
+      usageRecord({
+        completedAt: started + 100_000,
+        firstTokenAt: started + 1000,
+        resultStatus: "stop",
+        startedAt: started,
+        timestamp: now - 1000,
+      }),
+    );
+
+    const rows = db.getEfficiency("24h", now);
+    expect(rows[0]?.p50TotalMs).toBe(1000);
+    expect(rows[0]?.p95TotalMs).toBe(100_000);
+    expect(rows[0]?.p50TtftMs).toBe(100);
+  });
+
+  it("缺少时间点不进样本，结果状态未知不进成功率分母", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    for (let index = 0; index < 5; index += 1) {
+      db.insertUsageRecord(
+        usageRecord({
+          completedAt: now - 100,
+          firstTokenAt: now - 200,
+          resultStatus: "stop",
+          startedAt: now - 300,
+          timestamp: now - 500,
+        }),
+      );
+    }
+    for (let index = 0; index < 7; index += 1) {
+      db.insertUsageRecord(
+        usageRecord({
+          timestamp: now - 500,
+        }),
+      );
+    }
+    // 有时间点但没有结果状态：样本为 0，整组不进排行
+    db.insertUsageRecord(
+      usageRecord({
+        completedAt: now - 100,
+        firstTokenAt: now - 200,
+        model: "no-status",
+        startedAt: now - 300,
+        timestamp: now - 500,
+      }),
+    );
+
+    const rows = db.getEfficiency("24h", now);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.model).toBe("gpt-4");
+    expect(rows[0]?.sampleSize).toBe(5);
+    expect(rows[0]?.sufficient).toBe(false);
+    // 7 条无状态的存量记录不计入分母，成功率只看 5 条已知状态
+    expect(rows[0]?.successRate).toBe(1);
+  });
+
+  it("失败请求降低成功率，其耗时也不进延迟样本", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    const started = now - 10_000;
+    for (let index = 0; index < 8; index += 1) {
+      db.insertUsageRecord(
+        usageRecord({
+          completedAt: started + 500,
+          firstTokenAt: started + 50,
+          resultStatus: "stop",
+          startedAt: started,
+          timestamp: now - 1000,
+        }),
+      );
+    }
+    for (const resultStatus of [
+      "aborted",
+      "error",
+    ] as const) {
+      db.insertUsageRecord(
+        usageRecord({
+          completedAt: started + 90_000,
+          firstTokenAt: started + 80_000,
+          resultStatus,
+          startedAt: started,
+          timestamp: now - 1000,
+        }),
+      );
+    }
+
+    const rows = db.getEfficiency("24h", now);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.sampleSize).toBe(8);
+    expect(rows[0]?.successRate).toBeCloseTo(0.8, 10);
+    expect(rows[0]?.p95TotalMs).toBe(500);
+  });
+
+  it("排行把达标组排在前面，再按 p50 总耗时升序", () => {
+    const db = openTempDatabase();
+    const now = Date.now();
+    const started = now - 100_000;
+    const insertSamples = (provider: string, count: number, totalMs: number): void => {
+      for (let index = 0; index < count; index += 1) {
+        db.insertUsageRecord(
+          usageRecord({
+            completedAt: started + totalMs,
+            firstTokenAt: started + 10,
+            provider,
+            resultStatus: "stop",
+            startedAt: started,
+            timestamp: now - 1000,
+          }),
+        );
+      }
+    };
+    insertSamples("slow", 10, 2000);
+    insertSamples("fast", 9, 100);
+
+    const rows = db.getEfficiency("24h", now);
+    expect(rows.map((row) => row.provider)).toEqual([
+      "slow",
+      "fast",
+    ]);
+    expect(rows[1]?.sufficient).toBe(false);
+  });
+
+  it("没有真实时间点或超出时间范围时不产生排行", () => {
+    const db = openTempDatabase();
+    db.insertUsageRecord(usageRecord());
+    expect(db.getEfficiency("24h")).toEqual([]);
+
+    const old = Date.now() - 2 * DAY;
+    db.insertUsageRecord(
+      usageRecord({
+        completedAt: old + 100,
+        firstTokenAt: old + 10,
+        resultStatus: "stop",
+        startedAt: old,
+        timestamp: old,
+      }),
+    );
+    expect(db.getEfficiency("24h")).toEqual([]);
+    expect(db.getEfficiency("7d")).toHaveLength(1);
+  });
+});
+
 describe("getAttribution", () => {
   it("三个维度的花费、token、请求数总和彼此相等且等于统计总量", () => {
     const db = openTempDatabase();
@@ -493,6 +907,11 @@ describe("getAttribution", () => {
         sumOf(rows, (row) => row.requestCount),
         dimension,
       ).toBe(expectedRequests);
+      // 同一维度内各行占比之和为 1（总花费非零）
+      expect(
+        sumOf(rows, (row) => row.costShare ?? 0),
+        dimension,
+      ).toBeCloseTo(1, 6);
     }
   });
 
@@ -550,6 +969,30 @@ describe("getAttribution", () => {
     expect(project).toHaveLength(1);
     expect(project[0]?.key).toBe("");
     expect(project[0]?.requestCount).toBe(2);
+    // 未知分组的占比与单请求成本照常计算：缺的是归因信息，不是度量
+    expect(project[0]?.costShare).toBeCloseTo(1, 10);
+    expect(project[0]?.costPerRequest).toBeCloseTo(0.003, 10);
+    expect(project[0]?.cacheHitRate).toBe(0);
+  });
+  it("总花费为零时占比为 null，缓存命中率分母为零时同样为 null", () => {
+    const db = openTempDatabase();
+    db.insertUsageRecord(
+      usageRecord({
+        costInput: 0,
+        costOutput: 0,
+        costTotal: 0,
+        cwd: "/zero",
+        timestamp: Date.now(),
+        tokensCacheRead: 0,
+        tokensInput: 0,
+      }),
+    );
+
+    const rows = db.getAttribution("24h", "project");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.costShare).toBeNull();
+    expect(rows[0]?.cacheHitRate).toBeNull();
+    expect(rows[0]?.costPerRequest).toBe(0);
   });
 
   it("供应商·模型维度的键是 provider · model", () => {

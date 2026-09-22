@@ -1,8 +1,11 @@
+import { buildInsights, type InsightInput } from "../insights.ts";
 import type { Database, TrendSeries } from "../storage/database.ts";
 import type {
   AggregatedStats,
   AttributionDimension,
   AttributionRow,
+  EfficiencyRow,
+  Insight,
   StatsPeriod,
   UsageRecord,
 } from "../types.ts";
@@ -26,6 +29,16 @@ export class UsageCollector {
   /** 按时间范围查询聚合统计。 */
   getStats(period: StatsPeriod): AggregatedStats[] {
     return this.database.getUsageStats(period);
+  }
+
+  /** 真实调用效率排行（provider × model，含样本门槛标记）。 */
+  getEfficiency(period: StatsPeriod): EfficiencyRow[] {
+    return this.database.getEfficiency(period);
+  }
+
+  /** 基于已聚合的统计与效率生成只读洞察；失败由调用方降级，不影响基础统计。 */
+  getInsights(input: InsightInput): Insight[] {
+    return buildInsights(input);
   }
 
   /** 趋势数据，供面板折线图使用。 */

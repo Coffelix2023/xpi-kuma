@@ -5,13 +5,11 @@ import type {
   ExtensionContext,
   MessageEndEvent,
   SessionStartEvent,
-  TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { AccountService } from "./accounts/service.ts";
 import { UsageCollector } from "./collectors/usage-collector.ts";
 import { ConfigError, loadConfig, resolveConfigPath } from "./config.ts";
-import { formatStatus } from "./lib/format.ts";
 import { FileLogger } from "./lib/log.ts";
 import { openInBrowser } from "./lib/open-browser.ts";
 import { VendorMonitor } from "./monitors/vendor-monitor.ts";
@@ -20,12 +18,11 @@ import type { KumaConfig, UsageRecord } from "./types.ts";
 import { type DashboardServer, startDashboardServer } from "./ui/dashboard.ts";
 
 const VERSION = "0.6.0";
-const STATUS_KEY = "xpi-kuma";
 
 /**
  * 进程级运行时：`on` 建立、`off` 销毁；会话切换不重建。
  *
- * 面板与后台监测都常驻，所以数据库、累加器、探测定时器都挂在这里；只有 `cwd`
+ * 面板与后台监测都常驻，所以数据库与探测定时器都挂在这里；只有 `cwd`
  * 是会话级字段，随当前会话更新（体检页展示「当前项目」）。
  */
 interface Runtime {
@@ -51,12 +48,6 @@ export default function xpiKuma(pi: ExtensionAPI): void {
   pi.on("message_end", (event, ctx) => {
     handleMessageEnd(event, ctx);
   });
-
-  pi.on("turn_end", (event, ctx) => {
-    handleTurnEnd(event, ctx);
-  });
-
-  pi.on("session_shutdown", (_event, ctx) => clearStatus(ctx));
 
   pi.registerCommand("xpi-kuma", {
     description: "打开监控面板（on / off 开关，缺省等同 on）",
@@ -123,7 +114,7 @@ export default function xpiKuma(pi: ExtensionAPI): void {
 /**
  * 初始化（或复用）进程级运行时，并刷新会话级状态。
  *
- * 服务跨会话常驻：已有运行时只更新 `cwd`、清空会话累加器并刷新 footer；
+ * 服务跨会话常驻：已有运行时只更新 `cwd`；
  * `session_shutdown` 不再拆掉服务，只有 `xpi-kuma off` 才关。
  */
 async function startSession(
@@ -133,9 +124,7 @@ async function startSession(
   try {
     notifyLegacyConfig(ctx);
     const current = runtime ?? initRuntime(ctx.cwd);
-    // 会话级：体检页展示当前项目，累加器按会话清零
-    current.cwd = ctx.cwd;
-    current.usageCollector.resetSession();
+    // 会话级：体检页展示当前项目
 
     // 保留期清理在会话启动时执行一次
     const removed = current.database.cleanOldRecords(
@@ -147,10 +136,6 @@ async function startSession(
       );
     }
 
-    ctx.ui.setStatus(
-      STATUS_KEY,
-      formatStatus(current.usageCollector.getCurrentSessionStats()),
-    );
     logger.info(
       `会话启动（${event.reason}）：${current.config.vendors.length} 个供应商，${current.vendorMonitor.activeTimerCount} 个探测定时器`,
     );
@@ -225,17 +210,7 @@ async function stopRuntime(ctx: ExtensionContext): Promise<void> {
   await quietly(() => current.dashboardServer?.close());
   await quietly(() => current.vendorMonitor.stop());
   await quietly(() => current.database.close());
-  clearStatus(ctx);
   ctx.ui.notify("xpi-kuma 面板已关闭（/xpi-kuma on 可重新启动）", "info");
-}
-
-/** 清除 footer 状态；宿主接口异常只记日志，不影响其它清理步骤。 */
-function clearStatus(ctx: ExtensionContext): void {
-  try {
-    ctx.ui.setStatus(STATUS_KEY, undefined);
-  } catch (error) {
-    logger.error("清除 footer 状态失败", error);
-  }
 }
 
 /** 清理步骤彼此独立：单步失败只记日志，不阻断后续步骤。 */
@@ -363,22 +338,6 @@ function readContextValue(read: () => unknown): string {
     return typeof value === "string" ? value : "";
   } catch {
     return "";
-  }
-}
-
-/** 每个 turn 结束时刷新 footer；统计值来自内存累加器，不查数据库。 */
-function handleTurnEnd(_event: TurnEndEvent, ctx: ExtensionContext): void {
-  if (!runtime) {
-    return;
-  }
-  try {
-    ctx.ui.setStatus(
-      STATUS_KEY,
-      formatStatus(runtime.usageCollector.getCurrentSessionStats()),
-    );
-  } catch (error) {
-    logger.error("更新 footer 状态失败", error);
-    ctx.ui.setStatus(STATUS_KEY, "💰 - | 📊 -");
   }
 }
 

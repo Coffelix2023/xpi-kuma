@@ -215,9 +215,3 @@ export interface VendorStatus {
   totalTime: number | null;
   ttft: number | null;
 }
-
-/** footer 状态栏展示的当前会话累计值。 */
-export interface SessionTotals {
-  totalCost: number;
-  totalTokens: number;
-}

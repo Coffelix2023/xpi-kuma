@@ -87,42 +87,4 @@ describe("UsageCollector", () => {
       totalTokens: 480,
     });
   });
-
-  it("getCurrentSessionStats() 初始值为 0", () => {
-    const { collector } = setup();
-    expect(collector.getCurrentSessionStats()).toEqual({
-      totalCost: 0,
-      totalTokens: 0,
-    });
-  });
-
-  it("getCurrentSessionStats() 随 record() 累加四类 token 与费用", () => {
-    const { collector } = setup();
-    collector.record(
-      usageRecord({
-        costTotal: 0.005,
-      }),
-    );
-    collector.record(
-      usageRecord({
-        costTotal: 0.01,
-      }),
-    );
-
-    const totals = collector.getCurrentSessionStats();
-    expect(totals.totalTokens).toBe(2 * (100 + 50 + 10 + 5));
-    expect(totals.totalCost).toBeCloseTo(0.015, 10);
-  });
-
-  it("resetSession() 清零累加器但保留数据库记录", () => {
-    const { database, collector } = setup();
-    collector.record(usageRecord());
-    collector.resetSession();
-
-    expect(collector.getCurrentSessionStats()).toEqual({
-      totalCost: 0,
-      totalTokens: 0,
-    });
-    expect(database.getUsageStats("1h")[0].requestCount).toBe(1);
-  });
 });

@@ -9,7 +9,6 @@ import type {
   MessageEndEvent,
   SessionShutdownEvent,
   SessionStartEvent,
-  TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
 import {
   afterAll,
@@ -74,18 +73,15 @@ function fakePi() {
 }
 
 function fakeCtx(cwd: string) {
-  const setStatus = vi.fn();
   const notify = vi.fn();
   return {
     ctx: {
       cwd,
       ui: {
         notify,
-        setStatus,
       },
     } as unknown as ExtensionContext,
     notify,
-    setStatus,
   };
 }
 
@@ -172,7 +168,7 @@ function messageEnd(
 /**
  * 直接读扩展写出的那个 usage.db，按维度取出分组键。
  *
- * 归因数据只落库、不经过 footer，因此断言必须查库；测试之间的记录会累积，
+ * 归因数据只落库，因此断言必须查库；测试之间的记录会累积，
  * 所以一律用 `toContain` 而不是全等。
  */
 function readAttributionKeys(dimension: AttributionDimension): string[] {
@@ -196,16 +192,6 @@ function readToolCalls(): number {
   } finally {
     db.close();
   }
-}
-
-/** 事件内容对被测逻辑无关，只需要触发 footer 刷新。 */
-function turnEndEvent(): TurnEndEvent {
-  return {
-    message: {},
-    toolResults: [],
-    turnIndex: 1,
-    type: "turn_end",
-  } as unknown as TurnEndEvent;
 }
 
 /** 每次新建连接，避免连接池掩盖端口是否真的释放。 */
@@ -267,7 +253,7 @@ afterAll(() => {
 });
 
 describe("扩展注册", () => {
-  it("注册四个事件监听器与 /xpi-kuma 命令", () => {
+  it("注册两个事件监听器与 /xpi-kuma 命令", () => {
     const { api, commands, handlers } = fakePi();
     extensionFactory(api);
 
@@ -277,9 +263,7 @@ describe("扩展注册", () => {
       ].sort(),
     ).toEqual([
       "message_end",
-      "session_shutdown",
       "session_start",
-      "turn_end",
     ]);
     expect(commands.has("xpi-kuma")).toBe(true);
     expect(commands.get("xpi-kuma")?.description).toBe(
@@ -305,17 +289,6 @@ describe("扩展注册", () => {
 });
 
 describe("会话生命周期", () => {
-  it("session_start 后 footer 显示零值统计", async () => {
-    const { api, handlers } = fakePi();
-    extensionFactory(api);
-    const { ctx, setStatus } = fakeCtx(setupCwd());
-
-    await sessionStart(handlers, ctx);
-
-    expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 0");
-    await sessionShutdown(handlers, ctx);
-  });
-
   it("message_end 按 content 里的 toolCall 条数记录工具调用次数", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
@@ -359,36 +332,6 @@ describe("会话生命周期", () => {
     await sessionShutdown(handlers, ctx);
   });
 
-  it("message_end 累加会话统计并写入数据库", async () => {
-    const { api, handlers } = fakePi();
-    extensionFactory(api);
-    const { ctx } = fakeCtx(setupCwd());
-    await sessionStart(handlers, ctx);
-
-    messageEnd(
-      handlers,
-      {
-        cacheRead: 10,
-        cacheWrite: 5,
-        input: 100,
-        output: 50,
-        cost: {
-          cacheRead: 0,
-          cacheWrite: 0,
-          input: 0.001,
-          output: 0.002,
-          total: 0.003,
-        },
-      },
-      ctx,
-    );
-
-    const { ctx: turnCtx, setStatus } = fakeCtx(setupCwd());
-    handlers.get("turn_end")?.(turnEndEvent(), turnCtx);
-    expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 165");
-    await sessionShutdown(handlers, ctx);
-  });
-
   it("忽略非 assistant 消息与缺少 usage 的 assistant 消息", async () => {
     const { api, handlers } = fakePi();
     extensionFactory(api);
@@ -407,9 +350,6 @@ describe("会话生命周期", () => {
     );
     messageEnd(handlers, undefined, ctx);
 
-    const { ctx: turnCtx, setStatus } = fakeCtx(setupCwd());
-    handlers.get("turn_end")?.(turnEndEvent(), turnCtx);
-    expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 0");
     await sessionShutdown(handlers, ctx);
   });
 
@@ -477,18 +417,6 @@ describe("会话生命周期", () => {
     // 记录仍然写入，只是两个维度都落进「未知」分组
     expect(readAttributionKeys("project")).toContain("");
     expect(readAttributionKeys("session")).toContain("");
-  });
-
-  it("session_shutdown 清除 footer 状态", async () => {
-    const { api, handlers } = fakePi();
-    extensionFactory(api);
-    const { ctx, setStatus } = fakeCtx(setupCwd());
-    await sessionStart(handlers, ctx);
-    setStatus.mockClear();
-
-    await sessionShutdown(handlers, ctx, "quit");
-
-    expect(setStatus).toHaveBeenCalledWith("xpi-kuma", undefined);
   });
 
   it("配置无法创建时提示用户而不抛错", async () => {
@@ -681,55 +609,5 @@ describe("常驻与 on/off 开关", () => {
 
     expect(openBrowser).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("未知参数"), "warning");
-  });
-});
-
-describe("统计累加语义", () => {
-  it("同一 turn 内多条 assistant 消息都会累加", async () => {
-    const { api, handlers } = fakePi();
-    extensionFactory(api);
-    const { ctx } = fakeCtx(setupCwd());
-    await sessionStart(handlers, ctx);
-
-    const usage = {
-      cacheRead: 0,
-      cacheWrite: 0,
-      input: 10,
-      output: 5,
-      cost: {
-        total: 0.01,
-      },
-    };
-    messageEnd(handlers, usage, ctx);
-    messageEnd(handlers, usage, ctx);
-
-    const { ctx: turnCtx, setStatus } = fakeCtx(setupCwd());
-    handlers.get("turn_end")?.(turnEndEvent(), turnCtx);
-    expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.02 | 📊 30");
-    await sessionShutdown(handlers, ctx);
-  });
-
-  it("重新 session_start 重置累加器", async () => {
-    const { api, handlers } = fakePi();
-    extensionFactory(api);
-    const { ctx } = fakeCtx(setupCwd());
-    await sessionStart(handlers, ctx);
-    messageEnd(
-      handlers,
-      {
-        input: 1000,
-        output: 0,
-        cost: {
-          total: 1,
-        },
-      },
-      ctx,
-    );
-
-    const { ctx: newSessionCtx, setStatus } = fakeCtx(setupCwd());
-    await sessionStart(handlers, newSessionCtx, "new");
-
-    expect(setStatus).toHaveBeenCalledWith("xpi-kuma", "💰 ¥0.00 | 📊 0");
-    await sessionShutdown(handlers, newSessionCtx);
   });
 });

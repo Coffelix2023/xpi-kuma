@@ -3,45 +3,24 @@ import type {
   AggregatedStats,
   AttributionDimension,
   AttributionRow,
-  SessionTotals,
   StatsPeriod,
   UsageRecord,
 } from "../types.ts";
 
 /**
  * 使用量收集器：把 Pi 的 `message_end` 事件转换成数据库写入，
- * 并维护当前会话的内存累加器（供 footer 状态栏使用）。
- *
- * 累加器生命周期与会话一致：新建实例即清零，不读取历史会话数据。
+ * 并对外提供面板需要的统计查询。
  */
 export class UsageCollector {
   private readonly database: Database;
-  private sessionTotals: SessionTotals = {
-    totalCost: 0,
-    totalTokens: 0,
-  };
 
   constructor(database: Database) {
     this.database = database;
   }
 
-  /**
-   * 记录一次真实调用：写入数据库并累加到当前会话统计。
-   *
-   * 累加放在这里而不是 `turn_end`，避免一个 turn 内多条 assistant 消息被重复计数。
-   */
+  /** 记录一次真实调用：写入数据库，返回记录 id。 */
   record(data: UsageRecord): number {
-    const id = this.database.insertUsageRecord(data);
-    this.sessionTotals = {
-      totalCost: this.sessionTotals.totalCost + data.costTotal,
-      totalTokens:
-        this.sessionTotals.totalTokens +
-        data.tokensInput +
-        data.tokensOutput +
-        data.tokensCacheRead +
-        data.tokensCacheWrite,
-    };
-    return id;
+    return this.database.insertUsageRecord(data);
   }
 
   /** 按时间范围查询聚合统计。 */
@@ -60,20 +39,5 @@ export class UsageCollector {
     dimension: AttributionDimension,
   ): AttributionRow[] {
     return this.database.getAttribution(period, dimension);
-  }
-
-  /** 当前会话的内存累加值；初始为 0。 */
-  getCurrentSessionStats(): SessionTotals {
-    return {
-      ...this.sessionTotals,
-    };
-  }
-
-  /** 重置会话累加器（新建/切换会话时调用）。 */
-  resetSession(): void {
-    this.sessionTotals = {
-      totalCost: 0,
-      totalTokens: 0,
-    };
   }
 }

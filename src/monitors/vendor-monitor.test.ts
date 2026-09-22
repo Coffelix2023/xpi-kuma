@@ -19,7 +19,7 @@ afterEach(async () => {
  * `mode` 控制行为：正常流式、非 200、或挂起到超时。
  */
 async function startProbeServer(
-  mode: "ok" | "error" | "hang" | "reasoning",
+  mode: "ok" | "error" | "hang" | "reasoning" | "empty",
   ttftDelayMs = 5,
 ): Promise<{
   endpoint: string;
@@ -52,9 +52,13 @@ async function startProbeServer(
                 ? {
                     reasoning_content: "think",
                   }
-                : {
-                    content: "h",
-                  },
+                : mode === "empty"
+                  ? {
+                      content: "",
+                    }
+                  : {
+                      content: "h",
+                    },
           },
         ],
       };
@@ -259,6 +263,26 @@ describe("probeVendor", () => {
 
     expect(result.status).toBe("up");
     expect(result.ttft).toBeGreaterThanOrEqual(15);
+  });
+
+  it("max_tokens=1 空内容流判定为 up、TTFT 为未知（Mimo 回归）", async () => {
+    const { endpoint } = await startProbeServer("empty", 20);
+    const { monitor } = setup([
+      vendor({
+        endpoint,
+      }),
+    ]);
+
+    const result = await monitor.probeVendor(
+      vendor({
+        endpoint,
+      }),
+    );
+
+    expect(result.status).toBe("up");
+    expect(result.error).toBeNull();
+    expect(result.ttft).toBeNull();
+    expect(result.totalTime).toBeGreaterThanOrEqual(0);
   });
 
   it("HTTP 错误标记为 down 且指标为 null", async () => {

@@ -185,6 +185,7 @@ export class VendorMonitor {
     let ttft: number | null = null;
     let tokensInput = 0;
     let tokensOutput = 0;
+    let sawChunk = false;
 
     for await (const line of readLines(response.body)) {
       if (!line.startsWith("data:")) {
@@ -200,6 +201,7 @@ export class VendorMonitor {
       } catch {
         continue;
       }
+      sawChunk = true;
       // 部分 OpenAI-compatible 供应商把首字放在 reasoning_content（如 DeepSeek），
       // 只认 content 会把正常响应误判成空流。
       const { content, reasoningContent } = readDelta(chunk);
@@ -220,7 +222,8 @@ export class VendorMonitor {
       }
     }
 
-    if (ttft === null) {
+    // 一个有效数据块都没解析到才说明流是坏的；只有空 content 时照常返回，TTFT 记未知。
+    if (!sawChunk) {
       throw new Error("流结束但未收到任何内容块");
     }
     return {

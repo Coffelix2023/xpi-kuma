@@ -17,7 +17,7 @@ import { Database } from "./storage/database.ts";
 import type { KumaConfig, UsageRecord } from "./types.ts";
 import { type DashboardServer, startDashboardServer } from "./ui/dashboard.ts";
 
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
 
 /**
  * 进程级运行时：`on` 建立、`off` 销毁；会话切换不重建。

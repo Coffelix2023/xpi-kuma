@@ -69,7 +69,7 @@ describe("generateDashboardHTML 结构", () => {
     expect(html.match(/nonce="abc123"/g)?.length).toBe(3);
   });
 
-  it("提供四个时间范围按钮，默认标记 24h", () => {
+  it("提供四个时间范围按钮，默认标记 24h，且上移到导航标签之前", () => {
     const html = generateDashboardHTML();
     for (const period of [
       "1h",
@@ -82,6 +82,14 @@ describe("generateDashboardHTML 结构", () => {
     // 按钮上还挂着 data-i18n，属性顺序不再固定，改用正则匹配
     expect(html).toMatch(/data-range="24h"[^>]*aria-pressed="true"/);
     expect(html).toMatch(/data-range="7d"[^>]*aria-pressed="false"/);
+    // 页头级位置：范围按钮必须先于导航标签出现（tablist 无 id，用首个 tab 按钮 id 定位）
+    const tablistAt = html.indexOf('id="kuma-tab-overview"');
+    const rangeAt = html.indexOf('data-range="24h"');
+    expect(tablistAt).toBeGreaterThan(-1);
+    expect(rangeAt).toBeGreaterThan(-1);
+    expect(rangeAt).toBeLessThan(tablistAt);
+    // 不再出现在概览面板内部
+    expect(html).not.toMatch(/data-tab-panel="overview"[\s\S]*?data-range="24h"/);
   });
 
   it("页面零外部引用：不加载任何 CDN 脚本", () => {

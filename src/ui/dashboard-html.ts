@@ -67,7 +67,7 @@ export interface DashboardOptions {
  *
  * 四个标签页从左到右是使用量总览、使用量统计、趋势与供应商总览：概览置顶（首屏一眼
  * 看出本期花了多少），其后是按 `provider × model` 的使用量统计与趋势图，供应商总览殿后。
- * 时间范围按钮随概览面板一起，切换后概览、统计与趋势一起刷新。
+ * 时间范围按钮位于页头 actions 行（页面级全局筛选），切换后概览、统计、趋势与供应商面板一起沿用该 period。
  *
  * 面板一次性全部渲染，切换只改可见性（见 `client/nav.ts` 的 `wireTabs`），刷新不重建 DOM。
  *
@@ -96,6 +96,9 @@ function dashboardBody(): string {
         <option value="atlas"${i18nAttr("page.dashboard.familyAtlas")}>${zh("page.dashboard.familyAtlas")}</option>
       </select>
 ${fontControlsHtml()}
+      <div class="kuma-actions" role="group"${i18nAria("aria.timeRange")}">
+${ranges}
+      </div>
       <button type="button" id="kuma-lang"></button>
     </div>
   </header>
@@ -106,9 +109,6 @@ ${tabs}
     </div>
 
     <section role="tabpanel" id="kuma-panel-overview" aria-labelledby="kuma-tab-overview" data-tab-panel="overview">
-      <div class="kuma-actions" role="group"${i18nAria("aria.timeRange")}>
-${ranges}
-      </div>
       <div id="kuma-overview"></div>
       <div id="kuma-overview-notice" hidden></div>
     </section>

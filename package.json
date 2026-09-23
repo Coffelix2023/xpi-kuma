@@ -31,9 +31,10 @@
     "typescript": "^6.0.3",
     "vitest": "^3.0.0"
   },
-  "pi": {
-    "extensions": ["./src/index.ts"]
+  "bin": {
+    "xpi-kuma": "./src/service/cli.ts"
   },
+  "pi": {},
   "scripts": {
     "lint": "biome check .",
     "test": "vitest run --passWithNoTests",

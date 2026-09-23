@@ -67,7 +67,33 @@ pi remove git:github.com/<owner>/xpi-kuma
 | 命令 | 说明 |
 | --- | --- |
 | `/xpi-kuma` / `/xpi-kuma on` | 启动（或重启）本机监控服务并用浏览器打开面板，误关页面后再次执行即可重开（供应商状态、使用量统计、费用/token 趋势） |
-| `/xpi-kuma off` | 关闭服务并释放端口；探测与用量采集随之中止，直到再次 `on` |
+| `/xpi-kuma off` | 关闭 Pi 内网页服务与探测；实时用量采集不受影响，继续记录 |
+| `xpi-kuma on [--port <port>]` | 在任意终端启动独立后台服务；终端退出后服务继续运行（见下节） |
+| `xpi-kuma off` / `xpi-kuma status` | 停止独立服务 / 查看当前网页服务归属 |
+
+### 独立服务（终端守护进程）
+
+实时用量采集跟随 Pi 进程，但网页与供应商探测可以不跟随。在本仓库内执行一次 `pnpm link --global`
+即可获得全局 `xpi-kuma` 命令（需要 Node.js ≥ 23.6，直接运行 TypeScript 源码，无构建步骤）：
+
+```bash
+pnpm link --global                   # 在本仓库根执行；暴露 xpi-kuma 命令
+```
+
+- `xpi-kuma on [--port <1..65535>]` —— 以 detached 后台进程启动服务（先补录、再网页+探测），命令返回实际
+  本机 URL。非法端口在启动前报错、不写状态；端口被占用时明确失败，绝不静默换端口。
+- `xpi-kuma off` —— 先校验进程身份再停止（状态过期或 PID 被复用时绝不向无关进程发信号），然后释放端口。
+  幂等：重复执行也成功。
+- `xpi-kuma status` —— 显示当前所有者（独立服务或 Pi 进程）、端口与 URL。
+
+所有权规则：独立服务运行期间，Pi 内 `/xpi-kuma` 直接复用其 URL，不启动第二个监听器或第二组探测；
+Pi 已持有服务时，终端 `on` 明确拒绝而不是抢夺（先在 Pi 内执行 `/xpi-kuma off`）。任何情况下
+`message_end` 的实时用量采集都不中断。
+
+用量补录在每次 Pi 会话启动与独立服务 `on` 时运行：在保留期窗口内重放 Pi 会话日志中的 assistant usage，
+幂等且绝不双计。无法核实的条目（指纹冲突、日志不可读、旧记录缺字段）一律跳过，并在
+`~/.pi/agent/data/xpi-kuma/xpi-kuma.log` 中记录未核实数量与日志定位——绝不猜着计入统计。
+
 
 ### 配置
 
@@ -151,6 +177,9 @@ retention:
   主题 token，离线也完整可用。
 - **跟随 Pi 进程，而不是会话。** 退出、reload、新建、恢复或 fork 会话都不会关闭服务；只有
   `/xpi-kuma off`（或退出 Pi）才会关。`/xpi-kuma on` 会在同一端口、用同一凭据重新启动。
+- **所有者只有一个。** 网页服务要么归属当前 Pi 进程，要么归属独立守护进程（`xpi-kuma on`，见上文）——
+  绝不同时存在。daemon 持有时，Pi 内 `/xpi-kuma` 直接重开同一 URL 而不启动第二个监听器，且 Pi 退出后
+  daemon 继续服务。
 
 ### 面板页面
 
@@ -218,14 +247,18 @@ provider/model 组合要有至少 10 条带完整时间点的成功记录才进�
 
 ### 边界
 
-`/xpi-kuma` 是本扩展注册的唯一命令。它会:
+
+`/xpi-kuma` 是本扩展注册的唯一命令，`xpi-kuma` 是唯一终端命令。它们:
 
 - **读取** 全局 `~/.pi/agent/data/xpi-kuma/config.yaml` 与 `usage_records` / `probe_records` 两张表。
-- **启动**一个归属当前 Pi 进程的回环 HTTP 服务（`on` / `off` 控制，缺省等同 `on`），然后用系统默认浏览器打开。
+- **服务** 一个回环 HTTP 服务，归属要么是当前 Pi 进程（`/xpi-kuma on` / `off`）、要么是独立守护进程
+  （`xpi-kuma on` / `off`）——两者绝不同时存在。
+- **记录** 实时用量（`message_end`）：只要 Pi 进程存活就持续入账，与网页服务归属无关。
 - **写入**仅发生在你明确触发时:探测会为每个供应商发一次最小请求,消耗几个 token;同步余额会查询供应商接口;
-  手动填写在备份之后改写全局配置。
+  手动填写在备份之后改写全局配置;补录只插入可证实缺失的行,其余报告为未核实。
 - **拒绝**监听非回环网卡、把供应商 API Key 交给浏览器、在余额字段之外改写配置文件,
-  或在 `/xpi-kuma off` 之后继续提供服务。
+  以及在已有所有者时启动第二个网页服务。
+
 
 ## 开发
 
@@ -261,7 +294,7 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # 日常回路:在 Pi 内用 /r
 ├── mise.toml / package.json / biome.jsonc / tsconfig.json / pnpm-workspace.yaml
 ├── AGENTS.md / CONTEXT.md / DESIGN.md / THEMES.md
 ├── README.md / README.zh-CN.md / LICENSE
-├── docs/                      # Git 工作流、仓库约束与参考资料
+├── docs/                      # Git 工作流、仓库约束、ADR 与参考资料
 └── src/
     ├── index.ts               # 扩展入口(register 函数)
     ├── config.ts              # 全局 config.yaml 读取与 ${ENV_VAR} 展开
@@ -270,6 +303,8 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # 日常回路:在 Pi 内用 /r
     ├── collectors/            # 用量落库与聚合查询
     ├── monitors/              # 定时供应商探测
     ├── storage/               # SQLite 持久化
+    ├── sync/                  # 会话日志扫描 + 幂等用量补录
+    ├── service/               # 独立守护进程：CLI 入口、所有权状态、服务运行时
     ├── lib/                   # 日志、浏览器唤起
     └── ui/                    # 面板 HTTP 服务、页面渲染与主题
 ```

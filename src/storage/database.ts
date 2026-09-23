@@ -277,7 +277,10 @@ export class Database {
         started_at INTEGER,
         first_token_at INTEGER,
         completed_at INTEGER,
-        result_status TEXT
+        result_status TEXT,
+        source_entry_id TEXT,
+        message_at INTEGER,
+        reconcile_fingerprint TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_provider_model ON usage_records (provider, model);
@@ -361,10 +364,30 @@ export class Database {
     if (!columns.has("started_at")) {
       this.db.exec("ALTER TABLE usage_records ADD COLUMN started_at INTEGER");
     }
+
+    // 日志补录身份（ADR 0001 角色 2）：来源条目 ID + 消息时间 + 对账指纹。
+    // 三列全部可空：旧库补列后存量记录保持 NULL，实时行在 1.3 起写入。
+    if (!columns.has("source_entry_id")) {
+      this.db.exec("ALTER TABLE usage_records ADD COLUMN source_entry_id TEXT");
+    }
+    if (!columns.has("message_at")) {
+      this.db.exec("ALTER TABLE usage_records ADD COLUMN message_at INTEGER");
+    }
+    if (!columns.has("reconcile_fingerprint")) {
+      this.db.exec("ALTER TABLE usage_records ADD COLUMN reconcile_fingerprint TEXT");
+    }
     // 索引必须在列存在之后建：老库上先建索引会因缺列直接报错
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_cwd_timestamp ON usage_records (cwd, timestamp);
       CREATE INDEX IF NOT EXISTS idx_session_timestamp ON usage_records (session_id, timestamp);
+      /* 幂等键：同一条会话日志条目最多入账一次。必须用 partial index ——
+       * 实时行没有 source_entry_id，普通唯一索引在多行 NULL 时虽然放行，
+       * 但语义上会让人误以为约束覆盖了实时行。 */
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_source_entry
+        ON usage_records (session_id, source_entry_id)
+        WHERE source_entry_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_usage_fingerprint
+        ON usage_records (reconcile_fingerprint);
     `);
   }
 
@@ -376,8 +399,10 @@ export class Database {
           timestamp, provider, model,
           tokens_input, tokens_output, tokens_cache_read, tokens_cache_write,
           cost_input, cost_output, cost_cache_read, cost_cache_write, cost_total, source,
-          cwd, session_id, tool_calls, started_at, first_token_at, completed_at, result_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          cwd, session_id, tool_calls, started_at, first_token_at, completed_at, result_status,
+          source_entry_id, message_at, reconcile_fingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`,
       )
       .run(
         record.timestamp,
@@ -400,6 +425,9 @@ export class Database {
         record.firstTokenAt ?? null,
         record.completedAt ?? null,
         record.resultStatus ?? null,
+        record.sourceEntryId ?? null,
+        record.messageAt ?? null,
+        record.reconcileFingerprint ?? null,
       );
     return Number(result.lastInsertRowid);
   }
@@ -784,6 +812,111 @@ export class Database {
       .prepare("DELETE FROM usage_records WHERE timestamp < ?")
       .run(cutoff);
     return result.changes;
+  }
+
+  // —— 日志补录对账（ADR 0001 角色 2；SQL 集中在本文件，对账策略在 sync/backfill.ts）——
+
+  /** 在一个事务里执行 `fn`；抛错整体回滚。 */
+  runInTransaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
+  /** 按补录幂等键查行；没有返回 undefined。 */
+  findUsageBySourceEntry(
+    sessionId: string,
+    entryId: string,
+  ):
+    | {
+        id: number;
+      }
+    | undefined {
+    return this.db
+      .prepare(
+        "SELECT id FROM usage_records WHERE session_id = ? AND source_entry_id = ?",
+      )
+      .get(sessionId, entryId) as
+      | {
+          id: number;
+        }
+      | undefined;
+  }
+
+  /** 按对账指纹查行：实时行（source_entry_id 为 NULL）与补录行都返回。 */
+  findUsageByFingerprint(fingerprint: string): {
+    id: number;
+    source_entry_id: string | null;
+  }[] {
+    return this.db
+      .prepare(
+        "SELECT id, source_entry_id FROM usage_records WHERE reconcile_fingerprint = ?",
+      )
+      .all(fingerprint) as {
+      id: number;
+      source_entry_id: string | null;
+    }[];
+  }
+
+  /**
+   * 找旧库遗留的候选行：无指纹、无消息时间，但会话/模型/token/费用全等，
+   * 且完成时间落在日志消息时间的有界窗口内。
+   */
+  findLegacyUsageMatches(criteria: {
+    costCacheRead: number;
+    costCacheWrite: number;
+    costInput: number;
+    costOutput: number;
+    costTotal: number;
+    messageAt: number;
+    model: string;
+    provider: string;
+    sessionId: string;
+    tokensCacheRead: number;
+    tokensCacheWrite: number;
+    tokensInput: number;
+    tokensOutput: number;
+    windowMs: number;
+  }): {
+    id: number;
+  }[] {
+    return this.db
+      .prepare(
+        `SELECT id FROM usage_records
+         WHERE session_id = ? AND source_entry_id IS NULL
+           AND reconcile_fingerprint IS NULL AND message_at IS NULL
+           AND provider = ? AND model = ?
+           AND tokens_input = ? AND tokens_output = ?
+           AND tokens_cache_read = ? AND tokens_cache_write = ?
+           AND cost_input = ? AND cost_output = ?
+           AND cost_cache_read = ? AND cost_cache_write = ? AND cost_total = ?
+           AND completed_at BETWEEN ? AND ?`,
+      )
+      .all(
+        criteria.sessionId,
+        criteria.provider,
+        criteria.model,
+        criteria.tokensInput,
+        criteria.tokensOutput,
+        criteria.tokensCacheRead,
+        criteria.tokensCacheWrite,
+        criteria.costInput,
+        criteria.costOutput,
+        criteria.costCacheRead,
+        criteria.costCacheWrite,
+        criteria.costTotal,
+        criteria.messageAt - criteria.windowMs,
+        criteria.messageAt + criteria.windowMs,
+      ) as {
+      id: number;
+    }[];
+  }
+
+  /** 认领一行（对账成功）：给既有 usage 行补上来源条目 id。 */
+  claimUsageRowSource(id: number, entryId: string): void {
+    this.db
+      .prepare(
+        "UPDATE usage_records SET source_entry_id = ? WHERE id = ? AND source_entry_id IS NULL",
+      )
+      .run(entryId, id);
   }
 
   /** 关闭连接；重复调用无副作用。 */

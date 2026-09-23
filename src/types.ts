@@ -31,13 +31,19 @@ export interface UsageRecord {
   cwd: string;
   /** 首个响应 token 时刻（毫秒，首个 message_update 到达观测）；无流事件时缺省 */
   firstTokenAt?: number;
+  /** 消息本身的产生时刻（message.timestamp）；与完成时刻 completedAt 不同 */
+  messageAt?: number;
   model: string;
   provider: string;
+  /** 实时/日志对账指纹；缺消息时间时为 undefined（旧数据对账走保守路径） */
+  reconcileFingerprint?: string;
   /** 结果状态（message_end.message.stopReason）；不可得时缺省 */
   resultStatus?: CallResultStatus;
   /** 调用所属会话标识；宿主未提供时为空串，归因查询把它归入「未知」 */
   sessionId: string;
   source: UsageSource;
+  /** 日志补录身份：来源会话条目的稳定 id（实时事件没有，为空） */
+  sourceEntryId?: string;
   /** 请求开始时刻（毫秒，before_provider_request 到达观测）；不可得时缺省 */
   startedAt?: number;
   /** 毫秒时间戳 */

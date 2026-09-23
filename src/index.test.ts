@@ -24,6 +24,11 @@ import {
   vi,
 } from "vitest";
 import { readConfigTemplate, resolveConfigPath } from "./config.ts";
+import {
+  clearServiceState,
+  readServiceState,
+  serviceStatePath,
+} from "./service/state.ts";
 import { Database, defaultDatabasePath } from "./storage/database.ts";
 import type { AttributionDimension } from "./types.ts";
 
@@ -344,6 +349,217 @@ describe("真实时间点采集", () => {
   });
 });
 
+describe("消息时间与对账指纹", () => {
+  const usage = {
+    cacheRead: 10,
+    cacheWrite: 5,
+    input: 100,
+    output: 50,
+    cost: {
+      cacheRead: 0,
+      cacheWrite: 0,
+      input: 0.001,
+      output: 0.002,
+      total: 0.003,
+    },
+  };
+
+  function messageEndAt(
+    handlers: ReturnType<typeof fakePi>["handlers"],
+    ctx: ExtensionContext,
+    messageTimestamp: number,
+  ): void {
+    handlers.get("message_end")?.(
+      {
+        type: "message_end",
+        message: {
+          content: [],
+          model: "gpt-4o-mini",
+          provider: "openai",
+          role: "assistant",
+          stopReason: "stop",
+          timestamp: messageTimestamp,
+          usage,
+        },
+      } as unknown as MessageEndEvent,
+      ctx,
+    );
+  }
+
+  function readIdentity(): {
+    completed_at: number | null;
+    message_at: number | null;
+    reconcile_fingerprint: string | null;
+  }[] {
+    const db = new Sqlite(defaultDatabasePath(), {
+      readonly: true,
+    });
+    try {
+      // 测试间的记录会累积：只取本用例写入的尾部两行
+      return db
+        .prepare(
+          "SELECT message_at, reconcile_fingerprint, completed_at FROM usage_records ORDER BY id DESC LIMIT 2",
+        )
+        .all() as {
+        completed_at: number | null;
+        message_at: number | null;
+        reconcile_fingerprint: string | null;
+      }[];
+    } finally {
+      db.close();
+    }
+  }
+
+  it("两次相同 token 但不同消息分别入账：消息时间与完成时间正确区分", async () => {
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    messageEndAt(handlers, ctx, 1_727_000_000);
+    messageEndAt(handlers, ctx, 1_727_000_050);
+
+    const rows = readIdentity();
+    expect(rows).toHaveLength(2);
+    // 消息时间来自 message.timestamp，完成时间来自 message_end 到达观测：不同且都有效
+    expect(rows[0]?.message_at).toBe(1_727_000_050);
+    expect(rows[1]?.message_at).toBe(1_727_000_000);
+    for (const row of rows) {
+      expect(row.completed_at).toEqual(expect.any(Number));
+      expect(row.completed_at).not.toBe(row.message_at);
+    }
+    // 相同 token、不同消息 → 指纹不同（未来日志对账可精确匹配）
+    expect(rows[0]?.reconcile_fingerprint).not.toBe(rows[1]?.reconcile_fingerprint);
+  });
+});
+
+describe("off 与用量采集解耦", () => {
+  it("off 只关网页与探测：off 后 message_end 仍写入数据库", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+    await runCommand(commands, ctx, "off");
+    const before = readUsageCount();
+
+    messageEnd(
+      handlers,
+      {
+        input: 7,
+        output: 3,
+        cost: {
+          total: 0.1,
+        },
+      },
+      ctx,
+    );
+
+    expect(readUsageCount()).toBe(before + 1);
+  });
+});
+
+describe("session_start 日志补录", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  /** 在测试 agent 目录下写一份会话日志（扩展的扫描器按 getAgentDir()/sessions 找） */
+  function writeSessionLog(
+    agentDir: string,
+    sessionId: string,
+    cwd: string,
+    entries: {
+      entryId: string;
+      messageAt: number;
+    }[],
+  ): void {
+    const projectDir = join(agentDir, "sessions", "--proj--");
+    mkdirSync(projectDir, {
+      recursive: true,
+    });
+    const lines = [
+      JSON.stringify({
+        cwd,
+        id: sessionId,
+        timestamp: new Date().toISOString(),
+        type: "session",
+      }),
+      ...entries.map((entry) =>
+        JSON.stringify({
+          id: entry.entryId,
+          parentId: null,
+          timestamp: new Date(entry.messageAt).toISOString(),
+          type: "message",
+          message: {
+            content: [],
+            model: "gpt-4o-mini",
+            provider: "openai",
+            role: "assistant",
+            stopReason: "stop",
+            timestamp: entry.messageAt,
+            usage: {
+              cacheRead: 0,
+              cacheWrite: 0,
+              input: 30,
+              output: 20,
+              cost: {
+                cacheRead: 0,
+                cacheWrite: 0,
+                input: 0.001,
+                output: 0.002,
+                total: 0.003,
+              },
+            },
+          },
+        }),
+      ),
+    ];
+    writeFileSync(join(projectDir, `${sessionId}.jsonl`), `${lines.join("\n")}\n`);
+  }
+
+  it("历史缺口补齐：会话启动即补入保留期内的日志用量，且延迟字段保持未知", async () => {
+    const dir = setupCwd();
+    writeSessionLog(dir, "sess-bf", dir, [
+      {
+        entryId: "bfaa0001",
+        messageAt: now - 3_600_000,
+      },
+    ]);
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(dir);
+    const before = readUsageCount();
+
+    await sessionStart(handlers, ctx);
+
+    expect(readUsageCount()).toBe(before + 1);
+    expect(readAttributionKeys("project")).toContain(dir);
+    // 补录行不推断延迟
+    const timing = readLatestTiming();
+    expect(timing.started_at).toBeNull();
+    expect(timing.completed_at).toBeNull();
+    expect(timing.result_status).toBe("stop");
+  });
+
+  it("超期日志不回插：补录不与保留期清理打架，重跑也不反复插入", async () => {
+    const dir = setupCwd();
+    writeSessionLog(dir, "sess-old", dir, [
+      {
+        entryId: "olda0001",
+        messageAt: now - 30 * DAY_MS,
+      },
+    ]);
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(dir);
+    await sessionStart(handlers, ctx);
+    const afterFirst = readUsageCount();
+
+    // 第二次会话启动（新会话）：不把超期条目反复插进来
+    await sessionStart(handlers, ctx, "new");
+
+    expect(readUsageCount()).toBe(afterFirst);
+  });
+});
 /** 每次新建连接，避免连接池掩盖端口是否真的释放。 */
 function rawStatus(url: string, headers: Record<string, string> = {}): Promise<number> {
   const parsed = new URL(url);
@@ -883,5 +1099,83 @@ describe("常驻与 on/off 开关", () => {
 
     expect(openBrowser).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("未知参数"), "warning");
+  });
+});
+
+describe("独立服务所有权协调", () => {
+  const daemonState = {
+    owner: "daemon",
+    pid: process.pid,
+    port: 5199,
+    ready: true,
+    startedAt: new Date().toISOString(),
+    url: "http://127.0.0.1:5199/#tok",
+    version: 1,
+  };
+
+  it("独立服务先启动：/xpi-kuma 复用其 URL，不启动第二个监听器", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx, notify } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+
+    writeFileSync(serviceStatePath(), JSON.stringify(daemonState));
+    openBrowser.mockClear();
+    await runCommand(commands, ctx, "on");
+
+    expect(openBrowser).toHaveBeenCalledWith("http://127.0.0.1:5199/#tok");
+    // openBrowser 默认失败：降级通知给出可复制的独立服务 URL（与 Pi 自有服务同款行为）
+    expect(notify).toHaveBeenCalledWith(
+      expect.stringContaining("http://127.0.0.1:5199/#tok"),
+      "warning",
+    );
+    expect(readServiceState()?.owner).toBe("daemon");
+    clearServiceState();
+  });
+
+  // biome-ignore lint/security/noSecrets: 中文高熵误报，测试名不含任何凭据
+  it("独立服务运行期间会话启动：Pi 不重复探测，实时采集照常", async () => {
+    const { api, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+
+    writeFileSync(serviceStatePath(), JSON.stringify(daemonState));
+    await sessionStart(handlers, ctx);
+
+    messageEnd(
+      handlers,
+      {
+        cacheRead: 0,
+        cacheWrite: 0,
+        input: 10,
+        output: 5,
+        cost: {
+          cacheRead: 0,
+          cacheWrite: 0,
+          input: 0.01,
+          output: 0.02,
+          total: 0.03,
+        },
+      },
+      ctx,
+    );
+    // 关键：服务由 daemon 持有，但 message_end 仍实时入账（spec：usage-collection）
+    expect(readUsageCount()).toBeGreaterThanOrEqual(1);
+    clearServiceState();
+  });
+
+  it("Pi off 释放所有权登记，独立 CLI 之后可接管", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const { ctx } = fakeCtx(setupCwd());
+    await sessionStart(handlers, ctx);
+    await runCommand(commands, ctx, "on");
+
+    const piState = readServiceState();
+    expect(piState?.owner).toBe("pi");
+    expect(piState?.pid).toBe(process.pid);
+
+    await runCommand(commands, ctx, "off");
+    expect(readServiceState()).toBeNull();
   });
 });

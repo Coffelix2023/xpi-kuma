@@ -13,28 +13,40 @@ import { ConfigError, loadConfig, resolveConfigPath } from "./config.ts";
 import { FileLogger } from "./lib/log.ts";
 import { openInBrowser } from "./lib/open-browser.ts";
 import { VendorMonitor } from "./monitors/vendor-monitor.ts";
-import { Database } from "./storage/database.ts";
+import {
+  clearServiceState,
+  isOwnershipActive,
+  readServiceState,
+  replaceServiceState,
+  type ServiceState,
+} from "./service/state.ts";
+import { Database, defaultDatabasePath } from "./storage/database.ts";
+import { backfillFromSessionLogs } from "./sync/backfill.ts";
+import { usageFingerprint } from "./sync/fingerprint.ts";
 import type { KumaConfig, UsageRecord } from "./types.ts";
 import { type DashboardServer, startDashboardServer } from "./ui/dashboard.ts";
 
 const VERSION = "0.9.2";
 
 /**
- * 进程级运行时：`on` 建立、`off` 销毁；会话切换不重建。
+ * 进程级运行时：随 Pi 进程常驻，`off` 只销毁网页/探测所有权，不销毁 recorder。
  *
- * 面板与后台监测都常驻，所以数据库与探测定时器都挂在这里；只有 `cwd`
- * 是会话级字段，随当前会话更新（体检页展示「当前项目」）。
+ * 真实用量采集（usageCollector + database）独立于服务开关（spec：usage-collection）；
+ * 只有 `cwd` 是会话级字段，随当前会话更新（体检页展示「当前项目」）。
  */
 interface Runtime {
   accountService: AccountService;
   config: KumaConfig;
   /** 当前会话的工作目录；体检页据此展示「当前项目」 */
   cwd: string;
-  /** 进程内常驻的监控 Web 服务；未打开时为 null */
+  /** 监控 Web 服务；仅在服务 on 期间存在（off 只关网页与探测） */
   dashboardServer: DashboardServer | null;
   database: Database;
+  /** recorder 所连数据库的路径：agent 目录被 PI_CODING_AGENT_DIR 改指时据此重建 */
+  dbPath: string;
   usageCollector: UsageCollector;
-  vendorMonitor: VendorMonitor;
+  /** 探测定时器；仅在服务 on 期间存在，off 后为 null */
+  vendorMonitor: VendorMonitor | null;
 }
 
 /** 在途的服务启动 Promise；同一时刻只允许一个，成功后清空。 */
@@ -46,6 +58,37 @@ let pendingTiming: {
   startedAt: number;
 } | null = null;
 const logger = new FileLogger(join(getAgentDir(), "data", "xpi-kuma", "xpi-kuma.log"));
+/** 一天的毫秒数：保留期换算（cleanOldRecords 与补录扫描共用同一口径） */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 读取仍在生效的独立服务所有权状态（spec：standalone-service「共享所有权」）。
+ * 损坏或指向死亡进程/PID 复用的状态不视为活跃，由调用方自行启动服务。
+ */
+function findActiveDaemonState(): ServiceState | null {
+  const state = readServiceState();
+  if (state === null || state.owner !== "daemon" || !isOwnershipActive(state)) {
+    return null;
+  }
+  return state;
+}
+
+/**
+ * 记录 Pi 对网页/探测的所有权，供终端 CLI 识别冲突（spec：Pi 服务先启动时
+ * 独立 `on` 明确拒绝）。 ponytail: 与 daemon 就绪写入存在微小竞态窗口，
+ * 双方均为原子整文件替换，后写者胜，无半截状态。
+ */
+function recordPiOwnership(current: Runtime): void {
+  replaceServiceState({
+    owner: "pi",
+    pid: process.pid,
+    port: current.dashboardServer?.port ?? 0,
+    ready: true,
+    startedAt: new Date().toISOString(),
+    url: current.dashboardServer?.url ?? "",
+    version: 1,
+  });
+}
 
 export default function xpiKuma(pi: ExtensionAPI): void {
   pi.on("session_start", (event, ctx) => startSession(event, ctx));
@@ -84,20 +127,18 @@ export default function xpiKuma(pi: ExtensionAPI): void {
         ctx.ui.notify(`未知参数「${action}」，可用：on / off`, "warning");
         return;
       }
-      let current = runtime;
-      if (!current) {
-        try {
-          current = initRuntime(ctx.cwd);
-        } catch (error) {
-          logger.error("启动监控面板服务失败", error);
-          ctx.ui.notify(
-            error instanceof ConfigError
-              ? error.message
-              : `启动监控面板服务失败：${describeError(error)}`,
-            "error",
-          );
-          return;
-        }
+      let current: Runtime;
+      try {
+        current = ensureRuntime(ctx.cwd);
+      } catch (error) {
+        logger.error("启动监控面板服务失败", error);
+        ctx.ui.notify(
+          error instanceof ConfigError
+            ? error.message
+            : `启动监控面板服务失败：${describeError(error)}`,
+          "error",
+        );
+        return;
       }
       if (current.config.vendors.length === 0) {
         ctx.ui.notify(
@@ -105,6 +146,28 @@ export default function xpiKuma(pi: ExtensionAPI): void {
           "warning",
         );
       }
+      // 独立服务持有网页时复用其 URL 与持久凭据，不启动第二个监听器/探测器
+      // （spec：dashboard-ui「独立服务持有网页」）
+      const daemonState = findActiveDaemonState();
+      if (daemonState !== null) {
+        if (!daemonState.ready || daemonState.url === "") {
+          ctx.ui.notify("独立服务正在启动，请稍后重试 /xpi-kuma", "info");
+          return;
+        }
+        try {
+          await openInBrowser(daemonState.url);
+          ctx.ui.notify("监控面板由独立服务提供，已在浏览器打开", "info");
+        } catch (error) {
+          logger.error("打开默认浏览器失败", error);
+          ctx.ui.notify(
+            `无法自动打开浏览器，请手动访问：${daemonState.url}`,
+            "warning",
+          );
+        }
+        return;
+      }
+      // 服务所有权：on 时同时取得网页与探测，并登记 Pi 所有权供 CLI 识别
+      ensureVendorMonitor(current);
       let server: DashboardServer;
       try {
         server = await ensureDashboardServer(current);
@@ -119,6 +182,7 @@ export default function xpiKuma(pi: ExtensionAPI): void {
           "warning",
         );
       }
+      recordPiOwnership(current);
       try {
         await openInBrowser(server.url);
         // 成功通知只给重开入口，不带本机 URL 与访问凭据（凭据在 URL fragment 里）
@@ -146,21 +210,54 @@ async function startSession(
 ): Promise<void> {
   try {
     notifyLegacyConfig(ctx);
-    const current = runtime ?? initRuntime(ctx.cwd);
+    const current = ensureRuntime(ctx.cwd);
     // 会话级：体检页展示当前项目
 
     // 保留期清理在会话启动时执行一次
-    const removed = current.database.cleanOldRecords(
-      current.config.retention.rawRecords,
-    );
+    // 保留期清理在会话启动时执行一次；补录扫描下界必须与清理截止一致（同一 now）
+    const now = Date.now();
+    const retentionDays = current.config.retention.rawRecords;
+    const removed = current.database.cleanOldRecords(retentionDays, now);
     if (removed > 0) {
-      logger.info(
-        `清理了 ${removed} 条超过 ${current.config.retention.rawRecords} 天的使用量记录`,
-      );
+      logger.info(`清理了 ${removed} 条超过 ${retentionDays} 天的使用量记录`);
     }
 
+    // 共享补录（ADR 0001 角色 2）：扫描下界 = 清理截止，超期日志不回插。
+    // 自身失败只记日志：补录绝不阻断会话启动与实时采集（spec：usage-collection）
+    try {
+      const report = backfillFromSessionLogs(current.database, {
+        cutoff: now - retentionDays * DAY_MS,
+      });
+      for (const diagnostic of report.scanDiagnostics) {
+        logger.warn(`会话日志扫描：${diagnostic.sessionFile} ${diagnostic.detail}`);
+      }
+      for (const item of report.diagnostics) {
+        logger.warn(`补录未核实：${item.entryId}（${item.reason}）${item.sessionFile}`);
+      }
+      if (
+        report.inserted > 0 ||
+        report.reconciled > 0 ||
+        report.diagnostics.length > 0
+      ) {
+        logger.info(
+          `补录完成：新增 ${report.inserted}，对账 ${report.reconciled}，跳过 ${report.skipped}，未核实 ${report.diagnostics.length}`,
+        );
+      }
+    } catch (error) {
+      logger.warn(`日志补录失败（不影响实时采集）：${describeError(error)}`);
+    }
+
+    // 服务所有权协调（spec：standalone-service）：独立服务在跑时 Pi 不重复监听/探测，
+    // recorder 照常实时入账；服务停止后下一次会话/命令可由 Pi 接管。
+    if (findActiveDaemonState() !== null) {
+      // biome-ignore lint/security/noSecrets: 中文高熵误报，日志文案不含任何凭据
+      logger.info("独立服务持有网页与探测：Pi 仅保持实时用量采集");
+      return;
+    }
+    ensureVendorMonitor(current);
+    recordPiOwnership(current);
     logger.info(
-      `会话启动（${event.reason}）：${current.config.vendors.length} 个供应商，${current.vendorMonitor.activeTimerCount} 个探测定时器`,
+      `会话启动（${event.reason}）：${current.config.vendors.length} 个供应商，${current.vendorMonitor?.activeTimerCount ?? 0} 个探测定时器`,
     );
   } catch (error) {
     logger.error("会话启动失败", error);
@@ -171,32 +268,62 @@ async function startSession(
 }
 
 /**
- * 建立进程级运行时：加载配置、开数据库、启动探测定时器。
+ * 建立进程级运行时：加载配置、开数据库、常驻 recorder。
  *
+ * 探测定时器不在这里启动：探测与 Web 服务同为「服务所有权」，只在
+ * `on` / `session_start` 时经 `ensureVendorMonitor` 取得（spec：vendor-monitoring）。
  * 抛错交给调用方提示；失败时不留下半截运行时（先全部建好，再赋值给 `runtime`）。
  */
 function initRuntime(cwd: string): Runtime {
   const config = loadConfig();
   const database = new Database();
   const usageCollector = new UsageCollector(database);
-  const vendorMonitor = new VendorMonitor(database, config);
   const accountService = new AccountService({
     config,
     database,
     logger,
   });
-  vendorMonitor.start();
   runtime = {
     accountService,
     config,
     cwd,
     dashboardServer: null,
     database,
+    dbPath: defaultDatabasePath(),
     usageCollector,
-    vendorMonitor,
+    // 服务所有权：探测与网页只在 on / session_start 时取得
+    vendorMonitor: null,
   };
-  logger.info(`xpi-kuma ${VERSION} 运行时已建立，服务跨会话常驻`);
+  logger.info(`xpi-kuma ${VERSION} 运行时已建立（recorder 常驻，服务随 on/off 启停）`);
   return runtime;
+}
+
+/**
+ * 取得或重建运行时。
+ *
+ * recorder 常驻，但数据库路径随 `PI_CODING_AGENT_DIR` 走：运行中的 recorder 连的是
+ * 旧目录的库时（测试或用户改了覆盖变量），关闭旧服务与旧库后整体重建。
+ */
+function ensureRuntime(cwd: string): Runtime {
+  const dbPath = defaultDatabasePath();
+  if (runtime && runtime.dbPath !== dbPath) {
+    const stale = runtime;
+    runtime = null;
+    dashboardStart = null;
+    void quietly(() => stale.dashboardServer?.close());
+    void quietly(() => stale.vendorMonitor?.stop());
+    void quietly(() => stale.database.close());
+  }
+  return runtime ?? initRuntime(cwd);
+}
+
+/** 取得探测定时器所有权：服务所有者才持有定时任务（spec：vendor-monitoring）。 */
+function ensureVendorMonitor(current: Runtime): VendorMonitor {
+  if (!current.vendorMonitor) {
+    current.vendorMonitor = new VendorMonitor(current.database, current.config);
+    current.vendorMonitor.start();
+  }
+  return current.vendorMonitor;
 }
 
 /**
@@ -211,9 +338,13 @@ function reloadRuntimeConfig(): void {
     return;
   }
   const config = loadConfig();
-  const vendorMonitor = new VendorMonitor(current.database, config);
-  vendorMonitor.start();
-  void current.vendorMonitor.stop();
+  // 探测定时器只在服务 on 期间存在：off 后热重载不重建定时器
+  if (current.vendorMonitor) {
+    const vendorMonitor = new VendorMonitor(current.database, config);
+    vendorMonitor.start();
+    void current.vendorMonitor.stop();
+    current.vendorMonitor = vendorMonitor;
+  }
   const accountService = new AccountService({
     config,
     database: current.database,
@@ -226,9 +357,8 @@ function reloadRuntimeConfig(): void {
   }
   current.accountService = accountService;
   current.config = config;
-  current.vendorMonitor = vendorMonitor;
   logger.info(
-    `配置热重载：${config.vendors.length} 个供应商，${vendorMonitor.activeTimerCount} 个探测定时器`,
+    `配置热重载：${config.vendors.length} 个供应商，${current.vendorMonitor?.activeTimerCount ?? 0} 个探测定时器`,
   );
 }
 
@@ -250,27 +380,44 @@ function notifyLegacyConfig(ctx: ExtensionContext): void {
 }
 
 /**
- * 关闭面板服务、停止探测并关闭数据库（`xpi-kuma off`）。
+ * 关闭网页与探测（`xpi-kuma off`），但保留 recorder。
  *
- * 顺序固定：先停 HTTP 服务，再停探测，最后关数据库，避免在途 API 请求读到已关闭的
- * 连接。`session_shutdown` 不再调用这里 —— 服务要跨会话常驻。
+ * 真实用量采集独立于服务开关（spec：usage-collection）：数据库与 usageCollector
+ * 不在这里关闭，`message_end` 在 off 后照常入库。顺序固定：先停 HTTP 服务，
+ * 再停探测；在途时间点（pendingTiming）与 off 无关，不清空。
+ * `session_shutdown` 不调用这里 —— 服务要跨会话常驻。
  */
 async function stopRuntime(ctx: ExtensionContext): Promise<void> {
   const current = runtime;
-  if (!current) {
+  if (!current || (!current.dashboardServer && !current.vendorMonitor)) {
     ctx.ui.notify("xpi-kuma 面板已处于关闭状态", "info");
     return;
   }
-  runtime = null;
+  const server = current.dashboardServer;
+  const monitor = current.vendorMonitor;
+  current.dashboardServer = null;
+  current.vendorMonitor = null;
   dashboardStart = null;
-  pendingTiming = null;
-  await quietly(() => current.dashboardServer?.close());
-  await quietly(() => current.vendorMonitor.stop());
-  await quietly(() => current.database.close());
-  ctx.ui.notify("xpi-kuma 面板已关闭（/xpi-kuma on 可重新启动）", "info");
+  await quietly(() => server?.close());
+  await quietly(() => monitor?.stop());
+  // 释放 Pi 所有权登记，独立 CLI 之后可接管（spec：独立服务停止后 Pi 接管的反向）
+  quietlySync(() => clearServiceState("pi"));
+  ctx.ui.notify(
+    "监控面板与探测已关闭；真实用量采集不受影响（/xpi-kuma on 可重新启动）",
+    "info",
+  );
 }
 
 /** 清理步骤彼此独立：单步失败只记日志，不阻断后续步骤。 */
+/** 同步版 quietly：单步失败只记日志。 */
+function quietlySync(action: () => unknown): void {
+  try {
+    action();
+  } catch (error) {
+    logger.error("服务状态清理失败", error);
+  }
+}
+
 async function quietly(action: () => unknown): Promise<void> {
   try {
     await action();
@@ -295,7 +442,8 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
       cwd: current.cwd,
       reloadConfig: reloadRuntimeConfig,
       usageCollector: current.usageCollector,
-      vendorMonitor: current.vendorMonitor,
+      // 命令路径先经 ensureVendorMonitor，这里必然非空
+      vendorMonitor: current.vendorMonitor as VendorMonitor,
     }),
     {
       port: current.config.dashboard.port,
@@ -348,7 +496,7 @@ function handleMessageEnd(event: MessageEndEvent, ctx: ExtensionContext): void {
   // 调用链结束：取走在途时间点并清空（无论是否写记录，链已终止）
   const timing = pendingTiming;
   pendingTiming = null;
-  const { provider, model, stopReason, usage } = event.message;
+  const { provider, model, stopReason, usage, timestamp: messageAt } = event.message;
   if (!usage) {
     return;
   }
@@ -365,6 +513,9 @@ function handleMessageEnd(event: MessageEndEvent, ctx: ExtensionContext): void {
     firstTokenAt: timing?.firstTokenAt,
     model,
     provider,
+    // 消息时间与完成时刻是两个时间：完成时刻取 message_end 到达观测，
+    // 消息时间取 provider 报的 message.timestamp，供日志对账精确匹配。
+    messageAt: typeof messageAt === "number" ? messageAt : undefined,
     resultStatus: stopReason,
     sessionId: origin.sessionId,
     source: "real_usage",
@@ -377,6 +528,7 @@ function handleMessageEnd(event: MessageEndEvent, ctx: ExtensionContext): void {
     toolCalls: event.message.content.filter((block) => block.type === "toolCall")
       .length,
   };
+  record.reconcileFingerprint = usageFingerprint(record);
 
   try {
     runtime.usageCollector.record(record);

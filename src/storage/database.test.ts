@@ -683,6 +683,125 @@ describe("真实时间点与结果状态", () => {
   });
 });
 
+describe("日志补录身份列", () => {
+  it("新库建出三列与唯一来源索引：同 (session_id, source_entry_id) 第二次写入被约束拒绝", () => {
+    const db = openTempDatabase();
+    const record = usageRecord({
+      messageAt: 1_727_000_000,
+      reconcileFingerprint: "fp-1",
+      sessionId: "sess-a",
+      sourceEntryId: "entry-1",
+    });
+    db.insertUsageRecord(record);
+
+    // 同一条日志条目再入账一次：唯一索引必须拒绝
+    expect(() => db.insertUsageRecord(record)).toThrow();
+
+    // 实时行没有来源条目 ID，不受 partial index 约束
+    db.insertUsageRecord(
+      usageRecord({
+        sessionId: "sess-a",
+      }),
+    );
+    expect(totalRequests(db)).toBe(2);
+  });
+
+  it("旧库迁移补齐三列：存量记录为 NULL，重复打开幂等", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xpi-kuma-migrate-identity-"));
+    cleanups.push(() =>
+      rmSync(dir, {
+        force: true,
+        recursive: true,
+      }),
+    );
+    const dbPath = join(dir, "usage.db");
+
+    const legacy = new Sqlite(dbPath);
+    legacy.exec(`
+      CREATE TABLE usage_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        tokens_input INTEGER NOT NULL DEFAULT 0,
+        tokens_output INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_write INTEGER NOT NULL DEFAULT 0,
+        cost_input REAL NOT NULL DEFAULT 0,
+        cost_output REAL NOT NULL DEFAULT 0,
+        cost_cache_read REAL NOT NULL DEFAULT 0,
+        cost_cache_write REAL NOT NULL DEFAULT 0,
+        cost_total REAL NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'real_usage'
+      );
+    `);
+    legacy
+      .prepare(
+        "INSERT INTO usage_records (timestamp, provider, model, cost_total) VALUES (?, ?, ?, ?)",
+      )
+      .run(Date.now(), "openai", "gpt-4", 0.5);
+    legacy.close();
+
+    const identityOf = (id: number) => {
+      const probe = new Sqlite(dbPath, {
+        readonly: true,
+      });
+      const row = probe
+        .prepare(
+          "SELECT source_entry_id, message_at, reconcile_fingerprint FROM usage_records WHERE id = ?",
+        )
+        .get(id);
+      probe.close();
+      return row;
+    };
+
+    const db = new Database({
+      dbPath,
+    });
+    cleanups.push(() => db.close());
+    for (const column of [
+      "source_entry_id",
+      "message_at",
+      "reconcile_fingerprint",
+    ]) {
+      expect(usageColumns(dbPath)).toContain(column);
+    }
+    // 唯一来源索引已建且 partial
+    const probe = new Sqlite(dbPath, {
+      readonly: true,
+    });
+    const indexes = probe
+      .prepare("SELECT name, sql FROM sqlite_master WHERE type = 'index'")
+      .all() as {
+      name: string;
+      sql: string | null;
+    }[];
+    probe.close();
+    const sourceIndex = indexes.find((row) => row.name === "idx_usage_source_entry");
+    expect(sourceIndex?.sql).toContain("IS NOT NULL");
+
+    // 存量行保留且三列为 NULL
+    expect(totalRequests(db)).toBe(1);
+    expect(identityOf(1)).toEqual({
+      message_at: null,
+      reconcile_fingerprint: null,
+      source_entry_id: null,
+    });
+
+    // 重复迁移幂等：再开一次不报错，数据与列不变
+    db.close();
+    const again = new Database({
+      dbPath,
+    });
+    cleanups.push(() => again.close());
+    expect(totalRequests(again)).toBe(1);
+    expect(identityOf(1)).toEqual({
+      message_at: null,
+      reconcile_fingerprint: null,
+      source_entry_id: null,
+    });
+  });
+});
 describe("getEfficiency", () => {
   const SUCCESS_CYCLE = [
     "stop",

@@ -68,8 +68,39 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 
 | Command | Description |
 | --- | --- |
+| --- | --- |
 | `/xpi-kuma` / `/xpi-kuma on` | Start (or restart) the local dashboard service and open it in your browser — run it again to reopen a page you closed (vendor status, usage stats, cost/token trend) |
-| `/xpi-kuma off` | Shut the service down and release its port; probing and usage collection stop until the next `on` |
+| `/xpi-kuma off` | Shut the in-Pi web service and probes down; realtime usage recording keeps working |
+| `xpi-kuma on [--port <port>]` | Start the standalone background service from any terminal; it keeps running after the terminal exits (see below) |
+| `xpi-kuma off` / `xpi-kuma status` | Stop the standalone service / show who currently owns the web service |
+
+### Standalone service (terminal daemon)
+
+Realtime usage recording is bound to the Pi process, but the dashboard and vendor probes do not have to be.
+Install the CLI once and manage the service from any terminal (requires Node.js ≥ 23.6, which runs the
+TypeScript source directly — no build step):
+
+```bash
+pnpm link --global                   # inside this repository; exposes the `xpi-kuma` command
+```
+
+- `xpi-kuma on [--port <1..65535>]` — starts a detached background service (usage backfill first, then web
+  + probes) and prints the actual local URL. An invalid port fails before anything starts; an occupied port
+  fails instead of silently picking another one.
+- `xpi-kuma off` — stops the background service with identity checks (a stale state file or a reused PID is
+  never signaled) and releases the port. Idempotent: running it twice is fine.
+- `xpi-kuma status` — shows the current owner (standalone daemon or Pi process), port, and URL.
+
+Ownership rules: while the standalone service runs, `/xpi-kuma` inside Pi reuses its URL and no second web
+listener or probe set is started; while Pi owns the service, the CLI `on` refuses instead of taking over
+(run `/xpi-kuma off` inside Pi first). Realtime `message_end` recording continues in every case.
+
+Usage backfill runs at every Pi session start and at standalone `on`: it replays assistant usage found in
+Pi session logs within the retention window, idempotently and never double-counting. Entries that cannot be
+verified (fingerprint conflicts, unreadable logs, records too old to reconcile) are skipped and reported as
+unverified with a log location in `~/.pi/agent/data/xpi-kuma/xpi-kuma.log` — they are never guessed into the
+statistics.
+
 
 ### Configuration
 
@@ -160,6 +191,9 @@ session; the same command reuses the running service instead of starting a secon
 - **Process-scoped, not session-scoped.** Quitting, reloading, starting, resuming, or forking a session
   leaves the service running; only `/xpi-kuma off` (or exiting Pi) shuts it down. `/xpi-kuma on` starts
   it again on the same port with the same credential.
+- **Two possible owners.** The web service is owned either by this Pi process or by the standalone daemon
+  (`xpi-kuma on`, see above) — never both. When the daemon owns it, `/xpi-kuma` inside Pi reopens the same
+  URL instead of starting a second listener, and the daemon keeps serving after Pi exits.
 
 ### Dashboard pages
 
@@ -248,12 +282,19 @@ Vendors without a usable balance endpoint are the expected case, not a bug: none
 
 `/xpi-kuma` is the only command this extension registers. It:
 
-- **Reads** the global `~/.pi/agent/data/xpi-kuma/config.yaml` and the `usage_records` / `probe_records` tables.
-- **Starts** a loopback HTTP service owned by the Pi process (`on` / `off`, default `on`), then opens it in your default browser.
-- **Writes** only when you ask it to: a probe sends one minimal request per vendor, costing a few tokens;
-  a balance sync queries the vendor; manual entry rewrites the global config after taking a backup.
-- **Refuses** to listen on a non-loopback interface, to hand vendor API keys to the browser, to edit the
-  config file outside the balance fields, or to keep serving after `/xpi-kuma off`.
+`/xpi-kuma` is the only command this extension registers, and `xpi-kuma` is the only terminal command. They:
+
+- **Read** the global `~/.pi/agent/data/xpi-kuma/config.yaml` and the `usage_records` / `probe_records` tables.
+- **Serve** a loopback HTTP service owned either by the Pi process (`/xpi-kuma on` / `off`) or by the
+  standalone daemon (`xpi-kuma on` / `off`) — never both at once.
+- **Record** realtime usage (`message_end`) for as long as the Pi process lives, independent of which
+  owner, if any, holds the web service.
+- **Write** only when you ask: a probe sends one minimal request per vendor, costing a few tokens; a balance
+  sync queries the vendor; manual entry rewrites the global config after taking a backup; backfill inserts
+  rows that are provably absent and reports the rest as unverified.
+- **Refuse** to listen on a non-loopback interface, to hand vendor API keys to the browser, to edit the
+  config file outside the balance fields, or to spawn a second web service while an owner is already active.
+
 
 ## Development
 
@@ -289,7 +330,7 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # live loop: /reload inside Pi
 ├── mise.toml / package.json / biome.jsonc / tsconfig.json / pnpm-workspace.yaml
 ├── AGENTS.md / CONTEXT.md / DESIGN.md / THEMES.md
 ├── README.md / README.zh-CN.md / LICENSE
-├── docs/                      # Git workflow, repository guardrails, reference material
+├── docs/                      # Git workflow, repository guardrails, ADRs, reference material
 └── src/
     ├── index.ts               # Extension entrypoint (register function)
     ├── config.ts              # global config.yaml loading and ${ENV_VAR} expansion
@@ -298,6 +339,8 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-kuma   # live loop: /reload inside Pi
     ├── collectors/            # Usage persistence and aggregate queries
     ├── monitors/              # Scheduled vendor probes
     ├── storage/               # SQLite persistence
+    ├── sync/                  # Session-log scanner + idempotent usage backfill
+    ├── service/               # Standalone daemon: CLI entry, ownership state, service runtime
     ├── lib/                   # Logger, browser launch
     └── ui/                    # Dashboard HTTP service, page rendering, theme
 ```

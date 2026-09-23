@@ -25,6 +25,10 @@ export class FileLogger {
     this.write("INFO", message);
   }
 
+  warn(message: string): void {
+    this.write("WARN", message);
+  }
+
   error(message: string, error?: unknown): void {
     const detail =
       error instanceof Error ? `${error.name}: ${error.message}` : String(error ?? "");

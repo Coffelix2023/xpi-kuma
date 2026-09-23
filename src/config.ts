@@ -296,30 +296,45 @@ function parseVendors(value: unknown): VendorConfig[] {
     if (apiKey !== undefined && typeof apiKey !== "string") {
       throw new ConfigError(`vendors[${index}].api_key 必须是字符串`);
     }
-    const price = entry.price;
     const balance = parseVendorBalance(entry.balance, index);
     const oauth = parseVendorOAuth(entry.oauth, index);
     return {
       apiKey: apiKey === undefined ? undefined : expandEnvPlaceholders(apiKey),
       balance,
       endpoint: requireString(entry.endpoint, "endpoint", index),
-      model: requireString(entry.model, "model", index),
+      models: parseModels(entry, index),
       name: requireString(entry.name, "name", index),
       oauth,
-      price:
-        isRecord(price) &&
-        typeof price.input === "number" &&
-        typeof price.output === "number"
-          ? {
-              input: price.input,
-              output: price.output,
-            }
-          : undefined,
       probe: parseProbe(entry.probe, index),
     };
   });
 }
 
+/**
+ * 解析 `models` 列表；旧配置的单值 `model` 归一化为一项。
+ * 两者都缺、为空或含非字符串/空串时抛 `ConfigError`（fail-closed）。
+ */
+function parseModels(entry: Record<string, unknown>, index: number): string[] {
+  const raw = entry.models ?? entry.model;
+  // 新式列表直接用；旧式单值归一化成一项；两者都不是则留空，交给下面的必填校验
+  let list: unknown[] | undefined;
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (typeof raw === "string") {
+    list = [
+      raw,
+    ];
+  }
+  if (list === undefined || list.length === 0) {
+    throw new ConfigError(`vendors[${index}] 缺少 models（或旧式 model）`);
+  }
+  if (list.some((item) => typeof item !== "string" || item.trim() === "")) {
+    throw new ConfigError(`vendors[${index}].models 必须是非空字符串列表`);
+  }
+  return [
+    ...new Set(list as string[]),
+  ];
+}
 function parseRetention(value: unknown): RetentionConfig {
   if (value === undefined || value === null) {
     return {

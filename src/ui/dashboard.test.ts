@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AccountService } from "../accounts/service.ts";
 import { UsageCollector } from "../collectors/usage-collector.ts";
-import { resolveConfigPath } from "../config.ts";
+import { loadConfig, resolveConfigPath } from "../config.ts";
 import { FileLogger } from "../lib/log.ts";
 import { VendorMonitor } from "../monitors/vendor-monitor.ts";
 import { Database } from "../storage/database.ts";
@@ -22,12 +22,14 @@ const CONFIG: KumaConfig = {
   vendors: [
     {
       endpoint: "http://127.0.0.1:1/v1",
-      model: "gpt-4o-mini",
       name: "[OI]",
       // 手动手值：让同步与账户接口有可断言的成功行
       balance: {
         manual: 10,
       },
+      models: [
+        "gpt-4o-mini",
+      ],
       probe: {
         enabled: true,
         interval: "5m",
@@ -36,8 +38,10 @@ const CONFIG: KumaConfig = {
     },
     {
       endpoint: "http://127.0.0.1:1/v1",
-      model: "claude-3",
       name: "Anthropic",
+      models: [
+        "claude-3",
+      ],
       probe: {
         enabled: true,
         interval: "5m",
@@ -108,10 +112,10 @@ function tempProject(): string {
       "vendors:",
       '  - name: "[OI]"',
       '    endpoint: "http://127.0.0.1:1/v1"',
-      '    model: "gpt-4o-mini"',
+      '    models: ["gpt-4o-mini"]',
       '  - name: "Anthropic"',
       '    endpoint: "http://127.0.0.1:1/v1"',
-      '    model: "claude-3"',
+      '    models: ["claude-3"]',
     ].join("\n"),
   );
   cleanups.push(() =>
@@ -141,9 +145,15 @@ async function start(options: { port?: number } = {}): Promise<{
     logger: new FileLogger(join(projectDir, "xpi-kuma-test.log")),
   });
   cleanups.push(() => database.close());
-  const server = await startDashboardServer(collector, monitor, {
-    accountService,
+  // 依赖按请求读取：reloadConfig() 就地换掉字段后，接口立刻反映新配置
+  const deps = {
+    accounts: accountService,
     cwd: projectDir,
+    usageCollector: collector,
+    vendorMonitor: monitor,
+    reloadConfig: () => {},
+  };
+  const server = await startDashboardServer(() => deps, {
     port: options.port,
   });
   servers.push(server);
@@ -748,7 +758,7 @@ describe("服务启动与路由", () => {
 
   it("单供应商探测路由只探测该家", async () => {
     const { monitor, server } = await start();
-    const single = vi.spyOn(monitor, "triggerProbe").mockResolvedValue(null);
+    const single = vi.spyOn(monitor, "triggerProbe").mockResolvedValue([]);
     const all = vi.spyOn(monitor, "triggerAllProbes").mockResolvedValue([]);
 
     const res = await call(server.port, `/api/probes/${encodeURIComponent("[OI]")}`, {
@@ -760,7 +770,8 @@ describe("服务启动与路由", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(single).toHaveBeenCalledWith("[OI]");
+    // 无 ?model= 时传 undefined，triggerProbe 探测该供应商全部模型
+    expect(single).toHaveBeenCalledWith("[OI]", undefined);
     expect(all).not.toHaveBeenCalled();
   });
 
@@ -778,6 +789,136 @@ describe("服务启动与路由", () => {
 
     expect(res.status).toBe(200);
     expect(all).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("供应商写接口", () => {
+  /** 写请求必须来自本服务自身页面，凭据与 Origin 都带齐。 */
+  function writeHeaders(server: DashboardServer): Record<string, string> {
+    return {
+      authorization: `Bearer ${server.token}`,
+      "content-type": "application/json",
+      origin: `http://127.0.0.1:${server.port}`,
+    };
+  }
+
+  const VALID_BODY = {
+    endpoint: "https://api.example.test/v1",
+    name: "NewVendor",
+    probeInterval: "10m",
+    probeTimeout: 5000,
+    models: [
+      "m1",
+      "m1",
+      "m2",
+    ],
+  };
+
+  it("合法保存写回配置：去重后的 models 可被解析，注释保留且有备份", async () => {
+    const { server } = await start();
+    const configPath = resolveConfigPath();
+    writeFileSync(configPath, `# 用户注释\n${readFileSync(configPath, "utf8")}`);
+
+    const res = await call(server.port, "/api/vendors/save", {
+      body: JSON.stringify(VALID_BODY),
+      headers: writeHeaders(server),
+      method: "POST",
+    });
+
+    expect(res.status).toBe(200);
+    const saved = JSON.parse(res.body) as {
+      backupPath: string;
+      ok: boolean;
+    };
+    expect(saved.ok).toBe(true);
+    // 备份是写前快照：不该含新供应商
+    expect(readFileSync(saved.backupPath, "utf8")).not.toContain("NewVendor");
+    const written = readFileSync(configPath, "utf8");
+    expect(written).toContain("# 用户注释");
+    expect(loadConfig().vendors.find((v) => v.name === "NewVendor")?.models).toEqual([
+      "m1",
+      "m2",
+    ]);
+  });
+
+  it("缺少或伪造 Origin 的写请求被拒且零写盘", async () => {
+    const { server } = await start();
+    const configPath = resolveConfigPath();
+    const before = readFileSync(configPath, "utf8");
+    const withoutOrigin = {
+      authorization: `Bearer ${server.token}`,
+      "content-type": "application/json",
+    };
+
+    const missing = await call(server.port, "/api/vendors/save", {
+      body: JSON.stringify(VALID_BODY),
+      headers: withoutOrigin,
+      method: "POST",
+    });
+    const forged = await call(server.port, "/api/vendors/save", {
+      body: JSON.stringify(VALID_BODY),
+      method: "POST",
+      headers: {
+        ...writeHeaders(server),
+        origin: "https://evil.example",
+      },
+    });
+
+    expect(missing.status).toBe(403);
+    expect(forged.status).toBe(403);
+    expect(readFileSync(configPath, "utf8")).toBe(before);
+  });
+
+  it("非法字段回 400 且零写盘（含明文密钥）", async () => {
+    const { server } = await start();
+    const configPath = resolveConfigPath();
+    const before = readFileSync(configPath, "utf8");
+
+    const noModels = await call(server.port, "/api/vendors/save", {
+      body: JSON.stringify({
+        ...VALID_BODY,
+        models: [],
+      }),
+      headers: writeHeaders(server),
+      method: "POST",
+    });
+    const plainKey = await call(server.port, "/api/vendors/save", {
+      body: JSON.stringify({
+        ...VALID_BODY,
+        apiKey: "sk-plaintext",
+      }),
+      headers: writeHeaders(server),
+      method: "POST",
+    });
+
+    expect(noModels.status).toBe(400);
+    expect(plainKey.status).toBe(400);
+    expect(readFileSync(configPath, "utf8")).toBe(before);
+  });
+
+  it("删除供应商写回配置，未知名字回 400", async () => {
+    const { server } = await start();
+
+    const gone = await call(server.port, "/api/vendors/delete", {
+      body: JSON.stringify({
+        name: "Anthropic",
+      }),
+      headers: writeHeaders(server),
+      method: "POST",
+    });
+    const unknown = await call(server.port, "/api/vendors/delete", {
+      body: JSON.stringify({
+        name: "Nope",
+      }),
+      headers: writeHeaders(server),
+      method: "POST",
+    });
+
+    expect(gone.status).toBe(200);
+    expect(loadConfig().vendors.map((v) => v.name)).toEqual([
+      "[OI]",
+    ]);
+    expect(unknown.status).toBe(400);
   });
 });
 
@@ -816,7 +957,7 @@ describe("访问控制", () => {
 
   it("Origin 不匹配的探测请求被拒绝且不触发探测", async () => {
     const { monitor, server } = await start();
-    const single = vi.spyOn(monitor, "triggerProbe").mockResolvedValue(null);
+    const single = vi.spyOn(monitor, "triggerProbe").mockResolvedValue([]);
     const all = vi.spyOn(monitor, "triggerAllProbes").mockResolvedValue([]);
 
     const origin = await call(server.port, "/api/probes", {
@@ -841,7 +982,7 @@ describe("访问控制", () => {
 
   it("未配置的供应商名不触发探测", async () => {
     const { monitor, server } = await start();
-    const single = vi.spyOn(monitor, "triggerProbe").mockResolvedValue(null);
+    const single = vi.spyOn(monitor, "triggerProbe").mockResolvedValue([]);
 
     const res = await call(server.port, "/api/probes/unknown-vendor", {
       method: "POST",
@@ -934,7 +1075,7 @@ describe("体检接口", () => {
     expect(data.configPath).toBe(resolveConfigPath());
     expect(data.configExists).toBe(true);
     expect(data.vendors).toHaveLength(2);
-    expect(data.vendors[0].checks).toHaveLength(6);
+    expect(data.vendors[0].checks).toHaveLength(5);
     expect(data.global.cwd).toBe(projectDir);
     // 只读：查询不改动配置文件
     expect(readFileSync(resolveConfigPath(), "utf8")).toBe(before);

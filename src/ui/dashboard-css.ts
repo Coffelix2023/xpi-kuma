@@ -300,9 +300,131 @@ ${fonts}
     .kuma-kv-wide { grid-template-columns: minmax(120px, max-content) 1fr; }
     .kuma-kv-wide dd { text-align: left; word-break: break-all; }
 
-    /* 体检表：说明与动作要能换行，未通过项用破坏色标记 */
-    .kuma-note { white-space: normal; text-align: left; min-width: 160px; }
-    .kuma-check-fail { color: var(--destructive); font-weight: 700; }
+    /*
+     * 摘要条：四项等宽的计数 / 状态。
+     *
+     * 用 grid 而不是 flex-wrap，让四项在任何视口下都对齐成一条；窄视口由下面的
+     * 媒体查询降成两列。
+     */
+    .kuma-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--kuma-space-2);
+      margin-bottom: var(--kuma-space-3);
+    }
+    .kuma-summary-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      border: 1px solid var(--border);
+      border-radius: ${radius()};
+      padding: var(--kuma-space-1) var(--kuma-space-2);
+    }
+    .kuma-summary-label { color: var(--muted-foreground); font-size: var(--kuma-font-xs); }
+    .kuma-summary-value {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: var(--kuma-font-lg);
+    }
+
+    /* 通过 / 未通过 pill：颜色只是辅助通道，文字才是判定 */
+    .kuma-pill {
+      display: inline-block;
+      font-size: var(--kuma-font-xs);
+      padding: 1px 8px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      white-space: nowrap;
+    }
+    .kuma-pill-ok { color: var(--foreground); }
+    .kuma-pill-fail { color: var(--destructive); }
+
+    /*
+     * 体检页的供应商分卡：卡头 + 检查项列表。
+     *
+     * 未通过的卡整体加一条破坏色左边线，扫一眼就能定位到哪一家。
+     */
+    .kuma-vendor-check {
+      border: 1px solid var(--border);
+      border-radius: ${radius()};
+      padding: var(--kuma-space-2);
+      margin-bottom: var(--kuma-space-2);
+    }
+    .kuma-vendor-check-fail { border-left: 3px solid var(--destructive); }
+    .kuma-vendor-check-head {
+      display: flex;
+      align-items: baseline;
+      gap: var(--kuma-space-1);
+      margin-bottom: var(--kuma-space-1);
+    }
+    .kuma-vendor-check-head .kuma-card-model { flex: 1; }
+    .kuma-check-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: var(--kuma-space-1);
+    }
+    .kuma-check-item {
+      display: grid;
+      grid-template-columns: minmax(90px, max-content) max-content 1fr;
+      align-items: baseline;
+      gap: var(--kuma-space-1);
+      padding: var(--kuma-space-1) 0;
+      border-top: 1px solid var(--border);
+    }
+    .kuma-check-item:first-child { border-top: 0; }
+    .kuma-check-name { font-weight: 600; }
+    .kuma-check-detail { color: var(--muted-foreground); word-break: break-all; }
+    .kuma-check-action {
+      grid-column: 3;
+      color: var(--primary);
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    /*
+     * 供应商分组头与模型卡片：分组头讲供应商（endpoint 与三个动作），卡片只讲模型。
+     */
+    .kuma-vendor-group { margin-bottom: var(--kuma-space-3); }
+    .kuma-vendor-head {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: var(--kuma-space-1);
+      margin-bottom: var(--kuma-space-1);
+    }
+    .kuma-vendor-actions {
+      display: flex;
+      gap: var(--kuma-space-1);
+      margin-left: auto;
+    }
+
+    /* 供应商编辑表单：字段纵向排列，动作靠右 */
+    .kuma-vendor-form {
+      border: 1px solid var(--border);
+      border-radius: ${radius()};
+      padding: var(--kuma-space-2);
+      margin-bottom: var(--kuma-space-2);
+      display: grid;
+      gap: var(--kuma-space-1);
+    }
+    .kuma-field { display: grid; gap: 2px; }
+    .kuma-field-label { color: var(--muted-foreground); font-size: var(--kuma-font-sm); }
+    .kuma-field input,
+    .kuma-field textarea {
+      font-family: var(--font-mono);
+      font-size: var(--kuma-font-sm);
+      color: var(--foreground);
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: ${radius(-2)};
+      padding: 4px 8px;
+      width: 100%;
+    }
+    .kuma-field-hint { margin: 0; color: var(--muted-foreground); font-size: var(--kuma-font-xs); }
+    .kuma-form-error { margin: 0; color: var(--destructive); font-size: var(--kuma-font-sm); }
+    .kuma-form-actions { display: flex; justify-content: flex-end; gap: var(--kuma-space-1); }
 
     .kuma-steps { margin: 0; padding-left: var(--kuma-space-3); }
     .kuma-steps li { margin-bottom: var(--kuma-space-1); }
@@ -398,6 +520,10 @@ ${fonts}
       .kuma-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
       .kuma-chart-wrap svg { height: 200px; }
       .kuma-rank-grid { grid-template-columns: 1fr; }
+      /* 摘要条与检查项在窄视口降列，避免把 detail 挤成一字一行 */
+      .kuma-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .kuma-check-item { grid-template-columns: 1fr max-content; }
+      .kuma-check-detail, .kuma-check-action { grid-column: 1 / -1; }
     }
   `;
 }

@@ -11,11 +11,13 @@ function vendor(overrides: Partial<VendorConfig> = {}): VendorConfig {
   return {
     apiKey: "sk-secret",
     endpoint: "https://api.example/v1",
-    model: "m",
     name: "A",
     balance: {
       apiPath: "/v1/balance",
     },
+    models: [
+      "m",
+    ],
     probe: {
       enabled: false,
       interval: "5m",

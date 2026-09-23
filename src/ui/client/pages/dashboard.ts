@@ -96,8 +96,16 @@ export function dashboardPageFragment(): string {
         return withBusy(load);
       }
 
-      function probe(vendor) {
-        var path = vendor ? "/api/probes/" + encodeURIComponent(vendor) : "/api/probes";
+      /**
+       * 触发探测：带 model 只探测该模型，不带则探测该供应商全部模型。
+       *
+       * 探测完重新拉一次数据，卡片立刻反映新结果。
+       */
+      function probe(vendor, model) {
+        var path = vendor
+          ? "/api/probes/" + encodeURIComponent(vendor) +
+            (model ? "?model=" + encodeURIComponent(model) : "")
+          : "/api/probes";
         return withBusy(function () {
           return api(path, "POST").then(load);
         });
@@ -219,6 +227,7 @@ export function dashboardPageFragment(): string {
       wireTheme();
       wireFamily();
       wireRefreshAll();
+      wireAddVendor();
       wireNav();
       wireLanguage();
       document.addEventListener("visibilitychange", onVisibilityChange);

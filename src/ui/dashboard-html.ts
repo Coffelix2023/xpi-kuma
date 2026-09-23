@@ -135,7 +135,9 @@ ${tabs}
       <div class="kuma-actions">
         <a class="kuma-link" data-kuma-nav="/accounts" href="/accounts"${i18nAttr("link.accounts")}>${zh("link.accounts")}</a>
         <a class="kuma-link" data-kuma-nav="/settings" href="/settings"${i18nAttr("link.settings")}>${zh("link.settings")}</a>
+        <button type="button" id="kuma-vendor-add"${i18nAttr("vendor.add")}>${zh("vendor.add")}</button>
       </div>
+      <div id="kuma-vendor-form" hidden></div>
       <div id="kuma-vendors"></div>
       <div id="kuma-notice" hidden></div>
     </section>

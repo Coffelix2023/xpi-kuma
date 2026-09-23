@@ -371,6 +371,42 @@ describe("getProbeHistory", () => {
       200,
     ]);
   });
+
+  it("按 model 过滤：同供应商两模型互不串数据", () => {
+    const db = openTempDatabase();
+    db.insertProbeRecord(
+      probeResult({
+        model: "m-a",
+        ttft: 111,
+      }),
+    );
+    db.insertProbeRecord(
+      probeResult({
+        model: "m-b",
+        ttft: 222,
+      }),
+    );
+
+    const onlyA = db.getProbeHistory("OpenAI", 10, {
+      model: "m-a",
+    });
+    expect(onlyA).toHaveLength(1);
+    expect(onlyA[0].model).toBe("m-a");
+    expect(onlyA[0].ttft).toBe(111);
+
+    const onlyUpB = db.getProbeHistory("OpenAI", 10, {
+      model: "m-b",
+      status: "up",
+    });
+    expect(onlyUpB).toHaveLength(1);
+    expect(onlyUpB[0].model).toBe("m-b");
+
+    const down = db.getProbeHistory("OpenAI", 10, {
+      model: "m-b",
+      status: "down",
+    });
+    expect(down).toHaveLength(0);
+  });
 });
 
 describe("cleanOldRecords", () => {

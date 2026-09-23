@@ -196,10 +196,10 @@ export interface DatabaseOptions {
 }
 
 /**
- * 探测历史查询的两条字面量 SQL。
+ * 探测历史查询的四条字面量 SQL。
  *
- * 带不带状态过滤的占位符个数不同，SQLite 只能靠两套语句表达；写成字面量而不是
- * 拼接字符串，既避免注入面，也让两条语句各自可读。
+ * model / status 过滤的占位符个数不同，SQLite 只能靠多套语句表达；写成字面量而不是
+ * 拼接字符串，既避免注入面，也让每条语句各自可读。
  */
 const HISTORY_SQL = `SELECT id, timestamp, vendor, model, status, ttft, total_time,
                 tokens_input, tokens_output, error
@@ -212,6 +212,19 @@ const HISTORY_SQL_BY_STATUS = `SELECT id, timestamp, vendor, model, status, ttft
                 tokens_input, tokens_output, error
          FROM probe_records
          WHERE vendor = ? AND status = ?
+         ORDER BY timestamp DESC
+         LIMIT ?`;
+const HISTORY_SQL_BY_MODEL = `SELECT id, timestamp, vendor, model, status, ttft, total_time,
+                tokens_input, tokens_output, error
+         FROM probe_records
+         WHERE vendor = ? AND model = ?
+         ORDER BY timestamp DESC
+         LIMIT ?`;
+
+const HISTORY_SQL_BY_MODEL_AND_STATUS = `SELECT id, timestamp, vendor, model, status, ttft, total_time,
+                tokens_input, tokens_output, error
+         FROM probe_records
+         WHERE vendor = ? AND model = ? AND status = ?
          ORDER BY timestamp DESC
          LIMIT ?`;
 /**
@@ -671,18 +684,38 @@ export class Database {
     return result.sort(compareEfficiency);
   }
 
-  /** 查询指定供应商最近 N 条探测记录，按时间倒序；可按状态过滤。 */
-  getProbeHistory(vendor: string, limit: number, status?: string): ProbeHistoryRow[] {
-    // 两条查询各写成字面量：带不带状态过滤的占位符个数不同，SQLite 的可选子句
-    // 无法用绑定参数表达，因此不做字符串拼接 —— 探测状态来自调用方，不该进 SQL 文本
-    if (status === undefined) {
-      return this.db.prepare(HISTORY_SQL).all(vendor, limit) as ProbeHistoryRow[];
+  /**
+   * 查询指定供应商最近 N 条探测记录，按时间倒序。
+   *
+   * `options.model` / `options.status` 均可选；四种组合用四条字面量 SQL 表达，
+   * 不做字符串拼接 —— 过滤值来自调用方，不该进 SQL 文本。
+   */
+  getProbeHistory(
+    vendor: string,
+    limit: number,
+    options?: {
+      model?: string;
+      status?: string;
+    },
+  ): ProbeHistoryRow[] {
+    const { model, status } = options ?? {};
+    if (model !== undefined && status !== undefined) {
+      return this.db
+        .prepare(HISTORY_SQL_BY_MODEL_AND_STATUS)
+        .all(vendor, model, status, limit) as ProbeHistoryRow[];
     }
-    return this.db
-      .prepare(HISTORY_SQL_BY_STATUS)
-      .all(vendor, status, limit) as ProbeHistoryRow[];
+    if (model !== undefined) {
+      return this.db
+        .prepare(HISTORY_SQL_BY_MODEL)
+        .all(vendor, model, limit) as ProbeHistoryRow[];
+    }
+    if (status !== undefined) {
+      return this.db
+        .prepare(HISTORY_SQL_BY_STATUS)
+        .all(vendor, status, limit) as ProbeHistoryRow[];
+    }
+    return this.db.prepare(HISTORY_SQL).all(vendor, limit) as ProbeHistoryRow[];
   }
-
   /**
    * 按时间桶查询费用与 token 趋势，供面板折线图使用。
    *

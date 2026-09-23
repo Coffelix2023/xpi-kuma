@@ -26,8 +26,10 @@ function tempDir(): string {
 function vendor(overrides: Partial<VendorConfig> = {}): VendorConfig {
   return {
     endpoint: "https://api.example/v1",
-    model: "m",
     name: "A",
+    models: [
+      "m",
+    ],
     oauth: {
       authorizeUrl: "https://api.example/authorize",
       clientId: "cid",

@@ -176,12 +176,12 @@ describe("客户端脚本契约", () => {
     );
   });
 
-  it("探测按钮区分单供应商与全部", () => {
+  it("探测按钮区分单模型、单供应商与全部", () => {
     const html = generateDashboardHTML();
-    expect(html).toContain('"/api/probes/" + encodeURIComponent(vendor)');
-    expect(html).toContain(
-      'var path = vendor ? "/api/probes/" + encodeURIComponent(vendor) : "/api/probes"',
-    );
+    // 单模型：带 ?model=；单供应商：只到供应商路径；全部：/api/probes
+    expect(html).toContain('(model ? "?model=" + encodeURIComponent(model) : "")');
+    expect(html).toContain('? "/api/probes/" + encodeURIComponent(vendor) +');
+    expect(html).toContain(': "/api/probes";');
   });
 });
 
@@ -439,14 +439,22 @@ describe("供应商账户页结构", () => {
 });
 
 describe("配置体检页结构", () => {
-  it("提供只读声明、三块容器与重新读取按钮", () => {
+  it("提供只读声明、六块容器与重新读取按钮", () => {
     const html = generateSettingsHTML();
-    expect(html).toContain("不产生任何写盘操作");
-    expect(html).toContain('id="kuma-diagnostics"');
-    expect(html).toContain('id="kuma-diagnostics-vendors"');
-    expect(html).toContain('id="kuma-diagnostics-global"');
+    // 只读声明改写为「修改请到供应商标签页」，不再只是「不写盘」
+    expect(html).toContain("只读校验");
+    expect(html).toContain("供应商」标签页");
+    for (const id of [
+      "kuma-updated",
+      "kuma-issues",
+      "kuma-diagnostics",
+      "kuma-diagnostics-vendors",
+      "kuma-diagnostics-global",
+      "kuma-diagnostics-error",
+    ]) {
+      expect(html, id).toContain(`id="${id}"`);
+    }
     expect(html).toContain('id="kuma-reload"');
-    expect(html).toContain('id="kuma-issues"');
   });
 
   it("解析失败替代卡默认隐藏，避免与正常表格同时出现", () => {
@@ -461,7 +469,10 @@ describe("配置体检页结构", () => {
     expect(script).toContain("不会自动修复");
     expect(script).toContain("showSection");
     // 不提供任何写操作入口
+    // 不提供任何写操作入口：体检页不写盘，也不引导到写接口
     expect(script).not.toContain("/api/accounts/manual");
+    expect(script).not.toContain("/api/vendors/save");
+    expect(script).not.toContain("/api/vendors/delete");
   });
 });
 

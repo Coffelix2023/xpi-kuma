@@ -210,14 +210,6 @@ export interface AccountBalance {
   vendor: string;
 }
 
-/** 供应商价格，单位与费用统计一致，标注基准为每千 tokens。 */
-export interface VendorPrice {
-  /** 每千输入 token 价格 */
-  input: number;
-  /** 每千输出 token 价格 */
-  output: number;
-}
-
 /**
  * 供应商余额取数配置；三段全部可选。
  *
@@ -262,11 +254,11 @@ export interface VendorConfig {
   balance?: VendorBalanceConfig;
   /** OpenAI-compatible base URL，例如 `https://api.openai.com/v1` */
   endpoint: string;
-  model: string;
+  /** 探测的模型列表；至少一项，去重 */
+  models: string[];
   name: string;
   /** OAuth 授权配置（可选） */
   oauth?: VendorOAuthConfig;
-  price?: VendorPrice;
   probe: VendorProbeConfig;
 }
 
@@ -289,13 +281,19 @@ export interface KumaConfig {
   vendors: VendorConfig[];
 }
 
-/** `getVendorStatus()` 返回的单个供应商当前状态。 */
+/**
+ * `getVendorStatus()` 返回的单条当前状态。
+ *
+ * 一条 = 一个 `(供应商, 模型)` 组合：卡片按模型展开，供应商信息（`endpoint`）在每个
+ * 模型上重复，让前端不必再拉一份配置就能画出分组头。
+ */
 export interface VendorStatus {
+  /** 供应商 base URL；分组头展示，编辑表单预填 */
+  endpoint: string;
   /** 最近一次探测时间（毫秒时间戳），从未探测时为 null */
   lastProbeTime: number | null;
   model: string;
   name: string;
-  price: VendorPrice | null;
   status: ProbeStatus;
   totalTime: number | null;
   ttft: number | null;

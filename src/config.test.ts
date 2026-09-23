@@ -56,12 +56,9 @@ describe("loadConfig", () => {
     expect(config.vendors).toHaveLength(4);
     expect(config.vendors[0]).toMatchObject({
       endpoint: "https://api.openai.com/v1",
-      model: "gpt-4o-mini",
-      name: "OpenAI",
-      price: {
-        input: 0.15,
-        output: 0.6,
-      },
+      models: [
+        "gpt-4o-mini",
+      ],
       probe: {
         enabled: true,
         interval: "5m",
@@ -95,10 +92,68 @@ describe("loadConfig", () => {
 
   it("缺少必填字段时抛错", () => {
     tempAgentDir();
-    writeConfig("vendors:\n  - name: OpenAI\n    model: gpt-4o-mini\n");
+    writeConfig("vendors:\n  - name: OpenAI\n    models: [gpt-4o-mini]\n");
     expect(() => loadConfig()).toThrow(/endpoint/);
   });
 
+  it("旧式单值 model 归一化为一项 models，price 被安静忽略", () => {
+    tempAgentDir();
+    writeConfig(
+      [
+        "vendors:",
+        '  - name: "A"',
+        '    endpoint: "https://api.example/v1"',
+        '    model: "m"',
+        "    price: { input: 1, output: 2 }",
+      ].join("\n"),
+    );
+
+    const config = loadConfig();
+
+    expect(config.vendors[0].models).toEqual([
+      "m",
+    ]);
+    expect(config.vendors[0]).not.toHaveProperty("price");
+  });
+
+  it("models 为空列表或含空串时抛 ConfigError", () => {
+    tempAgentDir();
+    writeConfig(
+      [
+        "vendors:",
+        '  - name: "A"',
+        '    endpoint: "https://api.example/v1"',
+        "    models: []",
+      ].join("\n"),
+    );
+    expect(() => loadConfig()).toThrow("缺少 models");
+
+    writeConfig(
+      [
+        "vendors:",
+        '  - name: "A"',
+        '    endpoint: "https://api.example/v1"',
+        '    models: [""]',
+      ].join("\n"),
+    );
+    expect(() => loadConfig()).toThrow("非空字符串列表");
+  });
+
+  it("models 去重", () => {
+    tempAgentDir();
+    writeConfig(
+      [
+        "vendors:",
+        '  - name: "A"',
+        '    endpoint: "https://api.example/v1"',
+        '    models: ["m1", "m2", "m1"]',
+      ].join("\n"),
+    );
+    expect(loadConfig().vendors[0].models).toEqual([
+      "m1",
+      "m2",
+    ]);
+  });
   it("非法 probe.timeout 抛错", () => {
     tempAgentDir();
     writeConfig(

@@ -6,12 +6,8 @@
 vendors:
   - name: "OpenAI"
     endpoint: "https://api.openai.com/v1"
-    model: "gpt-4o-mini"
+    models: ["gpt-4o-mini"]
     api_key: "${OPENAI_API_KEY}"
-    # 价格单位与统计口径一致，基准为每千 tokens
-    price:
-      input: 0.15
-      output: 0.6
     probe:
       enabled: true
       interval: "5m"
@@ -33,11 +29,8 @@ vendors:
 
   - name: "Anthropic"
     endpoint: "https://api.anthropic.com/v1"
-    model: "claude-3-5-haiku-latest"
+    models: ["claude-3-5-haiku-latest"]
     api_key: "${ANTHROPIC_API_KEY}"
-    price:
-      input: 0.8
-      output: 4
     probe:
       enabled: true
       interval: "1h"
@@ -45,11 +38,8 @@ vendors:
 
   - name: "9router"
     endpoint: "https://api.9router.example/v1"
-    model: "gpt-4o-mini"
+    models: ["gpt-4o-mini"]
     api_key: "${NINE_ROUTER_API_KEY}"
-    price:
-      input: 0.1
-      output: 0.4
     probe:
       # 中转站限流较严时建议关闭探测
       enabled: false
@@ -58,11 +48,9 @@ vendors:
 
   - name: "commandcode"
     endpoint: "https://api.commandcode.ai/provider/v1"
-    model: "<your-commandcode-model>"   # 占位：公开仓库不披露默认 model，按你的订阅填写
+    # 占位：公开仓库不披露默认 model，按你的订阅填写；同一供应商可配多个模型
+    models: ["<your-commandcode-model>"]
     api_key: "${COMMANDCODE_API_KEY}"
-    price:
-      input: 0                      # 无公开价目，按你的实际价目填写
-      output: 0
     probe:
       enabled: true
       interval: "5m"

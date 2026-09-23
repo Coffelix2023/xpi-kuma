@@ -8,11 +8,13 @@ function vendor(overrides: Partial<VendorConfig> = {}): VendorConfig {
   return {
     apiKey: "sk-secret",
     endpoint: "https://api.example/v1",
-    model: "m",
     name: "A",
     balance: {
       apiPath: "/v1/balance",
     },
+    models: [
+      "m",
+    ],
     oauth: {
       authorizeUrl: "https://api.example/authorize",
       clientId: "cid",

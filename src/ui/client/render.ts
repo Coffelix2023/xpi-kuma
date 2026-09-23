@@ -132,10 +132,6 @@ export function renderFragment(): string {
         return box;
       }
 
-      function price(p) {
-        if (!p) { return t("chart.missingPrice"); }
-        return "¥" + p.input + " / ¥" + p.output;
-      }
 
       function text(tag, className, content) {
         var node = document.createElement(tag);
@@ -144,61 +140,124 @@ export function renderFragment(): string {
         return node;
       }
 
+      /**
+       * 按供应商分组的模型卡片。
+       *
+       * 接口返回的 vendors 是扁平的 (供应商, 模型) 列表；这里按 name 分组，
+       * 供应商信息（endpoint / 编辑 / 删除 / 探测全部）落在分组头，卡片只讲单个模型的
+       * TTFT、响应时间与最近探测 —— 卡片的存在意义是比这两个时间指标。
+       */
       function renderVendors(vendors) {
         var host = el("kuma-vendors");
         if (!host) { return; }
         host.textContent = "";
-        var grid = document.createElement("div");
-        grid.className = "kuma-grid";
 
-        vendors.forEach(function (v) {
-          var card = document.createElement("article");
-          card.className = "kuma-card";
+        groupByVendor(vendors).forEach(function (group) {
+          var section = document.createElement("section");
+          section.className = "kuma-vendor-group";
+          section.appendChild(vendorHead(group));
 
-          var head = document.createElement("div");
-          head.className = "kuma-card-head";
-          head.appendChild(text("span", "", statusIcon(v.status)));
-          head.appendChild(text("span", "kuma-card-name", v.name));
-          head.appendChild(text("span", "kuma-card-model", v.model));
-          card.appendChild(head);
-
-          card.appendChild(text("span", "kuma-badge " + statusClass(v.status), v.status));
-
-          var dl = document.createElement("dl");
-          dl.className = "kuma-kv";
-          [
-            [t("vendor.pricePerK"), price(v.price)],
-            [t("vendor.ttft"), ms(v.ttft)],
-            [t("vendor.responseTime"), ms(v.totalTime)],
-            [
-              t("vendor.lastProbe"),
-              v.lastProbeTime
-                ? new Date(v.lastProbeTime).toLocaleTimeString(dateLocale())
-                : t("common.never")
-            ]
-          ].forEach(function (pair) {
-            dl.appendChild(text("dt", "", pair[0]));
-            dl.appendChild(text("dd", "", pair[1]));
+          var grid = document.createElement("div");
+          grid.className = "kuma-grid";
+          group.models.forEach(function (v) {
+            grid.appendChild(modelCard(v));
           });
-          card.appendChild(dl);
-
-          var foot = document.createElement("div");
-          foot.className = "kuma-card-foot";
-          var btn = text("button", "", t("common.refresh"));
-          btn.type = "button";
-          btn.setAttribute("aria-label", t("vendor.probeNow") + " " + v.name);
-          btn.addEventListener("click", function () {
-            btn.disabled = true;
-            btn.textContent = t("common.probing");
-            probe(v.name);
-          });
-          foot.appendChild(btn);
-          card.appendChild(foot);
-
-          grid.appendChild(card);
+          section.appendChild(grid);
+          host.appendChild(section);
         });
+      }
 
-        host.appendChild(grid);
+      /** 按供应商名分组，保持接口给的顺序（分组头与卡片的相对次序都可预期）。 */
+      function groupByVendor(vendors) {
+        var groups = [];
+        var index = {};
+        vendors.forEach(function (v) {
+          if (!index[v.name]) {
+            index[v.name] = { models: [], name: v.name, endpoint: v.endpoint };
+            groups.push(index[v.name]);
+          }
+          index[v.name].models.push(v);
+        });
+        return groups;
+      }
+
+      /** 供应商分组头：名称 / endpoint / 编辑 / 删除 / 探测全部。 */
+      function vendorHead(group) {
+        var head = document.createElement("div");
+        head.className = "kuma-vendor-head";
+        head.appendChild(text("span", "kuma-card-name", group.name));
+        head.appendChild(text("span", "kuma-card-model", group.endpoint || ""));
+
+        var actions = document.createElement("div");
+        actions.className = "kuma-vendor-actions";
+        var all = text("button", "", t("vendor.probeAll"));
+        all.type = "button";
+        all.setAttribute("aria-label", t("vendor.probeAll") + " " + group.name);
+        all.addEventListener("click", function () {
+          all.disabled = true;
+          probe(group.name);
+        });
+        actions.appendChild(all);
+        actions.appendChild(vendorAction(t("vendor.edit"), function () {
+          openVendorForm(group);
+        }));
+        actions.appendChild(vendorAction(t("vendor.remove"), function () {
+          askRemoveVendor(group.name);
+        }));
+        head.appendChild(actions);
+        return head;
+      }
+
+      function vendorAction(label, onClick) {
+        var btn = text("button", "", label);
+        btn.type = "button";
+        btn.addEventListener("click", onClick);
+        return btn;
+      }
+
+      /** 单模型卡片：状态、TTFT、响应时间、最近探测与只探测该模型的按钮。 */
+      function modelCard(v) {
+        var card = document.createElement("article");
+        card.className = "kuma-card";
+
+        var head = document.createElement("div");
+        head.className = "kuma-card-head";
+        head.appendChild(text("span", "", statusIcon(v.status)));
+        head.appendChild(text("span", "kuma-card-model", v.model));
+        card.appendChild(head);
+
+        card.appendChild(text("span", "kuma-badge " + statusClass(v.status), v.status));
+
+        var dl = document.createElement("dl");
+        dl.className = "kuma-kv";
+        [
+          [t("vendor.ttft"), ms(v.ttft)],
+          [t("vendor.responseTime"), ms(v.totalTime)],
+          [
+            t("vendor.lastProbe"),
+            v.lastProbeTime
+              ? new Date(v.lastProbeTime).toLocaleTimeString(dateLocale())
+              : t("common.never")
+          ]
+        ].forEach(function (pair) {
+          dl.appendChild(text("dt", "", pair[0]));
+          dl.appendChild(text("dd", "", pair[1]));
+        });
+        card.appendChild(dl);
+
+        var foot = document.createElement("div");
+        foot.className = "kuma-card-foot";
+        var btn = text("button", "", t("common.refresh"));
+        btn.type = "button";
+        btn.setAttribute("aria-label", t("vendor.probeNow") + " " + v.name + " " + v.model);
+        btn.addEventListener("click", function () {
+          btn.disabled = true;
+          btn.textContent = t("common.probing");
+          probe(v.name, v.model);
+        });
+        foot.appendChild(btn);
+        card.appendChild(foot);
+        return card;
       }
 
       /** 无供应商时给出可操作提示，而不是让用户面对空白页。 */

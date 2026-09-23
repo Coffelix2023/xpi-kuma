@@ -97,9 +97,8 @@ dashboard:
 vendors:
   - name: "OpenAI"
     endpoint: "https://api.openai.com/v1"
-    model: "gpt-4o-mini"
+    models: ["gpt-4o-mini", "gpt-4o"]   # one probe per model; cards are per model
     api_key: "${OPENAI_API_KEY}"   # resolved from the environment, never stored
-    price: { input: 0.15, output: 0.6 }   # per 1K tokens
     probe:
       enabled: true
       interval: "5m"              # 5m / 30s / 1h
@@ -107,9 +106,8 @@ vendors:
 
   - name: "commandcode"         # command-code upstream API reachability sample
     endpoint: "https://api.commandcode.ai/provider/v1"
-    model: "<your-commandcode-model>"   # placeholder; fill in your subscribed model
+    models: ["<your-commandcode-model>"]   # placeholder; fill in your subscribed models
     api_key: "${COMMANDCODE_API_KEY}"
-    price: { input: 0, output: 0 }       # no public price list; fill in yours
     probe:
       enabled: true
       interval: "5m"
@@ -173,8 +171,18 @@ stays authenticated.
 | --- | --- | --- |
 | Main panel | `/` | Four tabs: usage overview, usage stats, trend, vendor overview |
 | Accounts | `/accounts` | Balance per vendor, where that number came from, and the action needed to refresh it |
-| Config checkup | `/settings` | Read-only report on `config.yaml`: six checks per vendor, plus global and storage facts |
+| Config checkup | `/settings` | Read-only report on `config.yaml`: five checks per vendor, plus global and storage facts |
 | Getting started | `/empty` | Guidance when no vendor is configured, or none has recorded usage yet |
+
+**Vendors are edited from the panel itself.** The main panel's vendor tab groups cards by vendor: the
+group header carries the name, endpoint, "probe all", "edit" and "delete", and each configured model
+gets its own card with its TTFT, response time and last-probe time. Saving a form writes back to
+`~/.pi/agent/data/xpi-kuma/config.yaml` — with a `config.yaml.bak-<timestamp>` backup, `0600` on the
+temporary file, an atomic `rename`, and your comments and unknown fields preserved — then hot-reloads
+in the same process: the API and the probe timers pick up the new models immediately, with no panel
+restart. Invalid input returns `400` and leaves the file byte-for-byte unchanged. The `api_key` field is
+always blank when you open an existing vendor: leaving it empty keeps the stored key, and the panel never
+echoes a secret back.
 
 The main panel's four sections are tabs — one visible at a time. The header's theme family is a
 dropdown (default / atlas) with a separate light-dark button; with no stored preference the default
@@ -203,7 +211,7 @@ by **read-only suggestions**, **provider/model and project spend rankings**, and
 rate is `cacheRead / (input + cacheRead)`; when the denominator is zero it reads "unknown" instead of a fabricated `0%`.
 
 **Suggestions are an explanation layer, not a decision layer.** Each one states its target, evidence, sample size, time
-range and confidence; the panel never switches models, writes vendor config, or fires a probe because of one.
+range and confidence; the panel never switches models, rewrites your vendor config, or fires a probe because of one.
 
 **The efficiency ranking uses only real call timings.** Request start, first response token and completion are taken from
 direct observation of the Pi event chain; a provider/model combination needs at least 10 successful records with complete
@@ -229,7 +237,7 @@ and marked stale instead of being dropped.
 
 **The config checkup page is strictly read-only.** It never creates the config template, never repairs a
 broken file, and never displays an API key — only the `${ENV_VAR}` placeholder name and whether that
-variable is currently set. A file that fails to parse hides the vendor table and the global section
+variable is currently set. A file that fails to parse hides the vendor cards and the global section
 entirely, showing the error, its line number, and the path instead of half the data.
 
 Vendors without a usable balance endpoint are the expected case, not a bug: none of the four samples in

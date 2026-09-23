@@ -47,7 +47,7 @@ export class VendorMonitor {
   }
 
   /**
-   * 为每个启用探测的供应商启动定时任务。
+   * 为每个启用探测的 `(供应商, 模型)` 组合启动定时任务。
    *
    * 首次探测在第一个间隔之后触发，面板在此之前显示 `unknown`。
    */
@@ -57,12 +57,14 @@ export class VendorMonitor {
         continue;
       }
       const interval = parseInterval(vendor.probe.interval);
-      const timer = setInterval(() => {
-        void this.runProbe(vendor);
-      }, interval);
-      // 定时器不阻止 Pi 退出；stop() 仍是主清理路径
-      timer.unref?.();
-      this.timers.add(timer);
+      for (const model of vendor.models) {
+        const timer = setInterval(() => {
+          void this.runProbe(vendor, model);
+        }, interval);
+        // 定时器不阻止 Pi 退出；stop() 仍是主清理路径
+        timer.unref?.();
+        this.timers.add(timer);
+      }
     }
   }
 
@@ -88,18 +90,22 @@ export class VendorMonitor {
     return this.config.vendors.map((vendor) => vendor.name);
   }
 
-  /** 执行一次探测并落库。 */
-  private async runProbe(vendor: VendorConfig): Promise<void> {
-    const result = await this.probeVendor(vendor);
-    this.database.insertProbeRecord(result);
+  /** 指定供应商配置的模型列表，供路由校验 `?model=`。 */
+  vendorModels(vendorName: string): string[] {
+    return this.config.vendors.find((v) => v.name === vendorName)?.models ?? [];
   }
 
+  /** 执行一次 `(供应商, 模型)` 探测并落库。 */
+  private async runProbe(vendor: VendorConfig, model: string): Promise<void> {
+    const result = await this.probeVendor(vendor, model);
+    this.database.insertProbeRecord(result);
+  }
   /**
-   * 对单个供应商执行一次探测。
+   * 对单个供应商的指定模型执行一次探测。
    *
    * 永远返回结果而不抛错：超时、HTTP 错误、网络错误统一记为 `down`。
    */
-  async probeVendor(vendor: VendorConfig): Promise<ProbeResult> {
+  async probeVendor(vendor: VendorConfig, model: string): Promise<ProbeResult> {
     const startedAt = Date.now();
     const controller = new AbortController();
     this.inFlight.add(controller);
@@ -111,7 +117,7 @@ export class VendorMonitor {
         {
           body: JSON.stringify({
             max_tokens: PROBE_MAX_TOKENS,
-            model: vendor.model,
+            model,
             stream: true,
             messages: [
               {
@@ -143,7 +149,7 @@ export class VendorMonitor {
       );
       return {
         error: null,
-        model: vendor.model,
+        model,
         status: "up",
         timestamp: startedAt,
         tokensInput,
@@ -155,7 +161,7 @@ export class VendorMonitor {
     } catch (error) {
       return {
         error: describeError(error),
-        model: vendor.model,
+        model,
         status: "down",
         timestamp: startedAt,
         tokensInput: 0,
@@ -238,20 +244,43 @@ export class VendorMonitor {
    *
    * 供应商未配置或未启用探测时返回 null。
    */
-  async triggerProbe(vendorName: string): Promise<ProbeResult | null> {
+  async triggerProbe(vendorName: string, model?: string): Promise<ProbeResult[]> {
     const vendor = this.config.vendors.find((v) => v.name === vendorName);
     if (!vendor) {
-      return null;
+      return [];
     }
-    const result = await this.probeVendor(vendor);
-    this.database.insertProbeRecord(result);
-    return result;
+    const models =
+      model === undefined
+        ? vendor.models
+        : [
+            model,
+          ];
+    // 与 triggerAllProbes 一致：并发探测，落库在全部返回后按序进行
+    const results = await Promise.all(
+      models.map(async (name) => this.probeVendor(vendor, name)),
+    );
+    for (const result of results) {
+      this.database.insertProbeRecord(result);
+    }
+    return results;
   }
 
-  /** 立即探测所有供应商，用于面板的「全部刷新」。 */
+  /** 立即探测所有 `(供应商, 模型)` 组合，用于面板的「全部刷新」。 */
   async triggerAllProbes(): Promise<ProbeResult[]> {
+    const combos: {
+      vendor: VendorConfig;
+      model: string;
+    }[] = [];
+    for (const vendor of this.config.vendors) {
+      for (const model of vendor.models) {
+        combos.push({
+          model,
+          vendor,
+        });
+      }
+    }
     const results = await Promise.all(
-      this.config.vendors.map(async (vendor) => this.probeVendor(vendor)),
+      combos.map(async ({ model, vendor }) => this.probeVendor(vendor, model)),
     );
     for (const result of results) {
       this.database.insertProbeRecord(result);
@@ -266,19 +295,28 @@ export class VendorMonitor {
    * 这样单次抖动不会把性能指标清空。
    */
   getVendorStatus(): VendorStatus[] {
-    return this.config.vendors.map((vendor) => {
-      const [latest] = this.database.getProbeHistory(vendor.name, 1);
-      const [latestOk] = this.database.getProbeHistory(vendor.name, 1, "up");
-      return {
-        lastProbeTime: latest?.timestamp ?? null,
-        model: vendor.model,
-        name: vendor.name,
-        price: vendor.price ?? null,
-        status: (latest?.status as VendorStatus["status"]) ?? "unknown",
-        totalTime: latestOk?.total_time ?? null,
-        ttft: latestOk?.ttft ?? null,
-      };
-    });
+    const statuses: VendorStatus[] = [];
+    for (const vendor of this.config.vendors) {
+      for (const model of vendor.models) {
+        const [latest] = this.database.getProbeHistory(vendor.name, 1, {
+          model,
+        });
+        const [latestOk] = this.database.getProbeHistory(vendor.name, 1, {
+          model,
+          status: "up",
+        });
+        statuses.push({
+          endpoint: vendor.endpoint,
+          lastProbeTime: latest?.timestamp ?? null,
+          model,
+          name: vendor.name,
+          status: (latest?.status as VendorStatus["status"]) ?? "unknown",
+          totalTime: latestOk?.total_time ?? null,
+          ttft: latestOk?.ttft ?? null,
+        });
+      }
+    }
+    return statuses;
   }
 }
 

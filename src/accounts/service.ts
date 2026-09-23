@@ -5,9 +5,9 @@ import { type ManualBalanceInput, writeManualBalance } from "./manual.ts";
 import { OAuthFlow, OAuthTokenStore } from "./oauth.ts";
 import { resolveBalances } from "./resolve.ts";
 
-/** 明细表的一行：余额快照 + 该供应商的模型，表格展示成「供应商 · 模型」。 */
+/** 明细表的一行：余额快照 + 该供应商的模型列表，表格展示成「供应商 · 模型1、模型2」。 */
 export interface AccountRow extends AccountBalance {
-  model: string;
+  models: string[];
 }
 
 /**
@@ -82,7 +82,7 @@ export class AccountService {
     );
     const rows: AccountRow[] = this.config.vendors.map((vendor) => ({
       ...(stored.get(vendor.name) ?? emptyBalance(vendor.name)),
-      model: vendor.model,
+      models: vendor.models,
     }));
     rows.sort((a, b) => balanceOrder(a.balance) - balanceOrder(b.balance));
     return {

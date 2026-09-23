@@ -8,15 +8,15 @@
 
 ### Requirement: 定期探测供应商性能
 
-系统 SHALL 根据配置文件中每个供应商的 `probe.interval` 设置，定期向供应商 API 发送测试请求，测量以下指标：
+系统 SHALL 根据配置文件中每个供应商的 `probe.interval` 设置，为其配置的**每个模型**各起一个定时任务，定期向供应商 API 发送测试请求，测量以下指标：
 - TTFT（Time To First Token，首字延迟）：从请求发送到接收到第一个流式响应块的时间（毫秒）
 - 总响应时间：从请求发送到响应完成的总时间（毫秒）
 - 可用性状态：`up`（正常）、`down`（失败）、`degraded`（部分可用）
 
 #### Scenario: 成功探测供应商
 
-- **WHEN** 配置了 OpenAI 供应商，`probe.interval: "5m"`，当前时间距离上次探测已超过5分钟
-- **THEN** 系统向 OpenAI API 发送测试请求（prompt: "hi", max_tokens: 1），记录 TTFT 和总响应时间到数据库，状态标记为 `up`
+- **WHEN** 配置了 [OI] 供应商，`models: ["gpt-4o", "gpt-4o-mini"]`，`probe.interval: "5m"`，当前时间距离上次探测已超过5分钟
+- **THEN** 系统为这两个模型各起一个定时器（共 2 个），分别向 [OI] API 发送测试请求（prompt: "hi", max_tokens: 1），把 TTFT、总响应时间与模型名记录到数据库，状态标记为 `up`
 
 #### Scenario: 探测超时
 
@@ -96,17 +96,18 @@
 
 ### Requirement: 获取供应商当前状态
 
-系统 SHALL 提供接口查询所有配置供应商的当前状态，包括：
-- 供应商名称、模型
+系统 SHALL 提供接口查询所有配置 `(供应商, 模型)` 组合的当前状态，包括：
+- 供应商名称、endpoint、模型
 - 最新探测时间
-- 当前状态（up/down/degraded）
+- 当前状态（up/down/degraded/unknown）
 - 最近一次成功探测的 TTFT 和总响应时间
-- 配置的价格（从配置文件读取）
+
+返回的是扁平列表：一条 = 一个 `(供应商, 模型)` 组合，供应商信息（endpoint）在每条上重复，前端据此分组渲染。
 
 #### Scenario: 查询所有供应商状态
 
-- **WHEN** 调用 `getVendorStatus()` 且数据库中有 OpenAI、Anthropic、9router 的探测记录
-- **THEN** 返回3个状态对象，每个包含 name, model, status, ttft, totalTime, price, lastProbeTime
+- **WHEN** 调用 `getVendorStatus()`，配置了 3 个供应商、共 4 个模型，且数据库中有各自的探测记录
+- **THEN** 返回 4 个状态对象，每个包含 name, endpoint, model, status, ttft, totalTime, lastProbeTime
 
 #### Scenario: 无探测记录时状态
 

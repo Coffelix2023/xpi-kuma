@@ -99,10 +99,6 @@ export const MESSAGES = {
     en: "Cost lines (left axis) and a dashed token total line (right axis) over time, one line per vendor; hover a point for details.",
     zh: "按时间的费用折线（左轴）与 token 总量虚线（右轴），每个供应商一条折线；悬停某一时间点可看该点明细。",
   },
-  "chart.missingPrice": {
-    en: "Not configured",
-    zh: "未配置",
-  },
   "chart.svgTitle": {
     en: "Cost and token trend",
     zh: "费用与 token 趋势",
@@ -119,13 +115,9 @@ export const MESSAGES = {
     en: "Endpoint",
     zh: "Endpoint",
   },
-  "check.model": {
-    en: "Model",
-    zh: "模型",
-  },
-  "check.price": {
-    en: "Price completeness",
-    zh: "价格完整性",
+  "check.models": {
+    en: "Models",
+    zh: "模型列表",
   },
   "check.probe": {
     en: "Probe config",
@@ -678,8 +670,8 @@ export const MESSAGES = {
     zh: "通过",
   },
   "settings.readonly": {
-    en: "This page is read-only: no template creation, no config edits, no database writes.",
-    zh: "本页只读取与校验，不产生任何写盘操作：不创建模板、不修改配置文件、不写数据库。",
+    en: "Read-only checks — this page never writes. To add or edit vendors, use the Vendors tab on the main panel.",
+    zh: "本页只读校验，不写盘；要新增或修改供应商，请到主面板「供应商」标签页。",
   },
   "settings.reload": {
     en: "Reload",
@@ -708,6 +700,22 @@ export const MESSAGES = {
   "settings.sourceNote": {
     en: "Global ~/.pi/agent/data/xpi-kuma/config.yaml",
     zh: "全局 ~/.pi/agent/data/xpi-kuma/config.yaml",
+  },
+  "settings.summary.checks": {
+    en: "Checks",
+    zh: "检查项",
+  },
+  "settings.summary.issues": {
+    en: "Failing",
+    zh: "未通过",
+  },
+  "settings.summary.parse": {
+    en: "Parse",
+    zh: "解析",
+  },
+  "settings.summary.vendors": {
+    en: "Vendors",
+    zh: "供应商",
   },
   "source.api": {
     en: "API query",
@@ -801,25 +809,93 @@ export const MESSAGES = {
     en: " days",
     zh: " 天",
   },
+  "vendor.add": {
+    en: "Add vendor",
+    zh: "新增供应商",
+  },
+  "vendor.apiKey": {
+    en: `API key (\${VAR} placeholder; leave blank to keep)`,
+    zh: `API Key（\${VAR} 占位符；留空表示不修改）`,
+  },
+  "vendor.cancel": {
+    en: "Cancel",
+    zh: "取消",
+  },
+  "vendor.confirmRemove": {
+    en: "Delete this vendor? Its models stop being probed.",
+    zh: "确认删除该供应商？它的模型将不再被探测。",
+  },
+  "vendor.edit": {
+    en: "Edit",
+    zh: "编辑",
+  },
+  "vendor.endpoint": {
+    en: "Endpoint",
+    zh: "Endpoint",
+  },
+  "vendor.formHint": {
+    en: "One model per line. Writes ~/.pi/agent/data/xpi-kuma/config.yaml (backup kept).",
+    zh: "每行一个模型。写回 ~/.pi/agent/data/xpi-kuma/config.yaml（保留备份）。",
+  },
+  "vendor.interval": {
+    en: "Probe interval",
+    zh: "探测间隔",
+  },
   "vendor.lastProbe": {
     en: "Last probe",
     zh: "最近探测",
   },
-  "vendor.noVendor": {
-    en: "No vendor configured — edit ~/.pi/agent/data/xpi-kuma/config.yaml",
-    zh: "未配置任何供应商，请编辑 ~/.pi/agent/data/xpi-kuma/config.yaml",
+  "vendor.models": {
+    en: "Models",
+    zh: "模型列表",
   },
-  "vendor.pricePerK": {
-    en: "Price / 1k tok",
-    zh: "价格/千tok",
+  "vendor.name": {
+    en: "Name",
+    zh: "名称",
+  },
+  "vendor.newTitle": {
+    en: "New vendor",
+    zh: "新增供应商",
+  },
+  "vendor.noVendor": {
+    en: "No vendor configured — add one here, or edit ~/.pi/agent/data/xpi-kuma/config.yaml",
+    zh: "未配置任何供应商 — 可在此新增，或编辑 ~/.pi/agent/data/xpi-kuma/config.yaml",
+  },
+  "vendor.probeAll": {
+    en: "Probe all",
+    zh: "探测全部",
+  },
+  "vendor.probeEnabled": {
+    en: "Scheduled probing",
+    zh: "定时探测",
   },
   "vendor.probeNow": {
     en: "Probe now",
     zh: "立即探测",
   },
+  "vendor.remove": {
+    en: "Delete",
+    zh: "删除",
+  },
   "vendor.responseTime": {
     en: "Response time",
     zh: "响应时间",
+  },
+  "vendor.save": {
+    en: "Save",
+    zh: "保存",
+  },
+  "vendor.saved": {
+    en: "Saved. Probes restarted with the new models.",
+    zh: "已保存，探测已按新模型重启。",
+  },
+  "vendor.saveFailed": {
+    en: "Save failed: ",
+    zh: "保存失败：",
+  },
+  "vendor.timeout": {
+    en: "Probe timeout (ms)",
+    zh: "探测超时（毫秒）",
   },
   "vendor.ttft": {
     en: "TTFT",

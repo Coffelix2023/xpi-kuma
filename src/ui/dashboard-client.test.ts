@@ -120,11 +120,25 @@ class FakeElement {
   /** 下拉的选中值：页面脚本直接读写这个属性。 */
   value = "";
 
+  /** 派发一次 submit；表单提交的入口（真实 DOM 里 requestSubmit 的语义）。 */
+  submit(): void {
+    for (const handler of this.listeners.get("submit") ?? []) {
+      handler({
+        preventDefault: () => {},
+      });
+    }
+  }
+
   /** 派发一次 change；下拉的交互入口。 */
   change(): void {
     for (const handler of this.listeners.get("change") ?? []) {
       handler({});
     }
+  }
+
+  /** 与真实 DOM 同语义：在自身子树里查。 */
+  querySelectorAll(selector: string): FakeElement[] {
+    return queryAll(this, selector);
   }
 
   descendants(): FakeElement[] {
@@ -285,6 +299,8 @@ function shell(): FakeDocument {
   doc.add("div", "kuma-overview");
   doc.add("div", "kuma-overview-notice");
   doc.add("div", "kuma-vendors");
+  doc.add("div", "kuma-vendor-form");
+  doc.add("button", "kuma-vendor-add");
   doc.add("div", "kuma-notice");
   doc.add("div", "kuma-stats");
   doc.add("div", "kuma-insights");
@@ -336,10 +352,10 @@ function shell(): FakeDocument {
 
 function vendor(overrides: Record<string, unknown> = {}) {
   return {
+    endpoint: "http://127.0.0.1:1/v1",
     lastProbeTime: null,
     model: "gpt-4o-mini",
     name: "[OI]",
-    price: null,
     status: "up",
     totalTime: 120,
     ttft: 40,
@@ -377,6 +393,7 @@ function respond(body: unknown, status = 200) {
 }
 
 interface Harness {
+  confirm: ReturnType<typeof vi.fn>;
   doc: FakeDocument;
   fetchMock: ReturnType<typeof vi.fn>;
   hash: () => string;
@@ -404,8 +421,10 @@ function harness(hash = "#token-abc", makeShell = shell): Harness {
       storage.set(key, value);
     },
   };
+  const confirmMock = vi.fn(() => true);
   const windowObject = {
     clearInterval,
+    confirm: confirmMock,
     history: {
       replaceState,
     },
@@ -413,6 +432,7 @@ function harness(hash = "#token-abc", makeShell = shell): Harness {
     setInterval,
   };
   return {
+    confirm: confirmMock,
     doc,
     fetchMock,
     hash: () => location.hash,
@@ -1185,7 +1205,7 @@ describe("时间范围与探测", () => {
     expect(h.fetchMock.mock.calls[1][0]).toBe("/api/dashboard?period=24h");
   });
 
-  it("卡片刷新按钮只探测该供应商", async () => {
+  it("卡片刷新按钮只探测该模型", async () => {
     const h = harness();
     h.fetchMock.mockReturnValue(respond(dashboard()));
 
@@ -1196,6 +1216,25 @@ describe("时间范围与探测", () => {
     const buttons = h.doc.querySelectorAll(".kuma-card-foot button");
     expect(buttons).toHaveLength(1);
     buttons[0].click();
+    await flush();
+
+    // 每模型一张卡：卡片按钮带 ?model=，只落该模型
+    expect(h.fetchMock.mock.calls[0][0]).toBe(
+      `/api/probes/${encodeURIComponent("[OI]")}?model=${encodeURIComponent("gpt-4o-mini")}`,
+    );
+    expect(h.fetchMock.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("分组头的探测全部不带 model，探测该供应商所有模型", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+
+    h.start();
+    await flush();
+    h.fetchMock.mockClear();
+
+    const all = h.doc.querySelectorAll(".kuma-vendor-actions button")[0];
+    all.click();
     await flush();
 
     expect(h.fetchMock.mock.calls[0][0]).toBe(
@@ -1217,6 +1256,89 @@ describe("时间范围与探测", () => {
     await flush();
     expect(all?.disabled).toBe(false);
     expect(all?.textContent).toBe("全部刷新");
+  });
+});
+
+describe("供应商编辑表单", () => {
+  /** 打开新增表单：入口是供应商面板操作行里的按钮。 */
+  function openAdd(h: Harness): FakeElement {
+    h.doc.getElementById("kuma-vendor-add")?.click();
+    const host = h.doc.getElementById("kuma-vendor-form");
+    if (!host) {
+      throw new Error("缺少表单容器");
+    }
+    return host;
+  }
+
+  it("新增入口打开表单，密钥字段恒为空", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const host = openAdd(h);
+    expect(host.hidden).toBe(false);
+    const inputs = host.querySelectorAll("input");
+    // name / endpoint / apiKey / interval / timeout：密钥那一格必须是空的
+    expect(inputs).toHaveLength(5);
+    expect(inputs[2].value).toBe("");
+  });
+
+  it("提交走 /api/vendors/save 且模型按行拆分去重", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+    h.fetchMock.mockClear();
+
+    const host = openAdd(h);
+    const inputs = host.querySelectorAll("input");
+    inputs[0].value = "Fresh";
+    inputs[1].value = "https://api.example.test/v1";
+    host.querySelectorAll("textarea")[0].value = "m1\nm2\nm1";
+    host.querySelectorAll("form")[0].submit();
+    await flush();
+
+    const [path, init] = h.fetchMock.mock.calls[0];
+    expect(path).toBe("/api/vendors/save");
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(init.body) as {
+      models: string[];
+      name: string;
+    };
+    expect(body.name).toBe("Fresh");
+    expect(body.models).toEqual([
+      "m1",
+      "m2",
+    ]);
+  });
+
+  it("编辑预填现值，删除走确认后调用 /api/vendors/delete", async () => {
+    const h = harness();
+    h.fetchMock.mockReturnValue(respond(dashboard()));
+    h.start();
+    await flush();
+
+    const actions = h.doc.querySelectorAll(".kuma-vendor-actions button");
+    actions[1].click();
+    const host = h.doc.getElementById("kuma-vendor-form");
+    const inputs = host?.querySelectorAll("input") ?? [];
+    expect(inputs[0].value).toBe("[OI]");
+    expect(inputs[1].value).toBe("http://127.0.0.1:1/v1");
+    // 编辑态不回显任何既有密钥
+    expect(inputs[2].value).toBe("");
+    expect(host?.querySelectorAll("textarea")[0].value).toBe("gpt-4o-mini");
+
+    h.fetchMock.mockClear();
+    actions[2].click();
+    await flush();
+
+    expect(h.confirm).toHaveBeenCalled();
+    const [path, init] = h.fetchMock.mock.calls[0];
+    expect(path).toBe("/api/vendors/delete");
+    expect(JSON.parse(init.body)).toEqual({
+      name: "[OI]",
+    });
   });
 });
 
@@ -1854,13 +1976,24 @@ function diagnosticsPayload(overrides: Record<string, unknown> = {}) {
       {
         endpoint: "https://api.example/v1",
         issueCount: 1,
-        model: "m",
         name: "A",
         checks: [
           {
             action: null,
-            detail: "name / endpoint / model 均已配置",
+            detail: "name / endpoint / models 均已配置",
             key: "required",
+            ok: true,
+          },
+          {
+            action: null,
+            detail: "已配置：https://api.example/v1",
+            key: "endpoint",
+            ok: true,
+          },
+          {
+            action: null,
+            detail: "已配置 1 个模型：m",
+            key: "models",
             ok: true,
           },
           {
@@ -1869,6 +2002,15 @@ function diagnosticsPayload(overrides: Record<string, unknown> = {}) {
             key: "apiKey",
             ok: false,
           },
+          {
+            action: null,
+            detail: "间隔 5m，超时 30000 ms",
+            key: "probe",
+            ok: true,
+          },
+        ],
+        models: [
+          "m",
         ],
       },
     ],
@@ -1892,7 +2034,15 @@ describe("配置体检页脚本", () => {
     expect(vendors?.textContent).toContain("未通过");
     // 密钥只显示变量名与下一步，不回显值
     expect(vendors?.textContent).toContain("export OPENAI_API_KEY");
-    expect(h.doc.getElementById("kuma-issues")?.textContent).toBe("待处理 1 项");
+    // 摘要条四项：供应商 / 检查项 / 未通过 / 解析状态
+    const summary = h.doc.getElementById("kuma-issues")?.textContent ?? "";
+    expect(summary).toContain("供应商1");
+    expect(summary).toContain("检查项5");
+    expect(summary).toContain("未通过1");
+    expect(summary).toContain("解析通过");
+    // 分卡而不是 rowspan 大表
+    expect(h.doc.querySelectorAll(".kuma-vendor-check")).toHaveLength(1);
+    expect(h.doc.querySelectorAll(".kuma-check-item")).toHaveLength(5);
     expect(h.doc.getElementById("kuma-diagnostics-global")?.textContent).toContain(
       "不存在",
     );

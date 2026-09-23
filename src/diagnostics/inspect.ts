@@ -12,15 +12,8 @@ import { parseInterval } from "../monitors/vendor-monitor.ts";
 import { defaultDatabasePath } from "../storage/database.ts";
 import type { KumaConfig, VendorConfig } from "../types.ts";
 
-/** 六项逐供应商检查的稳定标识；界面据此翻译标签。 */
-export type VendorCheckKey =
-  | "apiKey"
-  | "endpoint"
-  | "model"
-  | "price"
-  | "probe"
-  | "required";
-
+/** 五项逐供应商检查的稳定标识；界面据此翻译标签。 */
+export type VendorCheckKey = "apiKey" | "endpoint" | "models" | "probe" | "required";
 /** 单项检查结果。`detail` 与 `action` 含动态值（如环境变量名），由服务端生成。 */
 export interface DiagnosticsCheck {
   /** 下一步动作；检查通过时为 null */
@@ -36,7 +29,7 @@ export interface DiagnosticsVendor {
   endpoint: string;
   /** 未通过的检查数 */
   issueCount: number;
-  model: string;
+  models: string[];
   name: string;
 }
 
@@ -201,7 +194,7 @@ export function describeApiKeySource(rawValue: unknown): {
   };
 }
 
-/** 逐供应商六项检查；每项未通过时都带一句可执行的下一步。 */
+/** 逐供应商五项检查；每项未通过时都带一句可执行的下一步。 */
 export function inspectVendor(
   vendor: VendorConfig,
   rawEntry: Record<string, unknown> | null,
@@ -209,21 +202,20 @@ export function inspectVendor(
   const checks: DiagnosticsCheck[] = [
     {
       action: null,
-      detail: "name / endpoint / model 均已配置",
+      detail: "name / endpoint / models 均已配置",
       key: "required",
       ok: true,
     },
     endpointCheck(vendor),
-    modelCheck(vendor),
+    modelsCheck(vendor),
     apiKeyCheck(rawEntry),
-    priceCheck(vendor),
     probeCheck(vendor),
   ];
   return {
     checks,
     endpoint: vendor.endpoint,
     issueCount: checks.filter((check) => !check.ok).length,
-    model: vendor.model,
+    models: vendor.models,
     name: vendor.name,
   };
 }
@@ -240,13 +232,14 @@ function endpointCheck(vendor: VendorConfig): DiagnosticsCheck {
   };
 }
 
-function modelCheck(vendor: VendorConfig): DiagnosticsCheck {
-  const ok = vendor.model.trim() !== "";
+function modelsCheck(vendor: VendorConfig): DiagnosticsCheck {
+  const models = vendor.models;
+  const ok = models.length > 0 && models.every((name) => name.trim() !== "");
   return {
-    key: "model",
+    key: "models",
     ok,
-    action: ok ? null : "填写该供应商要调用的模型 ID",
-    detail: ok ? `已配置：${vendor.model}` : "model 为空",
+    action: ok ? null : "填写该供应商要调用的模型 ID 列表（models 至少一项）",
+    detail: ok ? `已配置 ${models.length} 个模型：${models.join("、")}` : "models 为空",
   };
 }
 
@@ -270,25 +263,6 @@ function apiKeyCheck(rawEntry: Record<string, unknown> | null): DiagnosticsCheck
       : `${source.label} 当前未设置（仅显示变量名，不回显密钥值）`,
     key: "apiKey",
     ok: set,
-  };
-}
-
-function priceCheck(vendor: VendorConfig): DiagnosticsCheck {
-  const price = vendor.price;
-  if (price && Number.isFinite(price.input) && Number.isFinite(price.output)) {
-    return {
-      action: null,
-      detail: `输入 ¥${price.input} / 输出 ¥${price.output}（每千 tokens）`,
-      key: "price",
-      ok: true,
-    };
-  }
-  const missing = price ? "output" : "input 与 output";
-  return {
-    action: "补齐 price.input 与 price.output；缺一项即整体视为未配置，费用按零计",
-    detail: `价格不完整：缺 ${missing}`,
-    key: "price",
-    ok: false,
   };
 }
 

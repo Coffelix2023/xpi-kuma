@@ -367,6 +367,45 @@ function rawStatus(url: string, headers: Record<string, string> = {}): Promise<n
   });
 }
 
+/** 发一次可带请求体的请求，拿回状态码与响应体：写接口与热重载断言都要看响应内容。 */
+function rawCall(
+  url: string,
+  options: {
+    body?: string;
+    headers?: Record<string, string>;
+    method?: string;
+  } = {},
+): Promise<{
+  body: string;
+  status: number;
+}> {
+  const parsed = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        agent: false,
+        headers: options.headers,
+        host: parsed.hostname,
+        method: options.method ?? "GET",
+        path: `${parsed.pathname}${parsed.search}`,
+        port: parsed.port,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () =>
+          resolve({
+            body: Buffer.concat(chunks).toString("utf8"),
+            status: res.statusCode ?? 0,
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.end(options.body);
+  });
+}
+
 function lastUrl(): string {
   return String(openBrowser.mock.calls.at(-1)?.[0] ?? "");
 }
@@ -725,6 +764,72 @@ describe("监控面板服务", () => {
       "warning",
     );
     expect(openBrowser).toHaveBeenCalledTimes(1);
+    await sessionShutdown(handlers, ctx);
+  });
+
+  it("保存供应商后热重载：接口立刻返回新模型，定时器数与模型数一致", async () => {
+    const { api, commands, handlers } = fakePi();
+    extensionFactory(api);
+    const dir = setupCwd();
+    const configPath = resolveConfigPath();
+    // 两个模型：定时器数必须是 2 而不是「供应商数 1」
+    writeFileSync(
+      configPath,
+      [
+        "vendors:",
+        '  - name: "Only"',
+        '    endpoint: "http://127.0.0.1:1/v1"',
+        '    models: ["m1", "m2"]',
+      ].join("\n"),
+    );
+    const { ctx } = fakeCtx(dir);
+    await sessionStart(handlers, ctx);
+    await runCommand(commands, ctx);
+
+    const origin = new URL(lastUrl()).origin;
+    const token = new URL(lastUrl()).hash.slice(1);
+    const before = await rawCall(`${origin}/api/dashboard`, {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    expect(before.status).toBe(200);
+    const saved = await rawCall(`${origin}/api/vendors/save`, {
+      body: JSON.stringify({
+        endpoint: "http://127.0.0.1:1/v1",
+        name: "Only",
+        probeInterval: "5m",
+        probeTimeout: 1000,
+        models: [
+          "m1",
+          "m2",
+          "m3",
+        ],
+      }),
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        origin,
+      },
+    });
+    expect(saved.status).toBe(200);
+
+    const after = await rawCall(`${origin}/api/dashboard`, {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    expect(after.status).toBe(200);
+    const models = (
+      JSON.parse(after.body) as {
+        vendors: {
+          model: string;
+        }[];
+      }
+    ).vendors.map((v) => v.model);
+    // 新增的 m3 立刻可见，无需重启面板
+    expect(models).toContain("m3");
     await sessionShutdown(handlers, ctx);
   });
 });

@@ -94,9 +94,8 @@ dashboard:
 vendors:
   - name: "OpenAI"
     endpoint: "https://api.openai.com/v1"
-    model: "gpt-4o-mini"
+    models: ["gpt-4o-mini", "gpt-4o"]   # 每个模型一条探测；卡片按模型展开
     api_key: "${OPENAI_API_KEY}"   # 仅从环境变量解析，不落盘
-    price: { input: 0.15, output: 0.6 }   # 每千 tokens
     probe:
       enabled: true
       interval: "5m"              # 支持 5m / 30s / 1h
@@ -104,9 +103,8 @@ vendors:
 
   - name: "commandcode"         # command-code 上游 API 可达性探测样例
     endpoint: "https://api.commandcode.ai/provider/v1"
-    model: "<your-commandcode-model>"   # 占位：按你的订阅填写 model
+    models: ["<your-commandcode-model>"]   # 占位：按你的订阅填写模型列表
     api_key: "${COMMANDCODE_API_KEY}"
-    price: { input: 0, output: 0 }       # 无公开价目，按你的实际价目填写
     probe:
       enabled: true
       interval: "5m"
@@ -163,9 +161,15 @@ retention:
 | --- | --- | --- |
 | 主面板 | `/` | 四个标签页：使用量总览、使用量统计、趋势图、供应商总览 |
 | 供应商账户 | `/accounts` | 各供应商余额、这个数字的来源，以及刷新它需要做的动作 |
-| 配置体检 | `/settings` | 对 `config.yaml` 的只读体检：逐供应商六项检查，外加全局与存储项 |
+| 配置体检 | `/settings` | 对 `config.yaml` 的只读体检：逐供应商五项检查，外加全局与存储项 |
 | 开始使用 | `/empty` | 未配供应商、或还没有任何用量记录时的引导 |
 
+**供应商可在面板内直接编辑。** 主面板「供应商」标签页按供应商分组：分组头是名称、endpoint 与
+「探测全部 / 编辑 / 删除」，组内每个配置的模型各一张卡片，卡上是该模型的 TTFT、响应时间与最近探测时间。
+保存表单会写回 `~/.pi/agent/data/xpi-kuma/config.yaml`：写前生成 `config.yaml.bak-<时间戳>` 备份、临时文件
+权限 `0600`、`rename` 原子替换，并保留你的注释与未知字段；随后同进程热重载 —— 接口与探测定时器立刻
+按新模型工作，不用重启面板。非法输入回 `400`，文件字节不变。打开既有供应商时 `api_key` 一栏恒为空：
+留空即保留原有密钥，面板也永不回显明文。
 
 主面板的四个区块是标签页，一次只显示一个；页头的主题家族是下拉（默认 / 图鉴），亮暗另有独立按钮。
 无偏好时的默认外观是**图鉴 · 亮色**，偏好存在 `localStorage` 的 `kuma.family` 与 `kuma.theme`，同样在首帧渲染前生效。
@@ -186,7 +190,7 @@ retention:
 `cacheRead / (input + cacheRead)` 计算，分母为零时显示「未知」，不用 `0%` 顶替。
 
 **建议是解释层，不是决策层。** 每条建议只说明对象、依据、样本数、时间范围与置信度；面板不因此切换模型、
-不写入供应商配置，也不发起探测。
+不擅自改写供应商配置，也不发起探测。
 
 **效率排行只用真实调用时间点。** 请求开始、首个响应 token 与完成时刻都取自 Pi 事件链的直接观测；一个
 provider/model 组合要有至少 10 条带完整时间点的成功记录才进入排行（门槛固定为 10，第一版不配置化），
@@ -205,7 +209,8 @@ provider/model 组合要有至少 10 条带完整时间点的成功记录才进�
 三档全部失败时页面显示「未知」而不是 `0`；此前取到过的值会保留并标注为旧值，而不是被丢掉。
 
 **配置体检页严格只读。** 它不会创建配置模板、不会修复损坏的文件，也绝不显示 API Key —— 只回显
-`${ENV_VAR}` 占位符的名字，以及该变量当前是否已设置。解析失败时整块隐藏供应商表与全局项，
+`${ENV_VAR}` 占位符的名字，以及该变量当前是否已设置。要增删改供应商，请到主面板「供应商」标签页。
+解析失败时整块隐藏供应商卡与全局卡，
 改为显示错误、行号与路径，而不是展示半截数据。
 
 没有可用的余额接口才是常态，不是缺陷：`config.example.yaml` 里的四家样例目前都没有公开的余额接口，

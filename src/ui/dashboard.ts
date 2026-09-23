@@ -1,12 +1,10 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { AccountService } from "../accounts/service.ts";
-import type { UsageCollector } from "../collectors/usage-collector.ts";
 import { FileLogger } from "../lib/log.ts";
-import type { VendorMonitor } from "../monitors/vendor-monitor.ts";
 import { loadDashboardToken } from "./dashboard-token.ts";
 import { handleApi } from "./routes/api.ts";
+import type { ApiContext } from "./routes/context.ts";
 import { cspFor, respond } from "./routes/http.ts";
 import { handleOAuthCallback } from "./routes/oauth.ts";
 import { PAGES } from "./routes/pages.ts";
@@ -30,17 +28,28 @@ export interface DashboardServer {
   readonly port: number;
   /** 目标端口被占用、已回退到系统随机端口 */
   readonly portFallback: boolean;
+  /**
+   * OAuth 回调地址。
+   *
+   * 由服务自己按监听结果构造：端口只有在监听成功后才知道，热重载重建账户服务时
+   * 要再注入一次（见 `index.ts` 的 `reloadRuntimeConfig`）。
+   */
+  readonly redirectUri: string;
   /** 本次服务启动生成的一次性访问凭据 */
   readonly token: string;
   /** 交给浏览器打开的本机地址，凭据放在 fragment 中 */
   readonly url: string;
 }
 
+/**
+ * 服务按请求读取的运行时依赖。
+ *
+ * 与 `ApiContext` 的差别只有服务自己补齐的 `logger` / `originMatches`。写成取值函数
+ * 而不是启动时捕获的对象，是为了让 `reloadConfig()` 就地替换字段后，接口立刻反映新配置。
+ */
+export type DashboardRuntimeDeps = Omit<ApiContext, "logger" | "originMatches">;
+
 export interface DashboardServerOptions {
-  /** 账户服务；未启用时传 null，账户接口回 503 */
-  accountService?: AccountService | null;
-  /** 当前工作目录；体检页据此展示「当前项目」 */
-  cwd?: string;
   /** 目标端口；0 或缺省表示交给系统随机分配 */
   port?: number;
 }
@@ -65,12 +74,9 @@ function getLogger(): FileLogger {
  * 本文件只保留启动、凭据、Host/Origin 校验、CSP 与关闭逻辑。
  */
 export async function startDashboardServer(
-  usageCollector: UsageCollector,
-  vendorMonitor: VendorMonitor,
+  provideDeps: () => DashboardRuntimeDeps,
   options: DashboardServerOptions = {},
 ): Promise<DashboardServer> {
-  const accountService = options.accountService ?? null;
-  const cwd = options.cwd ?? process.cwd();
   const token = loadDashboardToken();
 
   const server = createServer((req, res) => {
@@ -86,8 +92,9 @@ export async function startDashboardServer(
 
   const { port, portFallback } = await listenWithFallback(server, options.port ?? 0);
   const host = `${LOOPBACK}:${port}`;
-  // 端口此刻才确定，授权回调地址只能在监听成功后注入
-  accountService?.setRedirectUri(`http://${host}/oauth/callback`);
+  // 端口此刻才确定，授权回调地址只能在监听成功后构造
+  const redirectUri = `http://${host}/oauth/callback`;
+  provideDeps().accounts?.setRedirectUri(redirectUri);
 
   function handle(req: IncomingMessage, res: ServerResponse): void {
     // 严格 Host 校验：阻断 DNS rebinding 之类的跨源访问
@@ -102,7 +109,7 @@ export async function startDashboardServer(
     // OAuth 回调是唯一豁免 Bearer 的写路径：服务商重定向不带我们的凭据，
     // 改由一次性 state 校验把关（Host 校验已在上一步完成）
     if (method === "GET" && url.pathname === "/oauth/callback") {
-      handleOAuthCallback(url, res, accountService, getLogger());
+      handleOAuthCallback(url, res, provideDeps().accounts, getLogger());
       return;
     }
 
@@ -119,13 +126,11 @@ export async function startDashboardServer(
       return;
     }
 
+    // 按请求读取：reloadConfig() 换掉运行时字段后，这里立刻拿到新值
     const handled = handleApi(method, url, req, res, {
-      accounts: accountService,
-      cwd,
+      ...provideDeps(),
       logger: getLogger(),
       originMatches: (request) => sameOrigin(request, host),
-      usageCollector,
-      vendorMonitor,
     });
     if (!handled) {
       respond(res, 404, "text/plain; charset=utf-8", "未找到", null);
@@ -136,6 +141,7 @@ export async function startDashboardServer(
     close: idempotentClose(server),
     port,
     portFallback,
+    redirectUri,
     token,
     url: `http://${host}/#${token}`,
   };

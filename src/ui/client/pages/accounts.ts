@@ -135,7 +135,7 @@ export function accountsPageFragment(): string {
         var tbody = document.createElement("tbody");
         rows.forEach(function (row) {
           var tr = document.createElement("tr");
-          tr.appendChild(text("td", "", row.vendor + " · " + row.model));
+          tr.appendChild(text("td", "", row.vendor + " · " + (row.models || []).join(t("common.separator"))));
           tr.appendChild(text("td", "kuma-source", sourceLabel(row)));
           tr.appendChild(text("td", typeof row.balance === "number" ? "kuma-total" : "", amountText(row.balance, row.currency)));
           tr.appendChild(text("td", "", topupText(row)));

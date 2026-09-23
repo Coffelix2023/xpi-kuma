@@ -11,6 +11,7 @@ import { accountsPageFragment } from "./client/pages/accounts.ts";
 import { dashboardPageFragment } from "./client/pages/dashboard.ts";
 import { emptyPageFragment } from "./client/pages/empty.ts";
 import { settingsPageFragment } from "./client/pages/settings.ts";
+import { vendorsPageFragment } from "./client/pages/vendors.ts";
 import { pollFragment } from "./client/poll.ts";
 import { rankingFragment } from "./client/ranking.ts";
 import { renderFragment } from "./client/render.ts";
@@ -53,6 +54,7 @@ export function dashboardClientScript(): string {
       rankingFragment(),
       insightsFragment(),
       chartFragment(),
+      vendorsPageFragment(),
       dashboardPageFragment(),
     ].join("\n"),
   );

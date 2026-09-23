@@ -200,6 +200,39 @@ function initRuntime(cwd: string): Runtime {
 }
 
 /**
+ * 写配置成功后热重载：重建探测定时器与账户服务，并回注 OAuth 回调地址。
+ *
+ * 就地替换 `runtime` 的字段而不重建整个运行时：数据库与 HTTP 服务继续复用，
+ * 在途请求不受影响。解析失败直接抛给调用方（写接口据此回 400），运行时保持原样。
+ */
+function reloadRuntimeConfig(): void {
+  const current = runtime;
+  if (!current) {
+    return;
+  }
+  const config = loadConfig();
+  const vendorMonitor = new VendorMonitor(current.database, config);
+  vendorMonitor.start();
+  void current.vendorMonitor.stop();
+  const accountService = new AccountService({
+    config,
+    database: current.database,
+    logger,
+  });
+  const server = current.dashboardServer;
+  if (server) {
+    // 端口没变：回调地址直接沿用服务自己的那份，不必再从 URL 反推
+    accountService.setRedirectUri(server.redirectUri);
+  }
+  current.accountService = accountService;
+  current.config = config;
+  current.vendorMonitor = vendorMonitor;
+  logger.info(
+    `配置热重载：${config.vendors.length} 个供应商，${vendorMonitor.activeTimerCount} 个探测定时器`,
+  );
+}
+
+/**
  * 旧的项目级配置只提示迁移，不写盘。
  *
  * 配置已改为全局唯一。全局文件还没建、而当前项目里还留着旧文件时，用户大概率以为
@@ -257,11 +290,14 @@ function ensureDashboardServer(current: Runtime): Promise<DashboardServer> {
     return Promise.resolve(current.dashboardServer);
   }
   dashboardStart ??= startDashboardServer(
-    current.usageCollector,
-    current.vendorMonitor,
-    {
-      accountService: current.accountService,
+    () => ({
+      accounts: current.accountService,
       cwd: current.cwd,
+      reloadConfig: reloadRuntimeConfig,
+      usageCollector: current.usageCollector,
+      vendorMonitor: current.vendorMonitor,
+    }),
+    {
       port: current.config.dashboard.port,
     },
   ).then(

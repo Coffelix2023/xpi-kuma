@@ -16,6 +16,7 @@ import { ACCOUNT_ROUTES } from "./accounts.ts";
 import type { ApiContext, ApiRoute } from "./context.ts";
 import { DIAGNOSTICS_ROUTES } from "./diagnostics.ts";
 import { respond } from "./http.ts";
+import { VENDOR_ROUTES } from "./vendors.ts";
 
 const VALID_PERIODS: StatsPeriod[] = [
   "1h",
@@ -194,7 +195,7 @@ function handleProbesAll(
   );
 }
 
-/** POST /api/probes/<name>：单个供应商探测。 */
+/** POST /api/probes/<name>?model=：单供应商探测；带 model 只探测该模型，不带则全部模型。 */
 function handleProbeOne(
   url: URL,
   req: IncomingMessage,
@@ -210,7 +211,12 @@ function handleProbeOne(
     respond(res, 404, "text/plain; charset=utf-8", "未知的供应商", null);
     return;
   }
-  void ctx.vendorMonitor.triggerProbe(name).then(
+  const model = url.searchParams.get("model");
+  if (model !== null && !ctx.vendorMonitor.vendorModels(name).includes(model)) {
+    respond(res, 404, "text/plain; charset=utf-8", "未知的模型", null);
+    return;
+  }
+  void ctx.vendorMonitor.triggerProbe(name, model ?? undefined).then(
     () => {
       respond(
         res,
@@ -228,7 +234,6 @@ function handleProbeOne(
     },
   );
 }
-
 const VALID_DIMENSIONS: AttributionDimension[] = [
   "project",
   "session",
@@ -290,6 +295,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   },
   ...ACCOUNT_ROUTES,
   ...DIAGNOSTICS_ROUTES,
+  ...VENDOR_ROUTES,
 ];
 
 /** 分派一个已通过凭据校验的 API 请求；返回是否命中某条路由。 */

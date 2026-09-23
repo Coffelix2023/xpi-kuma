@@ -6,12 +6,11 @@
  */
 export function settingsPageFragment(): string {
   return `
-      /** 六项检查的显示名；键与服务端 VendorCheckKey 一致（见 diagnostics/inspect.ts）。 */
+      /** 五项检查的显示名；键与服务端 VendorCheckKey 一致（见 diagnostics/inspect.ts）。 */
       var CHECK_LABELS = {
         apiKey: "check.apiKey",
         endpoint: "check.endpoint",
-        model: "check.model",
-        price: "check.price",
+        models: "check.models",
         probe: "check.probe",
         required: "check.required"
       };
@@ -71,15 +70,48 @@ export function settingsPageFragment(): string {
         host.appendChild(box);
       }
 
-      /** 供应商体检表：每行一项检查，未通过的行带下一步动作。 */
-      function renderVendorChecks(vendors, issueCount) {
-        var issues = el("kuma-issues");
-        if (issues) {
-          issues.textContent = issueCount > 0
-            ? t("settings.issuesPrefix") + count(issueCount) + t("settings.issuesSuffix")
-            : t("settings.allPass");
-        }
+      /**
+       * 摘要条：供应商数 / 检查项总数 / 未通过数 / 解析状态。
+       *
+       * 四项都是计数或状态，不给结论性判断 —— 结论由每张体检卡的 pill 表达。
+       */
+      function renderSummary(payload, vendorCount) {
+        var host = el("kuma-issues");
+        if (!host) { return; }
+        host.textContent = "";
+        var checks = 0;
+        (payload.vendors || []).forEach(function (vendor) {
+          checks += vendor.checks.length;
+        });
+        [
+          [t("settings.summary.vendors"), count(vendorCount)],
+          [t("settings.summary.checks"), count(checks)],
+          [t("settings.summary.issues"), count(payload.issueCount || 0)],
+          [
+            t("settings.summary.parse"),
+            payload.error ? t("settings.parseFail") : t("settings.parseOk")
+          ]
+        ].forEach(function (pair) {
+          var item = document.createElement("span");
+          item.className = "kuma-summary-item";
+          item.appendChild(text("span", "kuma-summary-label", pair[0]));
+          item.appendChild(text("span", "kuma-summary-value", pair[1]));
+          host.appendChild(item);
+        });
+      }
 
+      /** 通过 / 未通过 pill。 */
+      function checkPill(ok) {
+        return text("span", "kuma-pill " + (ok ? "kuma-pill-ok" : "kuma-pill-fail"), ok ? t("settings.pass") : t("settings.fail"));
+      }
+
+      /**
+       * 每供应商一张体检卡：卡头是名字、endpoint 与整体结论，卡内逐项检查。
+       *
+       * 原来是「供应商名 rowspan + 五行表格」，把供应商与检查项两个层级压平；
+       * 分卡之后一眼能看出是哪一家出了问题。
+       */
+      function renderVendorChecks(vendors) {
         var host = el("kuma-diagnostics-vendors");
         if (!host) { return; }
         host.textContent = "";
@@ -88,43 +120,39 @@ export function settingsPageFragment(): string {
           return;
         }
 
-        var box = document.createElement("div");
-        box.className = "kuma-scroll";
-        var table = document.createElement("table");
-        var thead = document.createElement("thead");
-        var headRow = document.createElement("tr");
-        [
-          "settings.col.vendor",
-          "settings.col.check",
-          "settings.col.result",
-          "settings.col.detail",
-          "settings.col.action"
-        ].forEach(function (key) {
-          headRow.appendChild(text("th", "", t(key)));
-        });
-        thead.appendChild(headRow);
-        table.appendChild(thead);
-
         vendors.forEach(function (vendor) {
-          var tbody = document.createElement("tbody");
-          vendor.checks.forEach(function (check, index) {
-            var tr = document.createElement("tr");
-            if (index === 0) {
-              var nameCell = text("td", "", vendor.name);
-              // 供应商名纵向合并，表格才不会被同一个名字刷屏
-              nameCell.setAttribute("rowspan", String(vendor.checks.length));
-              tr.appendChild(nameCell);
+          var card = document.createElement("article");
+          card.className = "kuma-vendor-check" + (vendor.issueCount > 0 ? " kuma-vendor-check-fail" : "");
+
+          var head = document.createElement("div");
+          head.className = "kuma-vendor-check-head";
+          head.appendChild(text("span", "kuma-card-name", vendor.name));
+          head.appendChild(text("span", "kuma-card-model", vendor.endpoint));
+          head.appendChild(
+            text(
+              "span",
+              "kuma-pill " + (vendor.issueCount > 0 ? "kuma-pill-fail" : "kuma-pill-ok"),
+              vendor.issueCount > 0 ? t("settings.fail") : t("settings.pass")
+            )
+          );
+          card.appendChild(head);
+
+          var list = document.createElement("ul");
+          list.className = "kuma-check-list";
+          vendor.checks.forEach(function (check) {
+            var item = document.createElement("li");
+            item.className = "kuma-check-item" + (check.ok ? "" : " kuma-check-item-fail");
+            item.appendChild(text("span", "kuma-check-name", t(CHECK_LABELS[check.key] || check.key)));
+            item.appendChild(checkPill(check.ok));
+            item.appendChild(text("span", "kuma-check-detail", check.detail));
+            if (!check.ok && check.action) {
+              item.appendChild(text("span", "kuma-check-action", t("settings.col.action") + t("common.colon") + check.action));
             }
-            tr.appendChild(text("td", "", t(CHECK_LABELS[check.key] || check.key)));
-            tr.appendChild(text("td", check.ok ? "" : "kuma-check-fail", check.ok ? t("settings.pass") : t("settings.fail")));
-            tr.appendChild(text("td", "kuma-note", check.detail));
-            tr.appendChild(text("td", "kuma-note", check.action || t("settings.actionNone")));
-            tbody.appendChild(tr);
+            list.appendChild(item);
           });
-          table.appendChild(tbody);
+          card.appendChild(list);
+          host.appendChild(card);
         });
-        box.appendChild(table);
-        host.appendChild(box);
       }
 
       /** 全局与存储项；文件不存在时明确写「不存在」。 */
@@ -148,19 +176,20 @@ export function settingsPageFragment(): string {
         renderConfigDetail(payload);
 
         if (payload.error) {
-          // fail-closed：不展示供应商表与全局项，避免半截数据误导判断
+          // fail-closed：不展示供应商卡与全局卡，避免半截数据误导判断
           showSection("section-diagnostics-vendors", false);
           showSection("section-diagnostics-global", false);
-          var issues = el("kuma-issues");
-          if (issues) { issues.textContent = ""; }
+          renderSummary(payload, 0);
           renderDiagnosticsError(payload);
           showSection("section-diagnostics-error", true);
           setStatus(t("common.updatedAt") + " " + new Date().toLocaleTimeString(dateLocale()));
           return;
         }
 
+        var vendors = payload.vendors || [];
         showSection("section-diagnostics-error", false);
-        renderVendorChecks(payload.vendors || [], payload.issueCount || 0);
+        renderSummary(payload, vendors.length);
+        renderVendorChecks(vendors);
         renderGlobal(payload.global || {});
         showSection("section-diagnostics-vendors", true);
         showSection("section-diagnostics-global", true);

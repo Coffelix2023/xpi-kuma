@@ -18,6 +18,8 @@ export interface ApiContext {
   logger: FileLogger;
   /** 校验请求 Origin 与当前服务一致；由服务端按监听地址构造。 */
   originMatches: (req: IncomingMessage) => boolean;
+  /** 写配置成功后热重载：重建探测与账户服务，接口立刻反映新配置。 */
+  reloadConfig: () => void;
   usageCollector: UsageCollector;
   vendorMonitor: VendorMonitor;
 }

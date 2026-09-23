@@ -130,26 +130,17 @@ describe("只读体检", () => {
     expect(JSON.stringify(payload)).not.toContain("sk-secret-value");
   });
 
-  it("价格缺输出项时标注不完整并说明费用按零计", () => {
+  it("models 多模型全部列出，价格字段已被移除", () => {
     const dir = tempDir();
-    writeConfig(
-      configWith(
-        [
-          "    price:",
-          "      input: 1",
-        ].join("\n"),
-      ),
-    );
+    writeConfig(configWith("").replace('    model: "m"', '    models: ["m-a", "m-b"]'));
 
-    const check = collectDiagnostics(dir).vendors?.[0].checks.find(
-      (item) => item.key === "price",
-    );
+    const checks = collectDiagnostics(dir).vendors?.[0].checks;
 
-    expect(check?.ok).toBe(false);
-    expect(check?.detail).toContain("缺 input 与 output");
-    expect(check?.action).toContain("按零计");
+    const models = checks?.find((item) => item.key === "models");
+    expect(models?.ok).toBe(true);
+    expect(models?.detail).toContain("m-a、m-b");
+    expect(checks?.some((item) => String(item.key) === "price")).toBe(false);
   });
-
   it("未配密钥时给出补齐占位符的建议", () => {
     const dir = tempDir();
     writeConfig(

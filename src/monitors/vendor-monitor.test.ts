@@ -100,8 +100,10 @@ async function startProbeServer(
 function vendor(overrides: Partial<VendorConfig> = {}): VendorConfig {
   return {
     endpoint: "http://127.0.0.1:1/v1",
-    model: "gpt-4o-mini",
     name: "OpenAI",
+    models: [
+      "gpt-4o-mini",
+    ],
     probe: {
       enabled: true,
       interval: "5m",
@@ -171,6 +173,28 @@ describe("VendorMonitor 定时任务", () => {
     monitor.stop();
     expect(monitor.activeTimerCount).toBe(0);
   });
+  it("每模型一个定时器：2 模型 → 2 个定时器、2 条状态", () => {
+    const { monitor } = setup([
+      vendor({
+        name: "OpenAI",
+        models: [
+          "m-a",
+          "m-b",
+        ],
+      }),
+    ]);
+
+    monitor.start();
+    expect(monitor.activeTimerCount).toBe(2);
+    monitor.stop();
+
+    const statuses = monitor.getVendorStatus();
+    expect(statuses).toHaveLength(2);
+    expect(statuses.map((s) => s.model)).toEqual([
+      "m-a",
+      "m-b",
+    ]);
+  });
 
   it("stop() 后再次 stop() 无副作用", () => {
     const { monitor } = setup([
@@ -225,6 +249,7 @@ describe("probeVendor", () => {
       vendor({
         endpoint,
       }),
+      "gpt-4o-mini",
     );
 
     expect(result.status).toBe("up");
@@ -259,6 +284,7 @@ describe("probeVendor", () => {
       vendor({
         endpoint,
       }),
+      "gpt-4o-mini",
     );
 
     expect(result.status).toBe("up");
@@ -277,6 +303,7 @@ describe("probeVendor", () => {
       vendor({
         endpoint,
       }),
+      "gpt-4o-mini",
     );
 
     expect(result.status).toBe("up");
@@ -297,6 +324,7 @@ describe("probeVendor", () => {
       vendor({
         endpoint,
       }),
+      "gpt-4o-mini",
     );
 
     expect(result).toMatchObject({
@@ -323,7 +351,7 @@ describe("probeVendor", () => {
       },
     });
 
-    const result = await monitor.probeVendor(hanging);
+    const result = await monitor.probeVendor(hanging, "gpt-4o-mini");
 
     expect(result).toMatchObject({
       error: "timeout",
@@ -345,6 +373,7 @@ describe("probeVendor", () => {
       vendor({
         endpoint: "http://127.0.0.1:1/v1",
       }),
+      "gpt-4o-mini",
     );
     expect(result.status).toBe("down");
     expect(result.error).toBeTruthy();
@@ -360,17 +389,17 @@ describe("triggerProbe", () => {
       }),
     ]);
 
-    const result = await monitor.triggerProbe("OpenAI");
+    const [result] = await monitor.triggerProbe("OpenAI");
 
     expect(result?.status).toBe("up");
     expect(database.getProbeHistory("OpenAI", 5)).toHaveLength(1);
   });
 
-  it("未知供应商返回 null", async () => {
+  it("未知供应商返回空数组", async () => {
     const { monitor } = setup([
       vendor(),
     ]);
-    expect(await monitor.triggerProbe("不存在")).toBeNull();
+    expect(await monitor.triggerProbe("不存在")).toEqual([]);
   });
 });
 
@@ -381,10 +410,6 @@ describe("getVendorStatus", () => {
       vendor({
         endpoint,
         name: "OpenAI",
-        price: {
-          input: 0.15,
-          output: 0.6,
-        },
       }),
       vendor({
         name: "9router",
@@ -399,10 +424,6 @@ describe("getVendorStatus", () => {
       model: "gpt-4o-mini",
       name: "OpenAI",
       status: "up",
-      price: {
-        input: 0.15,
-        output: 0.6,
-      },
     });
     expect(statuses[0].ttft).toBeGreaterThanOrEqual(0);
     expect(statuses[0].totalTime).toBeGreaterThanOrEqual(0);
@@ -436,9 +457,9 @@ describe("getVendorStatus", () => {
       endpoint: "http://127.0.0.1:1/v1",
     });
 
-    const ok = await monitor.probeVendor(healthy);
+    const ok = await monitor.probeVendor(healthy, "gpt-4o-mini");
     database.insertProbeRecord(ok);
-    const down = await monitor.probeVendor(failing);
+    const down = await monitor.probeVendor(failing, "gpt-4o-mini");
     database.insertProbeRecord(down);
 
     const [status] = monitor.getVendorStatus();

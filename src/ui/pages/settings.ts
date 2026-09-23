@@ -5,8 +5,11 @@ import { fontControlsHtml, type PageOptions, pageShell } from "../shell.ts";
 /**
  * 配置体检页外壳。
  *
- * 只读诊断：摊开 `config.yaml` 的真实解析结果、逐供应商检查项与全局存储项。
- * 本页**不产生任何写盘操作**；页面是静态外壳，不含任何数据与凭据。
+ * 信息层级：摘要条 → 配置明细卡 → 每供应商一张体检卡 → 全局与存储卡；
+ * 解析失败时只留一张错误卡（fail-closed），不展示半截数据。
+ *
+ * 本页**只读取与校验，不写盘**；修改供应商请到主面板「供应商」标签页。
+ * 页面是静态外壳，不含任何数据与凭据。
  */
 export function generateSettingsHTML(options: PageOptions = {}): string {
   return pageShell({
@@ -25,6 +28,8 @@ ${fontControlsHtml()}
 
   <p class="kuma-readonly"${i18nAttr("settings.readonly")}>${zh("settings.readonly")}</p>
 
+  <div class="kuma-summary" id="kuma-issues" role="status" aria-live="polite"></div>
+
   <section id="section-diagnostics-error" aria-labelledby="kuma-diagnostics-error-title" hidden>
     <h2 id="kuma-diagnostics-error-title"${i18nAttr("settings.parseFailedTitle")}>${zh("settings.parseFailedTitle")}</h2>
     <div id="kuma-diagnostics-error"></div>
@@ -36,10 +41,7 @@ ${fontControlsHtml()}
   </section>
 
   <section id="section-diagnostics-vendors" aria-labelledby="kuma-diagnostics-vendors-title">
-    <div class="kuma-actions kuma-section-head">
-      <h2 id="kuma-diagnostics-vendors-title" style="margin:0"${i18nAttr("section.vendorChecks")}>${zh("section.vendorChecks")}</h2>
-      <span class="kuma-generated" id="kuma-issues"></span>
-    </div>
+    <h2 id="kuma-diagnostics-vendors-title"${i18nAttr("section.vendorChecks")}>${zh("section.vendorChecks")}</h2>
     <div id="kuma-diagnostics-vendors"></div>
   </section>
 

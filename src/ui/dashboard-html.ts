@@ -83,23 +83,23 @@ function dashboardBody(): string {
       `        <button type="button" role="tab" id="kuma-tab-${id}" aria-controls="kuma-panel-${id}" aria-selected="${String(index === 0)}" tabindex="${index === 0 ? "0" : "-1"}" data-tab="${id}"${i18nAttr(key)}>${zh(key)}</button>`,
   ).join("\n");
 
-  return `  <header>
+  return `  <header data-semantic-id="dashboard.header">
     <div>
-      <h1${i18nAttr("page.dashboard.title")}>${zh("page.dashboard.title")}</h1>
+      <h1${i18nAttr("page.dashboard.title")} data-semantic-id="dashboard.header.title">${zh("page.dashboard.title")}</h1>
       <div class="kuma-generated" id="kuma-updated"${i18nAttr("page.dashboard.loading")}>${zh("page.dashboard.loading")}</div>
     </div>
     <div class="kuma-actions">
-      <button type="button" id="kuma-refresh-all"${i18nAttr("page.dashboard.refreshAll")}>${zh("page.dashboard.refreshAll")}</button>
-      <button type="button" id="kuma-theme" data-preference aria-pressed="false"${i18nAttr("page.dashboard.toLight")}>${zh("page.dashboard.toLight")}</button>
-      <select id="kuma-family" data-preference${i18nAria("page.dashboard.family")}>
+      <button type="button" id="kuma-refresh-all" data-semantic-id="dashboard.vendors.refresh-all"${i18nAttr("page.dashboard.refreshAll")}>${zh("page.dashboard.refreshAll")}</button>
+      <button type="button" id="kuma-theme" data-preference aria-pressed="false" data-semantic-id="dashboard.header.theme-toggle"${i18nAttr("page.dashboard.toLight")}>${zh("page.dashboard.toLight")}</button>
+      <select id="kuma-family" data-preference data-semantic-id="dashboard.header.family-toggle"${i18nAria("page.dashboard.family")}>
         <option value="default"${i18nAttr("page.dashboard.familyDefault")}>${zh("page.dashboard.familyDefault")}</option>
         <option value="atlas"${i18nAttr("page.dashboard.familyAtlas")}>${zh("page.dashboard.familyAtlas")}</option>
       </select>
 ${fontControlsHtml()}
-      <div class="kuma-actions" role="group"${i18nAria("aria.timeRange")}">
+      <div class="kuma-actions" role="group" data-semantic-id="dashboard.header.period"${i18nAria("aria.timeRange")}">
 ${ranges}
       </div>
-      <button type="button" id="kuma-lang"></button>
+      <button type="button" id="kuma-lang" data-semantic-id="dashboard.header.lang-toggle"></button>
     </div>
   </header>
 
@@ -108,15 +108,15 @@ ${ranges}
 ${tabs}
     </div>
 
-    <section role="tabpanel" id="kuma-panel-overview" aria-labelledby="kuma-tab-overview" data-tab-panel="overview">
+    <section role="tabpanel" id="kuma-panel-overview" aria-labelledby="kuma-tab-overview" data-tab-panel="overview" data-semantic-id="dashboard.overview">
       <div id="kuma-overview"></div>
       <div id="kuma-overview-notice" hidden></div>
       <h2 class="kuma-block-title"${i18nAttr("overview.insightsTitle")}>${zh("overview.insightsTitle")}</h2>
       <div id="kuma-insights" role="region"${i18nAria("overview.insightsTitle")}></div>
       <h2 class="kuma-block-title"${i18nAttr("overview.rankTitle")}>${zh("overview.rankTitle")}</h2>
-      <div class="kuma-rank-grid">
+      <div class="kuma-rank-grid" data-semantic-id="dashboard.attribution">
         <div id="kuma-rank-model"></div>
-        <div id="kuma-rank-project"></div>
+        <div id="kuma-rank-project" data-semantic-id="dashboard.attribution.table"></div>
         <div id="kuma-rank-efficiency"></div>
       </div>
     </section>
@@ -125,20 +125,20 @@ ${tabs}
       <div id="kuma-stats"></div>
     </section>
 
-    <section role="tabpanel" id="kuma-panel-chart" aria-labelledby="kuma-tab-chart" data-tab-panel="chart" hidden>
+    <section role="tabpanel" id="kuma-panel-chart" aria-labelledby="kuma-tab-chart" data-tab-panel="chart" hidden data-semantic-id="dashboard.trend">
       <div class="kuma-chart-wrap">
-        <div id="kuma-chart" role="img"${i18nAria("chart.aria")}></div>
+        <div id="kuma-chart" role="img" data-semantic-id="dashboard.trend.chart"${i18nAria("chart.aria")}></div>
       </div>
     </section>
 
-    <section role="tabpanel" id="kuma-panel-vendors" aria-labelledby="kuma-tab-vendors" data-tab-panel="vendors" hidden>
+    <section role="tabpanel" id="kuma-panel-vendors" aria-labelledby="kuma-tab-vendors" data-tab-panel="vendors" hidden data-semantic-id="dashboard.vendors">
       <div class="kuma-actions">
         <a class="kuma-link" data-kuma-nav="/accounts" href="/accounts"${i18nAttr("link.accounts")}>${zh("link.accounts")}</a>
         <a class="kuma-link" data-kuma-nav="/settings" href="/settings"${i18nAttr("link.settings")}>${zh("link.settings")}</a>
         <button type="button" id="kuma-vendor-add"${i18nAttr("vendor.add")}>${zh("vendor.add")}</button>
       </div>
       <div id="kuma-vendor-form" hidden></div>
-      <div id="kuma-vendors"></div>
+      <div id="kuma-vendors" data-semantic-id="dashboard.vendors.grid"></div>
       <div id="kuma-notice" hidden></div>
     </section>
   </main>

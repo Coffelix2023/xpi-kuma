@@ -20,9 +20,11 @@ export function settingsPageFragment(): string {
         if (node) { node.hidden = !visible; }
       }
 
-      function kvRow(dl, label, value) {
+      function kvRow(dl, label, value, semanticId) {
         dl.appendChild(text("dt", "", label));
-        dl.appendChild(text("dd", "", value));
+        var dd = text("dd", "", value);
+        if (semanticId) { dd.setAttribute("data-semantic-id", semanticId); }
+        dl.appendChild(dd);
       }
 
       function kvList() {
@@ -43,7 +45,8 @@ export function settingsPageFragment(): string {
         if (!host) { return; }
         host.textContent = "";
         var dl = kvList();
-        kvRow(dl, t("settings.row.path"), payload.configPath);
+// semantic anchor: data-semantic-id="settings.config.path"
+kvRow(dl, t("settings.row.path"), payload.configPath, "settings.config.path");
         kvRow(dl, t("settings.row.source"), t("settings.sourceNote"));
         kvRow(dl, t("settings.row.fileState"), payload.configExists ? t("settings.fileExists") : t("settings.fileMissing"));
         kvRow(dl, t("settings.row.parseResult"), payload.error ? t("settings.parseFail") : t("settings.parseOk"));

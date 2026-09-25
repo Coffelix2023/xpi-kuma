@@ -78,7 +78,7 @@ describe("generateDashboardHTML 结构", () => {
     const html = generateDashboardHTML({
       nonce: "abc123",
     });
-    expect(html.match(/nonce="abc123"/g)?.length).toBe(3);
+expect(html.match(/nonce="abc123"/g)?.length).toBe(4);
   });
 
   it("提供四个时间范围按钮，默认标记 24h，且上移到导航标签之前", () => {
@@ -339,11 +339,11 @@ describe("页面互链", () => {
     const dashboard = generateDashboardHTML({
       nonce: "n1",
     });
-    expect(dashboard.match(/nonce="n1"/g)?.length).toBe(3);
-    const accounts = generateAccountsHTML({
-      nonce: "n2",
-    });
-    expect(accounts.match(/nonce="n2"/g)?.length).toBe(3);
+expect(dashboard.match(/nonce="n1"/g)?.length).toBe(4);
+const accounts = generateAccountsHTML({
+nonce: "n2",
+});
+expect(accounts.match(/nonce="n2"/g)?.length).toBe(4);
   });
 });
 
@@ -380,14 +380,16 @@ describe("主面板标签页与信息层级", () => {
     ]) {
       expect(html).toContain(`aria-labelledby="kuma-tab-${id}"`);
     }
-    expect(html).toContain('data-tab-panel="overview">');
-    for (const id of [
-      "stats",
-      "chart",
-      "vendors",
-    ]) {
-      expect(html).toContain(`data-tab-panel="${id}" hidden>`);
-    }
+expect(html).toMatch(/data-tab-panel="overview"\s+data-semantic-id="dashboard\.overview"\s*>/);
+for (const id of [
+"stats",
+"chart",
+"vendors",
+]) {
+// 与原 toContain 子串「data-tab-panel="${id}" hidden>」对齐；data-semantic-id 与字典元素一致
+const SEMANTIC_ID: Record<string, string | null> = { stats: null, chart: "dashboard.trend", vendors: "dashboard.vendors" };
+expect(html).toMatch(new RegExp('data-tab-panel="' + id + '" hidden' + (SEMANTIC_ID[id] ? ' data-semantic-id="' + SEMANTIC_ID[id] + '"' : '') + '>'));
+}
     // 用量归因区块、维度按钮与分区索引轨都已移除
     // 用量归因区块、维度按钮与分区索引轨都已移除（页面脚本里仍有旧片段，见 3.4）
     expect(html).not.toContain('id="kuma-attribution"');

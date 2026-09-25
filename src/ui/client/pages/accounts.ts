@@ -72,11 +72,14 @@ export function accountsPageFragment(): string {
         var box = document.createElement("dl");
         box.className = "kuma-overview";
         [
-          [t("accounts.topupTotal"), amountText(overview.topupTotal, "CNY")],
-          [t("accounts.balanceTotal"), amountText(overview.balanceTotal, "CNY")]
+// data-semantic-id="accounts.summary.topup"
+// data-semantic-id="accounts.summary.balance"
+[t("accounts.topupTotal"), amountText(overview.topupTotal, "CNY"), "accounts.summary.topup"],
+[t("accounts.balanceTotal"), amountText(overview.balanceTotal, "CNY"), "accounts.summary.balance"]
         ].forEach(function (pair) {
           var card = document.createElement("div");
           card.className = "kuma-metric";
+          if (pair[2]) { card.setAttribute("data-semantic-id", pair[2]); }
           card.appendChild(text("dt", "", pair[0]));
           card.appendChild(text("dd", "", pair[1]));
           box.appendChild(card);
@@ -92,6 +95,8 @@ export function accountsPageFragment(): string {
         if (!label) { return cell; }
         var btn = text("button", "", label);
         btn.type = "button";
+// data-semantic-id="accounts.list.grant" / data-semantic-id="accounts.list.manual"
+btn.setAttribute("data-semantic-id", label === "填写" ? "accounts.list.manual" : "accounts.list.grant");
         btn.setAttribute("aria-label", label + t("common.colon") + row.vendor);
         btn.addEventListener("click", function () {
           if (label === "填写") { fillManual(row.vendor); return; }

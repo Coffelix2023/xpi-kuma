@@ -17,16 +17,16 @@ export function generateEmptyHTML(options: PageOptions = {}): string {
       <div class="kuma-generated" id="kuma-updated"${i18nAttr("page.empty.subtitle")}>${zh("page.empty.subtitle")}</div>
     </div>
     <div class="kuma-actions">
-      <a class="kuma-link" data-kuma-nav="/" href="/"${i18nAttr("link.backToDashboard")}>${zh("link.backToDashboard")}</a>
+      <a class="kuma-link" data-kuma-nav="/" href="/" data-semantic-id="dashboard-empty.guide.back"${i18nAttr("link.backToDashboard")}>${zh("link.backToDashboard")}</a>
 ${fontControlsHtml()}
-      <button type="button" id="kuma-lang"></button>
+      <button type="button" id="kuma-lang" data-semantic-id="dashboard-empty.header.lang-toggle"></button>
     </div>
   </header>
 
   <section id="section-guide-vendors" aria-labelledby="kuma-guide-vendors-title" hidden>
     <h2 id="kuma-guide-vendors-title"${i18nAttr("section.guideVendors")}>${zh("section.guideVendors")}</h2>
     <p${i18nAttr("guide.vendorsIntro")}>${zh("guide.vendorsIntro")}</p>
-    <ul class="kuma-steps">
+    <ul class="kuma-steps" data-semantic-id="dashboard-empty.guide.steps">
       <li${i18nAttr("guide.vendorsStep1")}>${zh("guide.vendorsStep1")}</li>
       <li${i18nAttr("guide.vendorsStep2")}>${zh("guide.vendorsStep2")}</li>
       <li${i18nAttr("guide.vendorsStep3")}>${zh("guide.vendorsStep3")}</li>

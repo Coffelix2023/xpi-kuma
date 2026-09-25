@@ -3,6 +3,7 @@ import { i18nAria, i18nAttr, type MessageKey, zh } from "./client/messages.ts";
 import { preferenceBootstrapScript } from "./dashboard-client.ts";
 import { dashboardCss } from "./dashboard-css.ts";
 import { escapeHtml } from "./html.ts";
+import { semanticBadgeScript } from "./semantic-badge.ts";
 
 export interface PageShellOptions {
   /** 页面正文（`<body>` 内容，不含页内脚本） */
@@ -53,6 +54,8 @@ export function pageShell(options: PageShellOptions): string {
   const script = options.script
     ? `\n<script${nonce}>\n${options.script}\n</script>\n`
     : "";
+  // 语义徽标调试层：脚本自带 ?semantic=1 门槛，无参数时零行为
+  const badge = `\n<script${nonce}>\n${semanticBadgeScript()}\n</script>\n`;
 
   return `<!doctype html>
 <html lang="zh-CN" data-family="atlas" data-theme="light" data-title-key="${options.titleKey}">
@@ -69,6 +72,6 @@ ${preferenceBootstrapScript()}
 </script>
 </head>
 <body>
-${options.body}${script}</body>
+${options.body}${script}${badge}</body>
 </html>`;
 }

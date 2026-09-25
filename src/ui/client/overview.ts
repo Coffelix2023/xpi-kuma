@@ -32,14 +32,19 @@ export function overviewFragment(): string {
         var box = document.createElement("dl");
         box.className = "kuma-overview";
         [
-          [t("overview.cost"), money(data.costTotal)],
-          [t("overview.tokens"), count(data.totalTokens || 0)],
-          [t("overview.requests"), count(data.requestCount || 0)],
-          [t("overview.projects"), count(data.projectCount || 0)],
+// data-semantic-id="dashboard.overview.cost"
+// data-semantic-id="dashboard.overview.tokens"
+// data-semantic-id="dashboard.overview.requests"
+// data-semantic-id="dashboard.overview.projects"
+[t("overview.cost"), money(data.costTotal), "dashboard.overview.cost"],
+[t("overview.tokens"), count(data.totalTokens || 0), "dashboard.overview.tokens"],
+[t("overview.requests"), count(data.requestCount || 0), "dashboard.overview.requests"],
+[t("overview.projects"), count(data.projectCount || 0), "dashboard.overview.projects"],
           [t("overview.cacheHitRate"), percent(cache ? cache.hitRate : null)]
         ].forEach(function (pair) {
           var card = document.createElement("div");
           card.className = "kuma-metric";
+          if (pair[2]) { card.setAttribute("data-semantic-id", pair[2]); }
           card.appendChild(text("dt", "", pair[0]));
           card.appendChild(text("dd", "", pair[1]));
           box.appendChild(card);

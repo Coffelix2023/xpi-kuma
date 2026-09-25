@@ -245,6 +245,22 @@ provider/model 组合要有至少 10 条带完整时间点的成功记录才进�
 没有可用的余额接口才是常态，不是缺陷：`config.example.yaml` 里的四家样例目前都没有公开的余额接口，
 探测结论见 [`docs/probe-balance-and-oauth.md`](./docs/probe-balance-and-oauth.md)。
 
+### 语义徽标调试层（dev）
+
+四个页面的可修改元素都挂了 `data-semantic-id`，对应原型字典
+`.pi/prototype-design/kuma-dashboard/semantic-ui-map.yaml` 里的短码与全路径。任意面板 URL 加上
+`?semantic=1` 即可打开开关：页面顶部居中会出现一枚胶囊（颜色随主题强对比），按下时徽标全开，
+松开则拖动到任意位置；位置存 `localStorage`、开关状态存 `sessionStorage`，同标签页在四个页面之间
+跳转时不必每次手动加参数。
+
+徽标显示该元素的短码与中文标签，与原型字典同名同义（如 `P1-2-C1 本期花费`、`P3-3-B1 授权`、
+`P4-2-T2 生效路径` 等）。页面内脚本的轮询会重建卡片与行，`MutationObserver` 在下一帧重新为新增
+DOM 补上徽标，不需要手动刷新。普通访问（不带参数）零注入、零样式、零行为，对生产页面零影响。
+
+`data-semantic-id` ↔ 短码/标签 的映射在 [`src/ui/client/semantic-map.ts`](./src/ui/client/semantic-map.ts)；
+vitest 在每次运行时与字典对齐校对，源码里新增的 id 若没登记就会让 CI 失败，而不是等到运行时出现
+「未登记」的徽标。
+
 ### 边界
 
 

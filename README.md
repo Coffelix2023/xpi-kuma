@@ -276,7 +276,29 @@ entirely, showing the error, its line number, and the path instead of half the d
 
 Vendors without a usable balance endpoint are the expected case, not a bug: none of the four samples in
 `config.example.yaml` expose a public balance API today. See
+`config.example.yaml` expose a public balance API today. See
 [`docs/probe-balance-and-oauth.md`](./docs/probe-balance-and-oauth.md) for the probe results.
+
+### Semantic badge overlay (dev)
+
+Every interactive surface in the four pages carries a `data-semantic-id` matching the prototype
+dictionary at `.pi/prototype-design/kuma-dashboard/semantic-ui-map.yaml` — short code + full path.
+Add `?semantic=1` to any dashboard URL to flip the toggle: a pill in the top center of the page
+(highly contrasting against the current theme) starts badges on, and you can drag it anywhere; the
+position persists in `localStorage` and the on-state in `sessionStorage` so a same-tab navigation
+between pages keeps the overlay alive.
+
+The badge itself shows the element's short code and its Chinese label, drawn from the same dictionary
+that names the prototype elements (`P1-2-C1 本期花费`, `P3-3-B1 授权`, `P4-2-T2 生效路径`, ...). When
+the underlying DOM is rebuilt by the page's poll loop, a `MutationObserver` reapplies badges on the
+next animation frame, so re-rendered cards and rows stay labelled without a manual refresh. Plain
+visits (no parameter) inject nothing — zero CSS, zero script behavior, zero impact on production
+pages.
+
+The mapping between `data-semantic-id` and short code/label lives in
+[`src/ui/client/semantic-map.ts`](./src/ui/client/semantic-map.ts); a vitest checks it against the
+dictionary on every run, so an id added in code without an entry fails CI instead of producing a
+silent "unregistered" badge at runtime.
 
 ### Boundaries
 

@@ -13,41 +13,41 @@ import { fontControlsHtml, type PageOptions, pageShell } from "../shell.ts";
  */
 export function generateSettingsHTML(options: PageOptions = {}): string {
   return pageShell({
-    body: `  <header>
+    body: `  <header data-semantic-id="settings.header">
     <div>
       <h1${i18nAttr("page.settings.title")}>${zh("page.settings.title")}</h1>
       <div class="kuma-generated" id="kuma-updated"${i18nAttr("page.dashboard.loading")}>${zh("page.dashboard.loading")}</div>
     </div>
     <div class="kuma-actions">
-      <button type="button" id="kuma-reload"${i18nAttr("settings.reload")}>${zh("settings.reload")}</button>
-      <a class="kuma-link" data-kuma-nav="/" href="/"${i18nAttr("link.backToDashboard")}>${zh("link.backToDashboard")}</a>
+      <button type="button" id="kuma-reload" data-semantic-id="settings.header.reload"${i18nAttr("settings.reload")}>${zh("settings.reload")}</button>
+      <a class="kuma-link" data-kuma-nav="/" href="/" data-semantic-id="settings.header.back"${i18nAttr("link.backToDashboard")}>${zh("link.backToDashboard")}</a>
 ${fontControlsHtml()}
       <button type="button" id="kuma-lang"></button>
     </div>
   </header>
 
-  <p class="kuma-readonly"${i18nAttr("settings.readonly")}>${zh("settings.readonly")}</p>
+  <p class="kuma-readonly" data-semantic-id="settings.error.scope"${i18nAttr("settings.readonly")}>${zh("settings.readonly")}</p>
 
   <div class="kuma-summary" id="kuma-issues" role="status" aria-live="polite"></div>
 
-  <section id="section-diagnostics-error" aria-labelledby="kuma-diagnostics-error-title" hidden>
+  <section id="section-diagnostics-error" aria-labelledby="kuma-diagnostics-error-title" hidden data-semantic-id="settings.error">
     <h2 id="kuma-diagnostics-error-title"${i18nAttr("settings.parseFailedTitle")}>${zh("settings.parseFailedTitle")}</h2>
-    <div id="kuma-diagnostics-error"></div>
+    <div id="kuma-diagnostics-error" data-semantic-id="settings.error.card"></div>
   </section>
 
-  <section id="section-diagnostics" aria-labelledby="kuma-diagnostics-title">
+  <section id="section-diagnostics" aria-labelledby="kuma-diagnostics-title" data-semantic-id="settings.config">
     <h2 id="kuma-diagnostics-title"${i18nAttr("section.configDetail")}>${zh("section.configDetail")}</h2>
-    <div id="kuma-diagnostics"></div>
+    <div id="kuma-diagnostics" data-semantic-id="settings.config.details"></div>
   </section>
 
-  <section id="section-diagnostics-vendors" aria-labelledby="kuma-diagnostics-vendors-title">
+  <section id="section-diagnostics-vendors" aria-labelledby="kuma-diagnostics-vendors-title" data-semantic-id="settings.vendors">
     <h2 id="kuma-diagnostics-vendors-title"${i18nAttr("section.vendorChecks")}>${zh("section.vendorChecks")}</h2>
-    <div id="kuma-diagnostics-vendors"></div>
+    <div id="kuma-diagnostics-vendors" data-semantic-id="settings.vendors.table"></div>
   </section>
 
-  <section id="section-diagnostics-global" aria-labelledby="kuma-diagnostics-global-title">
+  <section id="section-diagnostics-global" aria-labelledby="kuma-diagnostics-global-title" data-semantic-id="settings.global">
     <h2 id="kuma-diagnostics-global-title"${i18nAttr("section.globalStorage")}>${zh("section.globalStorage")}</h2>
-    <div id="kuma-diagnostics-global"></div>
+    <div id="kuma-diagnostics-global" data-semantic-id="settings.global.list"></div>
   </section>
 `,
     nonce: options.nonce,

@@ -7,7 +7,7 @@ meta:
   project: kuma-dashboard
   version: 14
   type: multi-page
-  updated: 2026-09-16 08:53
+  updated: 2026-09-25 00:00
   annotate_default: true
 pages:
   P1:
@@ -35,7 +35,7 @@ elements:
     short: P1-1
     label: 面板头部
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1
@@ -46,22 +46,28 @@ elements:
       - dashboard.header.period
       - dashboard.header.theme-toggle
       - dashboard.header.lang-toggle
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.header.title:
     short: P1-1-T1
     label: 面板标题
     type: text
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1-T1
       hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-1-T1
     parent: dashboard.header
     i18n_key: dashboard.title
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.header.period:
     short: P1-1-S1
     label: 周期切换
     type: select
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1-S1
@@ -72,11 +78,14 @@ elements:
       - 周期按钮
     behavior: 在 1h / 24h / 7d / 30d 之间切换，驱动概览、归因与趋势同步刷新
     i18n_key: dashboard.period
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.header.theme-toggle:
     short: P1-1-B1
     label: 主题切换
     type: toggle
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1-B1
@@ -86,11 +95,14 @@ elements:
       - 亮暗切换
       - 明暗
     i18n_key: dashboard.theme
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.header.lang-toggle:
     short: P1-1-B2
     label: 语言切换
     type: toggle
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-1-B2
@@ -99,11 +111,14 @@ elements:
     aliases:
       - 中英文
     i18n_key: dashboard.lang
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.overview:
     short: P1-2
     label: 花费概览
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2
@@ -114,22 +129,28 @@ elements:
       - dashboard.overview.tokens
       - dashboard.overview.requests
       - dashboard.overview.projects
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.overview.cost:
     short: P1-2-C1
     label: 本期花费
     type: component
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2-C1
       hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-2-C1
     parent: dashboard.overview
     i18n_key: overview.cost
+    impl:
+      path: src/ui/client/overview.ts
+      promoted_at: 2026-09-25
   dashboard.overview.tokens:
     short: P1-2-C2
     label: Token 总量
     type: component
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2-C2
@@ -139,22 +160,28 @@ elements:
       - token 总数
       - 用量
     i18n_key: overview.tokens
+    impl:
+      path: src/ui/client/overview.ts
+      promoted_at: 2026-09-25
   dashboard.overview.requests:
     short: P1-2-C3
     label: 请求数
     type: component
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2-C3
       hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-2-C3
     parent: dashboard.overview
     i18n_key: overview.requests
+    impl:
+      path: src/ui/client/overview.ts
+      promoted_at: 2026-09-25
   dashboard.overview.projects:
     short: P1-2-C4
     label: 覆盖项目数
     type: component
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-2-C4
@@ -163,11 +190,14 @@ elements:
     aliases:
       - 项目数量
     i18n_key: overview.projects
+    impl:
+      path: src/ui/client/overview.ts
+      promoted_at: 2026-09-25
   dashboard.attribution:
     short: P1-3
     label: 用量归因
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-3
@@ -176,6 +206,9 @@ elements:
     children:
       - dashboard.attribution.dimension
       - dashboard.attribution.table
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.attribution.dimension:
     short: P1-3-S1
     label: 归因维度切换
@@ -196,7 +229,7 @@ elements:
     short: P1-3-T1
     label: 归因明细表
     type: table
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-3-T1
@@ -207,11 +240,14 @@ elements:
       - 花费明细
     behavior: 列为 维度 / 花费 / token / 请求数 / 占比，按花费倒序
     i18n_key: attribution.table
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.vendors:
     short: P1-4
     label: 供应商健康
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-4
@@ -220,11 +256,14 @@ elements:
     children:
       - dashboard.vendors.grid
       - dashboard.vendors.refresh-all
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.vendors.grid:
     short: P1-4-L1
     label: 供应商卡片网格
     type: list
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-4-L1
@@ -234,11 +273,14 @@ elements:
       - 供应商卡片
       - 探测卡片
     i18n_key: vendors.grid
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.vendors.refresh-all:
     short: P1-4-B1
     label: 全部刷新
     type: button
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-4-B1
@@ -247,22 +289,28 @@ elements:
     aliases:
       - 刷新全部
     i18n_key: vendors.refreshAll
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.trend:
     short: P1-5
     label: 费用与 token 趋势
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-5
       hifi: pages/dashboard/hifi/current/screens/01-dashboard.html#P1-5
     children:
       - dashboard.trend.chart
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard.trend.chart:
     short: P1-5-C1
     label: 趋势图
     type: component
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/01-dashboard.html#P1-5-C1
@@ -273,11 +321,14 @@ elements:
       - 趋势
     behavior: 随周期切换重绘；离线时整块隐藏并留一句说明
     i18n_key: trend.chart
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard-empty.guide:
     short: P2-1
     label: 零数据引导
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/02-empty.html#P2-1
@@ -290,7 +341,7 @@ elements:
     short: P2-1-L1
     label: 产生数据的三条路径
     type: list
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/02-empty.html#P2-1-L1
@@ -300,22 +351,28 @@ elements:
       - 引导步骤
       - 下一步
     i18n_key: empty.steps
+    impl:
+      path: src/ui/pages/empty.ts
+      promoted_at: 2026-09-25
   dashboard-empty.guide.back:
     short: P2-1-A1
     label: 返回主面板
     type: link
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/dashboard/wireframe/current/screens/02-empty.html#P2-1-A1
       hifi: pages/dashboard/hifi/current/screens/02-empty.html#P2-1-A1
     parent: dashboard-empty.guide
     i18n_key: empty.back
+    impl:
+      path: src/ui/pages/empty.ts
+      promoted_at: 2026-09-25
   accounts.header:
     short: P3-1
     label: 账户页头部
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-1
@@ -324,11 +381,14 @@ elements:
     children:
       - accounts.header.back
       - accounts.header.sync-all
+    impl:
+      path: src/ui/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.header.back:
     short: P3-1-A1
     label: 回到主面板
     type: link
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-1-A1
@@ -338,11 +398,14 @@ elements:
       - 返回
       - 回面板
     i18n_key: accounts.back
+    impl:
+      path: src/ui/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.header.sync-all:
     short: P3-1-B1
     label: 同步全部余额
     type: button
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-1-B1
@@ -353,11 +416,14 @@ elements:
       - 同步余额
     behavior: 按三档降级顺序对每个供应商取一次余额
     i18n_key: accounts.syncAll
+    impl:
+      path: src/ui/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.summary:
     short: P3-2
     label: 账户概览
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-2
@@ -366,11 +432,14 @@ elements:
     children:
       - accounts.summary.topup
       - accounts.summary.balance
+    impl:
+      path: src/ui/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.summary.topup:
     short: P3-2-C1
     label: 累计充值
     type: component
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-2-C1
@@ -380,11 +449,14 @@ elements:
       - 充值总额
       - 充值
     i18n_key: accounts.topup
+    impl:
+      path: src/ui/client/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.summary.balance:
     short: P3-2-C2
     label: 当前余额
     type: component
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-2-C2
@@ -394,11 +466,14 @@ elements:
       - 余额
       - 剩余金额
     i18n_key: accounts.balance
+    impl:
+      path: src/ui/client/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.list:
     short: P3-3
     label: 供应商账户列表
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-3
@@ -408,11 +483,14 @@ elements:
       - accounts.list.table
       - accounts.list.grant
       - accounts.list.manual
+    impl:
+      path: src/ui/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.list.table:
     short: P3-3-T1
     label: 账户明细表
     type: table
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-3-T1
@@ -423,11 +501,14 @@ elements:
       - 余额表
     behavior: 列为 供应商·模型 / 数据来源 / 余额 / 累计充值 / 最近同步 / 动作，按余额升序
     i18n_key: accounts.table
+    impl:
+      path: src/ui/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.list.grant:
     short: P3-3-B1
     label: 授权
     type: button
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-3-B1
@@ -438,11 +519,14 @@ elements:
       - 登录授权
     behavior: 服务商无余额接口时的第二档；也用于授权过期后的重新授权
     i18n_key: accounts.grant
+    impl:
+      path: src/ui/client/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.list.manual:
     short: P3-3-B2
     label: 手动填写余额
     type: button
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-3-B2
@@ -457,11 +541,14 @@ elements:
         type: boolean
         current: true
     i18n_key: accounts.manual
+    impl:
+      path: src/ui/client/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.empty:
     short: P3-4
     label: 账户页空态
     type: section
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-4
@@ -469,11 +556,14 @@ elements:
     behavior: 无账户信息时的引导与三档取数顺序说明
     children:
       - accounts.empty.steps
+    impl:
+      path: src/ui/pages/accounts.ts
+      promoted_at: 2026-09-25
   accounts.empty.steps:
     short: P3-4-T1
     label: 空态与取数顺序说明
     type: list
-    status: proposed
+    status: locked
     stage_created: wireframe
     fidelities:
       wireframe: pages/accounts/wireframe/current/screens/01-accounts.html#P3-4-T1
@@ -483,6 +573,9 @@ elements:
       - 取数顺序
       - 降级说明
     i18n_key: accounts.emptySteps
+    impl:
+      path: src/ui/pages/accounts.ts
+      promoted_at: 2026-09-25
   dashboard-empty.header.theme-toggle:
     short: P2-1-B1
     label: 空态主题切换
@@ -499,7 +592,7 @@ elements:
     short: P2-1-B2
     label: 空态语言切换
     type: toggle
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -507,11 +600,14 @@ elements:
     aliases:
       - 空态中英
     i18n_key: ui.lang
+    impl:
+      path: src/ui/pages/empty.ts
+      promoted_at: 2026-09-25
   dashboard.header.family-toggle:
     short: P1-1-B3
     label: 主题家族切换
     type: toggle
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -524,6 +620,9 @@ elements:
       - Atlas
     behavior: 在 Default-Themes（oklch 圆角）与 Atlas-Themes v2（复古印刷：奶油纸 + 普鲁士蓝 + 柿橙，直角平面）之间切换；写 kuma.family
     i18n_key: ui.family
+    impl:
+      path: src/ui/dashboard-html.ts
+      promoted_at: 2026-09-25
   dashboard-empty.header.family-toggle:
     short: P2-1-B3
     label: 空态主题家族切换
@@ -562,7 +661,7 @@ elements:
     short: P4-1
     label: 体检页头部
     type: section
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -571,11 +670,14 @@ elements:
     children:
       - settings.header.back
       - settings.header.reload
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.header.back:
     short: P4-1-A1
     label: 体检页返回主面板
     type: link
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -584,11 +686,14 @@ elements:
     aliases:
       - 从体检页回去
     i18n_key: cfg.back
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.header.reload:
     short: P4-1-B1
     label: 重新读取
     type: button
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -599,11 +704,14 @@ elements:
       - 刷新体检
     behavior: 本轮原型只做忙碌态，不触碰文件
     i18n_key: cfg.reload
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.config:
     short: P4-2
     label: 配置文件
     type: section
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -612,22 +720,28 @@ elements:
     children:
       - settings.config.details
       - settings.config.path
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.config.details:
     short: P4-2-T1
     label: 配置明细
     type: list
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
       hifi: pages/settings/hifi/current/screens/01-settings.html#P4-2-T1
     parent: settings.config
     i18n_key: cfg.file
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.config.path:
     short: P4-2-T2
     label: 生效路径
     type: text
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -637,11 +751,14 @@ elements:
       - 配置文件位置
     behavior: resolveConfigPath() 的结果，即 <cwd>/.pi/xpi-kuma/config.yaml
     i18n_key: cfg.kPath
+    impl:
+      path: src/ui/client/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.vendors:
     short: P4-3
     label: 供应商体检
     type: section
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -649,11 +766,14 @@ elements:
     behavior: 每行一个供应商，六项检查，缺失项配一句下一步动作
     children:
       - settings.vendors.table
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.vendors.table:
     short: P4-3-T1
     label: 供应商体检表
     type: table
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -664,11 +784,14 @@ elements:
       - 配置检查表
     behavior: 列为 供应商 / endpoint / model / api_key 环境变量 / 价格 / 探测；密钥只显示变量名
     i18n_key: cfg.vendors
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.global:
     short: P4-4
     label: 全局与存储
     type: section
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -676,22 +799,28 @@ elements:
     behavior: retention、usage.db 存在性与大小、探测默认值、会话 cwd
     children:
       - settings.global.list
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.global.list:
     short: P4-4-L1
     label: 全局项列表
     type: list
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
       hifi: pages/settings/hifi/current/screens/01-settings.html#P4-4-L1
     parent: settings.global
     i18n_key: cfg.global
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.error:
     short: P4-5
     label: 解析失败与只读边界
     type: section
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -700,11 +829,14 @@ elements:
     children:
       - settings.error.card
       - settings.error.scope
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.error.card:
     short: P4-5-T1
     label: 解析失败卡
     type: component
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -714,11 +846,14 @@ elements:
       - 报错卡
     behavior: 解析失败时替代 P4-3 与 P4-4，只给错误行与文件路径
     i18n_key: cfg.errTitle
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25
   settings.error.scope:
     short: P4-5-L1
     label: 只读边界说明
     type: list
-    status: proposed
+    status: locked
     stage_created: hifi
     fidelities:
       wireframe: null
@@ -728,3 +863,7 @@ elements:
       - 写盘策略
       - 密钥纪律
     i18n_key: cfg.b1.title
+
+    impl:
+      path: src/ui/pages/settings.ts
+      promoted_at: 2026-09-25

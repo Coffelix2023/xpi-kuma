@@ -71,7 +71,7 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 | --- | --- |
 | `/xpi-kuma` / `/xpi-kuma on` | Start (or restart) the local dashboard service and open it in your browser — run it again to reopen a page you closed (vendor status, usage stats, cost/token trend) |
 | `/xpi-kuma off` | Shut the in-Pi web service and probes down; realtime usage recording keeps working |
-| `xpi-kuma on [--port <port>]` | Start the standalone background service from any terminal; it keeps running after the terminal exits (see below) |
+| `xpi-kuma on [--port <port>] [--dev]` | Start the standalone background service from any terminal; it keeps running after the terminal exits. `--dev` also opens the semantic-badge debug page in your browser (see below) |
 | `xpi-kuma off` / `xpi-kuma status` | Stop the standalone service / show who currently owns the web service |
 
 ### Standalone service (terminal daemon)
@@ -84,9 +84,13 @@ TypeScript source directly — no build step):
 pnpm link --global                   # inside this repository; exposes the `xpi-kuma` command
 ```
 
-- `xpi-kuma on [--port <1..65535>]` — starts a detached background service (usage backfill first, then web
+- `xpi-kuma on [--port <1..65535>] [--dev]` — starts a detached background service (usage backfill first, then web
   + probes) and prints the actual local URL. An invalid port fails before anything starts; an occupied port
   fails instead of silently picking another one.
+- `xpi-kuma on --dev` — same as above, plus opens `<URL>?semantic=1` in your default browser before the
+  command returns, so you never hand-assemble the debug URL. It also works while the service is already
+  running (no restart, just another page), and a browser that refuses to open only prints a notice — the
+  service that did start is still reported as started.
 - `xpi-kuma off` — stops the background service with identity checks (a stale state file or a reused PID is
   never signaled) and releases the port. Idempotent: running it twice is fine.
 - `xpi-kuma status` — shows the current owner (standalone daemon or Pi process), port, and URL.
@@ -283,10 +287,17 @@ Vendors without a usable balance endpoint are the expected case, not a bug: none
 
 Every interactive surface in the four pages carries a `data-semantic-id` matching the prototype
 dictionary at `.pi/prototype-design/kuma-dashboard/semantic-ui-map.yaml` — short code + full path.
-Add `?semantic=1` to any dashboard URL to flip the toggle: a pill in the top center of the page
-(highly contrasting against the current theme) starts badges on, and you can drag it anywhere; the
+
+`xpi-kuma on --dev` in a terminal starts (or reuses) the service and opens the page with the toggle
+already on, so you never hand-assemble the URL. Opening a page by hand works too: add `?semantic=1` to
+any dashboard URL and a pill in the top center of the page (highly contrasting against the current
+theme) starts badges on, and you can drag it anywhere; the
 position persists in `localStorage` and the on-state in `sessionStorage` so a same-tab navigation
 between pages keeps the overlay alive.
+
+The toggle reads `?semantic=1` **as the page is entered**: the page script then clears the whole query
+string from the address bar (a side effect of scrubbing the credential), so the badge script runs ahead of
+it and `sessionStorage` carries the flag from there on.
 
 The badge itself shows the element's short code and its Chinese label, drawn from the same dictionary
 that names the prototype elements (`P1-2-C1 本期花费`, `P3-3-B1 授权`, `P4-2-T2 生效路径`, ...). When

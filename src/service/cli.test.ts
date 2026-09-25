@@ -11,7 +11,8 @@ import { createServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { readConfigTemplate, resolveConfigPath } from "../config.ts";
 import { main } from "./cli.ts";
 import {
@@ -20,6 +21,12 @@ import {
   readServiceState,
   serviceStatePath,
 } from "./state.ts";
+
+// `on --dev` 会真的用系统默认浏览器开页面；测试里换成空实现，只断言 URL 形状
+// （vitest 会把 vi.mock 提升到所有 import 之前，位置不影响生效）
+vi.mock("../lib/open-browser.ts", () => ({
+  openInBrowser: vi.fn(async () => {}),
+}));
 
 /** 面板 URL 形状：`http://127.0.0.1:<端口>/#<凭据>`。 */
 const DASHBOARD_URL_PATTERN = /^http:\/\/127\.0\.0\.1:\d+\/#/;
@@ -326,6 +333,56 @@ describe("xpi-kuma CLI", () => {
       ]),
     ).toBe(0);
     expect(state?.port).toBe(port);
+  });
+
+  it("on --dev：服务就绪后用浏览器打开带语义徽标参数的页面", async () => {
+    setupAgentDir();
+    const { openInBrowser } = await import("../lib/open-browser.ts");
+    const opened = vi.mocked(openInBrowser);
+    opened.mockClear();
+
+    // 未知参数照旧拒绝：既不启动服务，也不开页面
+    expect(
+      await main([
+        "on",
+        "--dev",
+        "--bogus",
+      ]),
+    ).toBe(2);
+    expect(opened).not.toHaveBeenCalled();
+
+    const port = await freePort();
+    expect(
+      await main([
+        "on",
+        "--port",
+        String(port),
+        "--dev",
+      ]),
+    ).toBe(0);
+    expect(opened).toHaveBeenCalledTimes(1);
+    const url = new URL(opened.mock.calls[0]?.[0] ?? "");
+    expect(url.searchParams.get("semantic")).toBe("1");
+    expect(url.port).toBe(String(port));
+    // 凭据仍在 fragment 里，查询串只多了调试开关
+    expect(url.hash).not.toBe("");
+
+    // 服务已在运行时再执行 --dev：复用现有服务并再开一次页面
+    opened.mockClear();
+    expect(
+      await main([
+        "on",
+        "--dev",
+      ]),
+    ).toBe(0);
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(opened.mock.calls[0]?.[0]).toContain("?semantic=1");
+
+    expect(
+      await main([
+        "off",
+      ]),
+    ).toBe(0);
   });
 
   it("宿主 stderr 零字节：daemon 直跑时无任何输出，对照组可检出", {

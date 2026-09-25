@@ -54,7 +54,9 @@ export function pageShell(options: PageShellOptions): string {
   const script = options.script
     ? `\n<script${nonce}>\n${options.script}\n</script>\n`
     : "";
-  // 语义徽标调试层：脚本自带 ?semantic=1 门槛，无参数时零行为
+  // 语义徽标调试层：脚本自带 ?semantic=1 门槛，无参数时零行为。
+  // 必须排在页内脚本之前：bootstrap 的 readToken() 会用 replaceState 抹掉整个
+  // 查询串，排在后面就读不到 ?semantic=1 了。
   const badge = `\n<script${nonce}>\n${semanticBadgeScript()}\n</script>\n`;
 
   return `<!doctype html>
@@ -72,6 +74,6 @@ ${preferenceBootstrapScript()}
 </script>
 </head>
 <body>
-${options.body}${script}${badge}</body>
+${options.body}${badge}${script}</body>
 </html>`;
 }

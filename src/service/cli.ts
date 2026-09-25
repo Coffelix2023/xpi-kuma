@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { closeSync, openSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ConfigError, loadConfig } from "../config.ts";
+import { openInBrowser } from "../lib/open-browser.ts";
 import { daemonLogPath, runDaemon } from "./daemon.ts";
 import {
   claimServiceState,
@@ -32,8 +33,7 @@ const READY_TIMEOUT_MS = 30_000;
 
 /** `off` 发送 SIGTERM 后等待进程退出的上限；超时且身份复核通过才升级 SIGKILL。 */
 const STOP_TIMEOUT_MS = 5000;
-
-const HELP = "用法：xpi-kuma on [--port <1..65535>] | off | status";
+const HELP = "用法：xpi-kuma on [--port <1..65535>] [--dev] | off | status";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -48,12 +48,22 @@ function parsePort(value: string): number | null {
   return port;
 }
 
-/** 解析 `on [--port <n>]` 的剩余参数；未知参数返回 null。 */
-function parseOnArgs(argv: string[]): {
+/** `on` 的参数：`--port <n>` 与 `--dev`（打开带语义徽标的页面）。 */
+interface OnArgs {
+  /** `--dev`：服务就绪后用默认浏览器打开 ?semantic=1 的调试页面 */
+  dev: boolean;
   port?: number;
-} | null {
+}
+
+/** 解析 `on [--port <n>] [--dev]` 的剩余参数；未知参数返回 null。 */
+function parseOnArgs(argv: string[]): OnArgs | null {
   let port: number | undefined;
-  for (let i = 1; i < argv.length; i += 2) {
+  let dev = false;
+  for (let i = 1; i < argv.length; i += 1) {
+    if (argv[i] === "--dev") {
+      dev = true;
+      continue;
+    }
     if (argv[i] !== "--port" || i + 1 >= argv.length) {
       return null;
     }
@@ -62,10 +72,33 @@ function parseOnArgs(argv: string[]): {
       return null;
     }
     port = parsed;
+    i += 1;
   }
   return {
+    dev,
     port,
   };
+}
+
+/**
+ * `--dev`：用默认浏览器打开带语义徽标调试层的页面（`?semantic=1`）。
+ *
+ * 只影响本机浏览器，失败（无 URL、系统没有可用浏览器）只提示、不改退出码：
+ * 服务已经起来了，不能因为开页面失败就报告启动失败。
+ */
+async function openDevPage(url: string): Promise<void> {
+  if (!url) {
+    console.error("服务未报告网页地址，跳过打开浏览器");
+    return;
+  }
+  try {
+    const target = new URL(url);
+    target.searchParams.set("semantic", "1");
+    await openInBrowser(target.toString());
+    console.log(`已用浏览器打开语义标签页面：${target.toString()}`);
+  } catch (error) {
+    console.error(`打开浏览器失败：${describeError(error)}`);
+  }
 }
 
 /** `xpi-kuma on [--port <n>]`：预检 → 后台拉起 daemon → 等真实就绪。 */
@@ -82,6 +115,9 @@ async function cmdOn(argv: string[]): Promise<number> {
       console.log(
         `xpi-kuma 服务已在运行：${existing.url || `http://127.0.0.1:${existing.port}`}`,
       );
+      if (args.dev) {
+        await openDevPage(existing.url);
+      }
       return 0;
     }
     console.error(
@@ -154,6 +190,9 @@ async function cmdOn(argv: string[]): Promise<number> {
       console.log(
         `xpi-kuma 服务已在运行：${rival.url || `http://127.0.0.1:${rival.port}`}`,
       );
+      if (args.dev) {
+        await openDevPage(rival.url);
+      }
       return 0;
     }
     clearServiceState();
@@ -170,6 +209,8 @@ async function cmdOn(argv: string[]): Promise<number> {
   };
 
   const deadline = Date.now() + READY_TIMEOUT_MS;
+  // 就绪后要打开的调试页面地址：在循环外统一打开，避免在轮询循环里 await
+  let devUrl: string | null = null;
   while (Date.now() < deadline) {
     if (child.exitCode !== null || child.signalCode !== null) {
       if (claimIsOurs()) {
@@ -188,10 +229,17 @@ async function cmdOn(argv: string[]): Promise<number> {
       if (state.unverified !== undefined && state.unverified > 0) {
         console.log(`补录未核实 ${state.unverified} 条，详见日志 ${daemonLogPath()}`);
       }
-      return 0;
+      devUrl = state.url;
+      break;
     }
     // biome-ignore lint/performance/noAwaitInLoops: 轮询等待 daemon 就绪是刻意的间隔重试
     await sleep(100);
+  }
+  if (devUrl !== null) {
+    if (args.dev) {
+      await openDevPage(devUrl);
+    }
+    return 0;
   }
   // 就绪超时：只清理自己的认领，不碰可能已接管的他人状态
   if (claimIsOurs()) {

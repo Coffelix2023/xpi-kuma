@@ -2,19 +2,21 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
 import { SEMANTIC_BADGES } from "./client/semantic-map.ts";
-import { semanticBadgeScript } from "./semantic-badge.ts";
-import { generateAccountsHTML } from "./pages/accounts.ts";
 import { generateDashboardHTML } from "./dashboard-html.ts";
+import { generateAccountsHTML } from "./pages/accounts.ts";
 import { generateEmptyHTML } from "./pages/empty.ts";
 import { generateSettingsHTML } from "./pages/settings.ts";
+import { semanticBadgeScript } from "./semantic-badge.ts";
 
 const MAP_PATH = ".pi/prototype-design/kuma-dashboard/semantic-ui-map.yaml";
 
 interface MapElement {
-  short: string;
+  impl?: {
+    path?: string;
+  };
   label: string;
+  short: string;
   status: string;
-  impl?: { path?: string };
 }
 
 describe("语义徽标映射与字典同步", () => {
@@ -58,6 +60,24 @@ describe("语义徽标调试层", () => {
     expect(script).toContain('entry.short + " " + entry.label');
   });
 
+  it("注入的样式带页面 nonce，且徽标以自身元素为定位祖先", () => {
+    const script = semanticBadgeScript();
+    // CSP 是 style-src 'nonce-...'：无 nonce 的 JS 注入 <style> 会被整个拦掉
+    expect(script).toContain("document.currentScript");
+    expect(script).toContain('style.setAttribute("nonce", NONCE)');
+    // 页面没有任何定位元素，缺 position:relative 时 ::after 会落在视口外
+    expect(script).toContain("position: relative; outline: 1px dashed");
+  });
+
+  it("徽标脚本排在页内脚本之前，先于 readToken 抹掉查询串读到 ?semantic=1", () => {
+    const html = generateDashboardHTML({
+      nonce: "test-nonce",
+    });
+    expect(html.indexOf("kuma-semantic-toggle")).toBeLessThan(
+      html.indexOf("function readToken"),
+    );
+  });
+
   it("四个页面都注入了徽标脚本；脚本内置全部短码映射", () => {
     for (const html of [
       generateDashboardHTML(),
@@ -81,9 +101,9 @@ describe("语义徽标调试层", () => {
       generateSettingsHTML(),
       generateEmptyHTML(),
     ].join("\n");
-    const ids = [...html.matchAll(/data-semantic-id="([^"]+)"/g)].map(
-      (m) => m[1],
-    );
+    const ids = [
+      ...html.matchAll(/data-semantic-id="([^"]+)"/g),
+    ].map((m) => m[1]);
     expect(ids.length).toBeGreaterThan(20);
     for (const id of ids) {
       expect(SEMANTIC_BADGES[id], `徽标映射缺少: ${id}`).toBeDefined();

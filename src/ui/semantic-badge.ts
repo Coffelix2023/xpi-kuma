@@ -17,9 +17,20 @@ export function semanticBadgeScript(): string {
   if (!active) { return; }
   try { window.sessionStorage.setItem(KEY_STATE, "1"); } catch (e) { /* 忽略 */ }
 
+  // 注入的 <style> 不带 nonce 会被 CSP 的 style-src 整个拦掉，徽标样式全部失效
+  var NONCE = (function () {
+    var current = document.currentScript;
+    if (current && current.nonce) { return current.nonce; }
+    var scripts = document.querySelectorAll("script");
+    for (var i = 0; i < scripts.length; i++) {
+      if (scripts[i].nonce) { return scripts[i].nonce; }
+    }
+    return "";
+  })();
   var style = document.createElement("style");
+  if (NONCE) { style.setAttribute("nonce", NONCE); }
   style.textContent = [
-    "html[data-semantic-on] [data-semantic-badge] { outline: 1px dashed var(--muted-foreground); outline-offset: 1px; }",
+    "html[data-semantic-on] [data-semantic-badge] { position: relative; outline: 1px dashed var(--muted-foreground); outline-offset: 1px; }",
     "html[data-semantic-on] [data-semantic-badge]::after {",
     "  content: attr(data-semantic-badge);",
     "  position: absolute; left: 0; top: 0; transform: translateY(-100%);",
